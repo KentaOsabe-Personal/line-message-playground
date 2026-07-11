@@ -29,6 +29,9 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-line_message}
       MYSQL_USER: ${MYSQL_USER:-line_message}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-line_message_password}
+      LINE_CHANNEL_ACCESS_TOKEN: ${LINE_CHANNEL_ACCESS_TOKEN}
+      LINE_CHANNEL_SECRET: ${LINE_CHANNEL_SECRET}
+      LINE_USER_ID: ${LINE_USER_ID}
     depends_on:
       db:
         condition: service_healthy
