@@ -1,19 +1,19 @@
 ---
 name: create-pr
-description: Commit scoped local changes, push this repository's develop branch, and create or update a GitHub pull request. Use when the user asks to commit, push, publish, open a PR, create a pull request, or perform the repeated commit, push, and PR flow for copilot-cli-history-v2 after implementation or documentation work.
+description: Commit scoped local changes, push this repository's develop branch, and create or update a GitHub pull request. Use when the user asks to commit, push, publish, open a PR, create a pull request, or perform the repeated commit, push, and PR flow for `line-message-playground` after implementation or documentation work.
 ---
 
 # create-pr
 
 ## Overview
 
-Use this skill to publish completed local work from `copilot-cli-history-v2` with the project's usual discipline: inspect scope, commit only intended files, push `develop`, and create a ready PR to `main` unless the user explicitly asks otherwise.
+Use this skill to publish completed local work from `line-message-playground` with the project's usual discipline: inspect scope, commit only intended files, push `develop`, and create a ready PR to `main` unless the user explicitly asks otherwise.
 
 Read `references/publish-history.md` when selecting titles, branch/base defaults, or PR body style from past repository practice.
 
 ## Defaults
 
-- Repository: `KentaOsabe-Personal/copilot-cli-history-v2`.
+- Repository: `KentaOsabe-Personal/line-message-playground`.
 - Normal branch flow: `develop` -> `main`.
 - PR state: ready for review by default. Create a draft only when the user asks for draft or the work is explicitly incomplete.
 - Language: use Japanese for user-facing summaries and PR prose unless an existing title or user request is English.

@@ -4,13 +4,13 @@
 
 ## 概要
 
-この Skill は `copilot-cli-history-v2` の完了済みローカル変更を公開するために使います。通常の流れは、変更範囲を確認し、意図したファイルだけをステージし、`develop` を push し、`main` 向けの ready PR を作成または更新することです。
+この Skill は `line-message-playground` の完了済みローカル変更を公開するために使います。通常の流れは、変更範囲を確認し、意図したファイルだけをステージし、`develop` を push し、`main` 向けの ready PR を作成または更新することです。
 
 PR タイトル、branch/base の既定値、PR body の雰囲気を過去の運用に合わせる必要がある場合は、`references/publish-history.md` を参照します。
 
 ## 既定値
 
-- リポジトリ: `KentaOsabe-Personal/copilot-cli-history-v2`
+- リポジトリ: `KentaOsabe-Personal/line-message-playground`
 - 通常のブランチフロー: `develop` から `main`
 - PR 状態: 既定では ready。ユーザーが draft を指定した場合、または作業が未完了である場合だけ draft にする
 - 言語: 既存タイトルやユーザー指定が英語でない限り、ユーザー向け要約と PR 本文は日本語
