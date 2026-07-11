@@ -1,0 +1,10 @@
+.env
+.DS_Store
+frontend/node_modules/
+frontend/dist/
+backend/__pycache__/
+backend/**/*.py[cod]
+backend/.pytest_cache/
+backend/.venv/
+*.sqlite3
+memo.txt
