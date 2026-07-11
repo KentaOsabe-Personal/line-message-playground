@@ -7,4 +7,6 @@ backend/**/*.py[cod]
 backend/.pytest_cache/
 backend/.venv/
 *.sqlite3
+
 memo.txt
+tmp/
