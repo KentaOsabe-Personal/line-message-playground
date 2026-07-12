@@ -11,8 +11,11 @@
 **場所**: `/frontend/`  
 **目的**: React UI、ブラウザ側の状態、Frontend のビルド・テスト設定  
 **実装場所**: `/frontend/src/`
+**テスト場所**: `/frontend/test/`
 
 `main.tsx` はアプリケーション起動とグローバル CSS 読み込み、`App.tsx` は画面ルートを担当します。現在は小規模な flat 構造のため、feature、components、hooks 等の分割規則はまだ固定しません。
+
+flat 構造でも、UI とイベント接続、状態遷移、HTTP 通信、境界 DTO の検証はモジュールの責務として分離します。複雑な画面状態は純粋な遷移関数へ切り出し、Component へ通信状態や再試行判断を埋め込みません。
 
 ### Backend プロジェクト設定
 
@@ -27,6 +30,8 @@
 **目的**: 1つの機能領域に属する View、URL、Model、テスト等
 
 各 app は app-local な URLConf を持ち、`backend/config/urls.py` から include します。API の公開パスはルートの `/api/` prefix と app 内の resource path を組み合わせます。
+
+複数の責務を持つ app では、View と Serializer は HTTP 境界、Service はユースケースと transaction、Model は永続化、Gateway は外部 API 境界を担当します。外部 SDK の型や例外を View や Model まで伝播させません。
 
 ### コンテナ固有の補助処理
 
@@ -86,9 +91,9 @@ from .views import HealthView
 
 ## テスト配置
 
-- Frontend テストは対象実装と同じ `src` 配下に co-locate し、`*.test.tsx` とする
+- Frontend テストは `frontend/test/` 配下に置き、`*.test.ts` または `*.test.tsx` とする
 - Backend テストは対象 Django app 内に置き、公開 HTTP 契約を検証する
-- Backend の `tests.py` と `tests/` package の使い分けはまだ確立していないため、規模に応じた規則を別途決める
+- 小規模な Backend app は `tests.py`、複数責務を持つ app は `tests/` package と `test_<責務>.py` で分割する
 
 ## コード配置の原則
 
@@ -98,4 +103,4 @@ from .views import HealthView
 - 新しいコードが既存パターンに従う限り、この文書へファイル単位の追記を必要としない
 
 ---
-_更新日: 2026-07-11。配置判断に使えるパターンを記録し、ディレクトリツリーの網羅表にはしない。_
+_更新日: 2026-07-12。配置判断に使えるパターンを記録し、ディレクトリツリーの網羅表にはしない。_

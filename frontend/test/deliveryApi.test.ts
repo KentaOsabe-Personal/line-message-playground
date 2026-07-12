@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
-import { createDeliveryApiClient, DeliveryApiError } from './deliveryApi'
+import { createDeliveryApiClient, DeliveryApiError } from '../src/deliveryApi'
 
 const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
