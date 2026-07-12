@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import DeliveryForm from './DeliveryForm'
 
 type Health = { status: string }
 
@@ -23,6 +24,7 @@ export default function App() {
         <dt>Backend API</dt>
         <dd>{status}</dd>
       </dl>
+      <DeliveryForm />
     </main>
   )
 }
