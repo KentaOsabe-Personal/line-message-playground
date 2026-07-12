@@ -25,7 +25,7 @@ Project memory keeps persistent guidance (steering, specs notes, component docs)
 - Use `$kiro-spec-status [feature-name]` to check progress
 
 ## Development Guidelines
-- Think in English, generate responses in Japanese. All Markdown content written to project files (e.g., requirements.md, design.md, tasks.md, research.md, validation reports) MUST be written in the target language configured for this specification (see spec.json.language).
+- Generate user-facing responses in Japanese. All Markdown content written to project files (e.g., requirements.md, design.md, tasks.md, research.md, validation reports) MUST be written in the target language configured for this specification (see spec.json.language).
 
 ## Minimal Workflow
 - Phase 0 (optional): `$kiro-steering`, `$kiro-steering-custom`
@@ -53,25 +53,12 @@ Skills are located in `.agents/skills/kiro-*/SKILL.md`
 - `kiro-review` — task-local adversarial review protocol used by reviewer subagents
 - `kiro-debug` — root-cause-first debug protocol used by debugger subagents
 - `kiro-verify-completion` — fresh-evidence gate before success or completion claims
-- **If there is even a 1% chance a skill applies to the current task, invoke it.** Do not skip skills because the task seems simple.
+- Invoke a skill when the user names it or when the task clearly matches the skill's description. Do not invoke loosely related skills solely because they might be marginally relevant.
 
-## Collaboration Modes (Optional)
-Enable collaboration modes in `~/.codex/config.toml` to let Codex choose focused execution modes for longer tasks:
+## Multi-Agent
+Multi-agent is stable and enabled by default in current Codex versions. When a skill calls for delegation, use sub-agents for independent, bounded research or validation work. Prefer parallel read-heavy work; avoid parallel edits unless boundaries are explicitly non-overlapping.
 
-```toml
-[features]
-collaboration_modes = true
-```
-
-## Multi-Agent (Experimental)
-If multi-agent is available, use it to parallelize independent research and validation within skills. Enable in `~/.codex/config.toml`:
-
-```toml
-[features]
-multi_agent = true
-```
-
-Skills with "Parallel Research" sections list independent work items that benefit from sub-agent spawning when this feature is active.
+Skills with "Parallel Research" sections identify independent work items that benefit from sub-agent spawning.
 
 ## Development Rules
 - 3-phase approval workflow: Requirements → Design → Tasks → Implementation
@@ -80,6 +67,6 @@ Skills with "Parallel Research" sections list independent work items that benefi
 - Follow the user's instructions precisely, and within that scope act autonomously: gather the necessary context and complete the requested work end-to-end in this run, asking questions only when essential information is missing or the instructions are critically ambiguous.
 
 ## Steering Configuration
-- Load entire `.kiro/steering/` as project memory
-- Default files: `product.md`, `tech.md`, `structure.md`
-- Custom files are supported (managed via `$kiro-steering-custom`)
+- Load the core steering files `product.md`, `tech.md`, and `structure.md` when they exist
+- Load custom steering files only when their topic is relevant to the current task
+- Custom files are managed via `$kiro-steering-custom`
