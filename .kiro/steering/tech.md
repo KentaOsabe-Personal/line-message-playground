@@ -52,7 +52,7 @@ Frontend は ES Modules、React JSX transform、ES2022 を前提とします。B
 
 ### テスト
 
-- Frontend は Vitest と jsdom を使い、`*.test.tsx` を対象実装の近くに置く
+- Frontend は Vitest と jsdom を使い、テストコードを `/frontend/test/` に置く
 - Backend は Django test runner と DRF `APITestCase` を使い、status code と response body の両方を検証する
 - Frontend・Backendとも、各テスト定義の直前に日本語コメントで `テストケース:` と `期待値:` を1行ずつ記載し、入力・操作と観測可能な期待結果を具体的に示す
 - 現時点で coverage、E2E、共通 lint/formatter は導入されていないため、未確立の必須基準を仮定しない
@@ -87,11 +87,17 @@ docker compose down
 
 ### LINE 配信
 
-送信処理は Backend のサービス境界に閉じ込めます。冪等性キー、送信監査、LINE リクエスト ID、利用上限確認を設計上の主要関心事とします。
+送信処理は Backend のサービス境界に閉じ込めます。プレビュー時に正規化済み内容を確認トークンへ結び付け、送信時に内容の一致を再検証します。トークンは不透明な値とし、本文や操作 ID を含めません。
+
+操作 ID を LINE retry key と監査レコードに一貫して使用し、同じ操作は保存済み結果へ収束させます。外部通信はデータベース transaction の外で行い、処理中レコードの一意制約と条件付き更新で並行送信や結果の上書きを防ぎます。
+
+配信状態は `processing`、`succeeded`、`failed`、`unknown` を区別します。タイムアウト等の結果不明時は自動再送せず、状態確認 API で既存操作を確認してから明示的な再試行を許可します。LINE SDK の生の例外や認証情報、固定宛先は公開 API や通常ログへ出さず、安全なエラー分類へ変換します。
+
+現在の push 送信が参照する秘密値はアクセストークンと固定ユーザー ID です。チャネルシークレットは Webhook の署名検証を導入するまで送信処理で使用しません。利用上限確認は将来の運用機能として扱います。
 
 ### Webhook
 
 導入時は生の request body に対する HMAC-SHA256 署名検証を JSON 解析より先に行います。`webhookEventId` で重複を排除し、重い処理はレスポンス返却から分離します。
 
 ---
-_更新日: 2026-07-11。技術判断と標準を記録し、依存パッケージ一覧にはしない。_
+_更新日: 2026-07-12。技術判断と標準を記録し、依存パッケージ一覧にはしない。_

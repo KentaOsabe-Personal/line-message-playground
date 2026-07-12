@@ -2,9 +2,9 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
-import type { DeliveryApiClient } from './deliveryApi'
-import { DeliveryApiError } from './deliveryApi'
-import DeliveryForm from './DeliveryForm'
+import type { DeliveryApiClient } from '../src/deliveryApi'
+import { DeliveryApiError } from '../src/deliveryApi'
+import DeliveryForm from '../src/DeliveryForm'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 

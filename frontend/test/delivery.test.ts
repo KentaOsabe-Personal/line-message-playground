@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
-import { parseDeliveryResult, parseErrorResponse, parsePreviewResponse } from './deliveryDto'
-import { initialDeliveryState, transitionDelivery } from './deliveryState'
+import { parseDeliveryResult, parseErrorResponse, parsePreviewResponse } from '../src/deliveryDto'
+import { initialDeliveryState, transitionDelivery } from '../src/deliveryState'
 
 describe('delivery DTO', () => {
   // テストケース: statusごとの必須値を持つ成功応答と欠落応答を判定する。
