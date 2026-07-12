@@ -30,3 +30,116 @@ dd {
   margin: 0;
   font-weight: 700;
 }
+
+.delivery {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid #dfe7e3;
+}
+
+.delivery h2,
+.delivery h3 {
+  margin-top: 0;
+}
+
+.delivery form,
+.delivery label {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.delivery form {
+  gap: 1rem;
+}
+
+.delivery input,
+.delivery textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #aebbb5;
+  border-radius: 0.5rem;
+  font: inherit;
+}
+
+.delivery [aria-invalid='true'] {
+  border-color: #b42318;
+}
+
+.delivery button {
+  width: fit-content;
+  padding: 0.7rem 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  color: white;
+  background: #087f3e;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.delivery button.secondary {
+  color: #17202a;
+  background: #e6ece9;
+}
+
+.delivery button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.panel {
+  padding: 1rem;
+  border: 1px solid #c8d5ce;
+  border-left-width: 0.4rem;
+  border-radius: 0.75rem;
+  background: #f8faf9;
+}
+
+.panel pre {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.panel.progress {
+  border-left-color: #2878b5;
+}
+
+.panel.success {
+  border-left-color: #087f3e;
+  background: #effaf3;
+}
+
+.panel.error,
+.notice.error,
+.field-error {
+  color: #8a1c13;
+}
+
+.panel.error {
+  border-left-color: #b42318;
+  background: #fff4f2;
+}
+
+.panel.uncertain {
+  border-left-color: #b07800;
+  background: #fff9e8;
+}
+
+.field-error {
+  margin: -0.25rem 0 0;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 760px) {
+  main {
+    margin: 1rem;
+    padding: 1.25rem;
+  }
+}

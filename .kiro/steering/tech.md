@@ -54,6 +54,7 @@ Frontend は ES Modules、React JSX transform、ES2022 を前提とします。B
 
 - Frontend は Vitest と jsdom を使い、`*.test.tsx` を対象実装の近くに置く
 - Backend は Django test runner と DRF `APITestCase` を使い、status code と response body の両方を検証する
+- Frontend・Backendとも、各テスト定義の直前に日本語コメントで `テストケース:` と `期待値:` を1行ずつ記載し、入力・操作と観測可能な期待結果を具体的に示す
 - 現時点で coverage、E2E、共通 lint/formatter は導入されていないため、未確立の必須基準を仮定しない
 
 ## 共通コマンド
