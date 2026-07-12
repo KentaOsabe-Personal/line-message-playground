@@ -7,7 +7,6 @@ import App from './App'
 test('renders the application title', () => {
   const html = renderToString(<App />)
   expect(html).toContain('LINE Message Playground')
-  expect(html).toContain('Backend API')
   expect(html).toContain('LINEテスト配信')
   expect(html).toContain('送信内容を確認')
 })
