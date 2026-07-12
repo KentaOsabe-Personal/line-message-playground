@@ -1,1 +1,1 @@
-{"root":["./src/App.test.tsx","./src/App.tsx","./src/DeliveryForm.test.tsx","./src/DeliveryForm.tsx","./src/delivery.test.ts","./src/deliveryApi.test.ts","./src/deliveryApi.ts","./src/deliveryDto.ts","./src/deliveryState.ts","./src/main.tsx","./src/vite-env.d.ts"],"version":"6.0.3"}
+{"root":["./src/App.tsx","./src/DeliveryForm.tsx","./src/deliveryApi.ts","./src/deliveryDto.ts","./src/deliveryState.ts","./src/main.tsx","./src/vite-env.d.ts","./test/App.test.tsx","./test/DeliveryForm.test.tsx","./test/delivery.test.ts","./test/deliveryApi.test.ts"],"version":"6.0.3"}
