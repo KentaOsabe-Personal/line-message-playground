@@ -1,4 +1,4 @@
-import { useReducer } from 'react'
+import { useReducer, useRef } from 'react'
 
 import { createDeliveryApiClient, DeliveryApiError } from './deliveryApi'
 import type { DeliveryApiClient, SendDeliveryRequest } from './deliveryApi'
@@ -18,6 +18,7 @@ const fieldErrors = (error: DeliveryApiError) => ({
 
 export default function DeliveryForm({ client = createDeliveryApiClient(), createOperationId = () => crypto.randomUUID() }: Props) {
   const [state, dispatch] = useReducer(transitionDelivery, initialDeliveryState)
+  const submitInFlight = useRef(false)
 
   const applyResult = (result: DeliveryResult) => {
     if (result.status === 'processing') dispatch({ type: 'processing', result })
@@ -46,10 +47,15 @@ export default function DeliveryForm({ client = createDeliveryApiClient(), creat
   }
 
   const submit = async () => {
-    if (state.phase !== 'preview') return
+    if (state.phase !== 'preview' || submitInFlight.current) return
+    submitInFlight.current = true
     const request = { subject: state.subject, body: state.body, confirmationToken: state.confirmationToken, operationId: createOperationId() }
     dispatch({ type: 'submitted', operationId: request.operationId })
-    await send(request)
+    try {
+      await send(request)
+    } finally {
+      submitInFlight.current = false
+    }
   }
 
   const checkStatus = async () => {
@@ -65,10 +71,15 @@ export default function DeliveryForm({ client = createDeliveryApiClient(), creat
   }
 
   const retrySameOperation = async () => {
-    if (state.phase !== 'uncertain' || !state.canRetrySameOperation) return
+    if (state.phase !== 'uncertain' || !state.canRetrySameOperation || submitInFlight.current) return
+    submitInFlight.current = true
     const request = { subject: state.subject, body: state.body, confirmationToken: state.confirmationToken, operationId: state.operationId }
     dispatch({ type: 'retryStarted' })
-    await send(request)
+    try {
+      await send(request)
+    } finally {
+      submitInFlight.current = false
+    }
   }
 
   return (

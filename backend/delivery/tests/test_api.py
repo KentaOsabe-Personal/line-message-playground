@@ -1,23 +1,25 @@
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
+from django.test import override_settings
 from rest_framework.test import APITestCase
 from django.utils import timezone
 
 from delivery.confirmation import ConfirmationTokenService
 from delivery.formatters import format_message
-from delivery.gateway import LinePushAccepted
+from delivery.gateway import LINEGateway, LinePushAccepted, LinePushRejected, LinePushUnknown
 from delivery.models import DeliveryAttempt
 
 
 class FakeGateway:
-    def __init__(self):
+    def __init__(self, result=None):
         self.commands = []
+        self.result = result or LinePushAccepted("request-1", None)
 
     def push_text(self, command):
         self.commands.append(command)
-        return LinePushAccepted("request-1", None)
+        return self.result
 
 
 class DeliveryApiTests(APITestCase):
@@ -269,3 +271,106 @@ class DeliveryApiTests(APITestCase):
         self.assertEqual(expired_response.data["status"], "unknown")
         self.assertEqual(expired_response.data["error"]["code"], "processing_expired")
         self.assertEqual(gateway.commands, [])
+
+    # テストケース: gatewayが設定不足、外部拒否、timeout、unexpectedを返す。
+    # 期待値: 各結果を安全なfailed/unknown応答と監査日時へ確定し、秘密値やraw errorを露出しない。
+    def test_send_maps_external_failures_to_safe_terminal_responses(self):
+        cases = (
+            (LinePushRejected("configuration"), "failed", "configuration", "Backendの配信設定を確認してください。"),
+            (LinePushRejected("invalid_request"), "failed", "invalid_request", "入力または配信設定を確認してください。"),
+            (LinePushRejected("authentication"), "failed", "authentication", "LINEの認証設定を確認してください。"),
+            (LinePushRejected("permission"), "failed", "permission", "LINEチャネルの権限を確認してください。"),
+            (LinePushRejected("conflict"), "failed", "conflict", "LINE側で送信が競合しました。"),
+            (LinePushRejected("rate_limited"), "failed", "rate_limited", "時間をおいて利用上限を確認してください。"),
+            (LinePushRejected("service_unavailable"), "failed", "service_unavailable", "LINE側の状態を確認してください。"),
+            (LinePushRejected("unexpected"), "failed", "unexpected", "配信結果を確定できませんでした。"),
+            (LinePushUnknown("timeout_unknown"), "unknown", "timeout_unknown", "送信結果を確認できませんでした。"),
+        )
+        for gateway_result, expected_status, expected_code, expected_summary in cases:
+            with self.subTest(code=expected_code):
+                operation_id = uuid4()
+                subject = f"secret-token-{operation_id}"
+                body = f"raw-error-secret-user-{operation_id}"
+                message = format_message(subject, body)
+                gateway = FakeGateway(gateway_result)
+                with patch("delivery.views.LINEGateway", return_value=gateway):
+                    response = self.client.post(
+                        "/api/deliveries/",
+                        {
+                            "subject": subject,
+                            "body": body,
+                            "operationId": str(operation_id),
+                            "confirmationToken": ConfirmationTokenService().issue(message),
+                        },
+                        format="json",
+                    )
+
+                attempt = DeliveryAttempt.objects.get(operation_id=operation_id)
+                rendered = str(response.data)
+                self.assertEqual(response.status_code, 201)
+                self.assertEqual(response.data["status"], expected_status)
+                self.assertEqual(response.data["error"]["code"], expected_code)
+                self.assertEqual(response.data["error"]["summary"], expected_summary)
+                self.assertIsNotNone(attempt.failed_at)
+                self.assertIsNotNone(attempt.completed_at)
+                self.assertEqual(attempt.failure_type, expected_code)
+                self.assertNotIn(subject, rendered)
+                self.assertNotIn(body, rendered)
+                self.assertNotIn("secret-user", rendered)
+                self.assertNotIn("raw-error", rendered)
+                self.assertEqual(len(gateway.commands), 1)
+
+    # テストケース: 実adapter境界へ秘密設定を注入し、SDKがraw情報を含む例外を送出する。
+    # 期待値: API応答、DB、通常ログのいずれにもtoken、固定宛先、raw例外を露出しない。
+    @override_settings(
+        LINE_CHANNEL_ACCESS_TOKEN="actual-token-sentinel",
+        LINE_USER_ID="actual-user-sentinel",
+    )
+    def test_send_does_not_expose_configuration_or_raw_gateway_error(self):
+        operation_id = uuid4()
+        message = format_message("件名", "本文")
+        api = Mock()
+        api.push_message_with_http_info.side_effect = RuntimeError(
+            "actual-raw-error-sentinel"
+        )
+        gateway = LINEGateway(api_client_factory=lambda _: api)
+
+        with (
+            patch("delivery.views.LINEGateway", return_value=gateway),
+            patch("logging.Logger._log") as log_call,
+        ):
+            response = self.client.post(
+                "/api/deliveries/",
+                {
+                    "subject": message.subject,
+                    "body": message.body,
+                    "operationId": str(operation_id),
+                    "confirmationToken": ConfirmationTokenService().issue(message),
+                },
+                format="json",
+            )
+
+        attempt = DeliveryAttempt.objects.get(operation_id=operation_id)
+        persisted_values = " ".join(
+            str(getattr(attempt, field.name))
+            for field in DeliveryAttempt._meta.concrete_fields
+        )
+        public_output = str(response.data)
+        logged_output = str(log_call.call_args_list)
+        for sentinel in (
+            "actual-token-sentinel",
+            "actual-user-sentinel",
+            "actual-raw-error-sentinel",
+        ):
+            with self.subTest(sentinel=sentinel):
+                self.assertNotIn(sentinel, public_output)
+                self.assertNotIn(sentinel, persisted_values)
+                self.assertNotIn(sentinel, logged_output)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], "failed")
+        self.assertEqual(response.data["error"]["code"], "unexpected")
+        self.assertEqual(
+            response.data["error"]["summary"],
+            "配信結果を確定できませんでした。",
+        )
+        api.push_message_with_http_info.assert_called_once()

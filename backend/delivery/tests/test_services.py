@@ -102,7 +102,14 @@ class DeliveryServiceSubmitTests(TestCase):
     # 期待値: 対応するterminal状態、失敗種別、完了日時を一度だけ保存する
     def test_submit_persists_unsuccessful_gateway_results(self):
         cases = (
+            (LinePushRejected("configuration"), "failed", "configuration"),
+            (LinePushRejected("invalid_request"), "failed", "invalid_request"),
             (LinePushRejected("authentication"), "failed", "authentication"),
+            (LinePushRejected("permission"), "failed", "permission"),
+            (LinePushRejected("conflict"), "failed", "conflict"),
+            (LinePushRejected("rate_limited"), "failed", "rate_limited"),
+            (LinePushRejected("service_unavailable"), "failed", "service_unavailable"),
+            (LinePushRejected("unexpected"), "failed", "unexpected"),
             (LinePushUnknown("timeout_unknown"), "unknown", "timeout_unknown"),
         )
         for gateway_result, status, failure_type in cases:
@@ -117,6 +124,30 @@ class DeliveryServiceSubmitTests(TestCase):
                 self.assertEqual(attempt.failure_type, failure_type)
                 self.assertIsNotNone(attempt.failed_at)
                 self.assertIsNotNone(attempt.completed_at)
+
+    # テストケース: LINEがretry keyによる既受理成功を返す。
+    # 期待値: accepted request IDと全受付監査項目を同じ試行へ保存する。
+    def test_submit_persists_accepted_request_id_and_audit_fields(self):
+        accepted_at = timezone.now()
+        operation_id = uuid4()
+        message = format_message("監査件名", "監査本文\n2行目")
+        service = DeliveryService(
+            gateway=FakeGateway(LinePushAccepted(None, "accepted-request-1")),
+            clock=lambda: accepted_at,
+        )
+
+        result = service.submit(SubmitDeliveryCommand(operation_id, message))
+
+        attempt = DeliveryAttempt.objects.get(operation_id=operation_id)
+        self.assertEqual(result.status, "succeeded")
+        self.assertEqual(attempt.subject, message.subject)
+        self.assertEqual(attempt.body, message.body)
+        self.assertEqual(attempt.formatted_text, message.formatted_text)
+        self.assertEqual(attempt.content_fingerprint, message.fingerprint)
+        self.assertEqual(attempt.target_mode, DeliveryAttempt.TargetMode.FIXED_USER)
+        self.assertEqual(attempt.accepted_at, accepted_at)
+        self.assertEqual(attempt.sent_at, accepted_at)
+        self.assertEqual(attempt.line_accepted_request_id, "accepted-request-1")
 
     # テストケース: gateway完了前に別処理が試行をterminal状態へ確定する
     # 期待値: 遅延したgateway結果は先行terminal状態と監査項目を上書きしない

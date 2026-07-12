@@ -117,8 +117,8 @@
   - アプリを起動するとhealth確認と配信フォームの双方が利用できる状態にする
   - _Requirements: 1.1, 2.1, 3.2, 3.4, 5.5, 6.4, 7.1, 7.2, 7.3_
 
-- [ ] 5. 配信フローの安全性と回帰を検証する
-- [ ] 5.1 (P) Backendの正規化と確認を境界テストで保証する
+- [x] 5. 配信フローの安全性と回帰を検証する
+- [x] 5.1 (P) Backendの正規化と確認を境界テストで保証する
   - 空白、改行、BMP文字、絵文字、結合文字、5,000/5,001境界、孤立surrogateを検証する
   - 正しい確認トークンだけを受理し、入力変更、改変、version変更を外部呼び出し前に拒否する
   - 同じ入力の整形結果とfingerprintが安定し、無効な入力や確認から送信可能な結果が生成されないことを確認する
@@ -127,7 +127,7 @@
   - _Boundary: MessageFormatter, ConfirmationTokenService_
   - _Depends: 2.1, 2.2_
 
-- [ ] 5.2 (P) LINE変換をadapter境界テストで保証する
+- [x] 5.2 (P) LINE変換をadapter境界テストで保証する
   - LINEの成功、409既受理、400、401、403、409、429、5xx、timeout、unexpected、設定不足を安全な結果へ変換する
   - gateway mockの呼出し回数、timeout、自動retry無効、request ID取得、raw本文と秘密値の非露出を確認する
   - 固定宛先へのテキスト1件と操作ID由来のretry keyだけがSDKへ渡ることを確認する
@@ -136,7 +136,7 @@
   - _Boundary: LINEGateway_
   - _Depends: 2.3_
 
-- [ ] 5.3 (P) BackendのAPIと送信サービスを統合テストで保証する
+- [x] 5.3 (P) BackendのAPIと送信サービスを統合テストで保証する
   - previewの有効・無効契約と、無効時にDBおよびLINEが変更されないことを検証する
   - sendの1件push、監査項目、retry key、成功日時、request ID、既存結果、内容差し替え拒否を検証する
   - statusの期限前処理中、期限後unknown、404、および状態確認でLINEを呼ばないことを検証する
@@ -146,7 +146,7 @@
   - _Boundary: DeliveryService, DeliveryHTTPAPI_
   - _Depends: 3.3_
 
-- [ ] 5.4 MySQL上の並行性と状態整合性を検証する
+- [x] 5.4 MySQL上の並行性と状態整合性を検証する
   - 同一操作IDの並行要求でgateway callが最大1回となり、全要求が同じ試行へ収束することを検証する
   - 別操作IDで同一active fingerprintを使う並行要求でも外部送信が最大1回になることを検証する
   - gateway完了と期限切れunknown確定のcompare-and-set競合でterminal状態が上書きされないことを確認する
@@ -155,7 +155,7 @@
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 5.2, 5.4, 6.2, 6.3_
   - _Depends: 3.1, 3.2, 5.3_
 
-- [ ] 5.5 (P) Frontendの受入フローを画面テストで保証する
+- [x] 5.5 (P) Frontendの受入フローを画面テストで保証する
   - 件名と改行付き本文の入力、確認テキスト、入力へ戻る操作、編集後の再確認を検証する
   - 送信中のdisabled表示と重複click抑止、処理中からの状態確認を検証する
   - 成功、確定失敗、結果不明の表示と、確認済み内容との対応を検証する
@@ -166,7 +166,7 @@
   - _Boundary: DeliveryState, DeliveryApiClient, DeliveryForm_
   - _Depends: 4.3_
 
-- [ ] 5.6 全体のmigration・回帰テスト・production buildを確認する
+- [x] 5.6 全体のmigration・回帰テスト・production buildを確認する
   - 初期migrationを空のMySQLへ適用し、配信テーブルの制約と既存health APIの継続動作を確認する
   - Backend全テストとFrontend全テストを実行し、配信機能と既存機能の回帰がないことを確認する
   - TypeScript型検査を含むFrontend production buildを実行し、型エラーや生成失敗がないことを確認する

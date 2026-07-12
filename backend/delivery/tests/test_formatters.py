@@ -1,6 +1,11 @@
-from django.test import SimpleTestCase, override_settings
+from django.core import signing
+from django.test import SimpleTestCase
 
-from delivery.confirmation import ConfirmationError, ConfirmationTokenService
+from delivery.confirmation import (
+    CONFIRMATION_SALT,
+    ConfirmationError,
+    ConfirmationTokenService,
+)
 from delivery.formatters import (
     FormattedMessage,
     MessageValidationError,
@@ -46,6 +51,22 @@ class MessageFormatterTests(SimpleTestCase):
         with self.assertRaises(MessageValidationError):
             count_utf16_code_units("\ud800")
 
+    # テストケース: BMP文字、結合文字、絵文字を含む同じ入力を複数回整形する。
+    # 期待値: Unicodeを正規化で変更せず、UTF-16単位数とfingerprintが安定する。
+    def test_preserves_unicode_sequences_and_stable_fingerprint(self):
+        subject = "漢字e\u0301😀"
+        body = "本文\ne\u0301と😀"
+
+        first = format_message(subject, body)
+        second = format_message(subject, body)
+
+        self.assertEqual(first.formatted_text, "【漢字e\u0301😀】\n\n本文\ne\u0301と😀")
+        self.assertEqual(first.fingerprint, second.fingerprint)
+        self.assertEqual(
+            count_utf16_code_units(first.formatted_text),
+            len(first.formatted_text.encode("utf-16-le")) // 2,
+        )
+
 
 class ConfirmationTokenServiceTests(SimpleTestCase):
     # テストケース: preview済み内容のtokenを同じ内容と変更内容で検証する。
@@ -82,3 +103,25 @@ class ConfirmationTokenServiceTests(SimpleTestCase):
         self.assertEqual(set(payload), {"v", "fp"})
         self.assertNotIn("secret-subject", token)
         self.assertNotIn("secret-body", token)
+
+    # テストケース: versionを書き換えて再署名した確認tokenを検証する。
+    # 期待値: 署名自体が正しくても現行formatter versionと異なるtokenは拒否される。
+    def test_rejects_resigned_token_with_different_version(self):
+        service = ConfirmationTokenService()
+        message = format_message("件名", "本文")
+        token = signing.dumps(
+            {"v": message.formatter_version + 1, "fp": message.fingerprint},
+            salt=CONFIRMATION_SALT,
+            compress=True,
+        )
+
+        with self.assertRaises(ConfirmationError):
+            service.verify(token, message)
+
+    # テストケース: 無効な入力から確認tokenの発行を試みる。
+    # 期待値: 整形段階で拒否され、送信可能なmessageやtokenは生成されない。
+    def test_invalid_input_cannot_produce_confirmation_token(self):
+        service = ConfirmationTokenService()
+
+        with self.assertRaises(MessageValidationError):
+            service.issue(format_message(" ", "本文"))
