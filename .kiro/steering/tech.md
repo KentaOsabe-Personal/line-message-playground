@@ -83,7 +83,7 @@ docker compose down
 
 ### 起動順序と健全性
 
-サービス間依存は単なるプロセス起動ではなく healthcheck で判定します。Backend は起動時に migration を適用し、Frontend は健全な Backend を待ちます。
+Backend は MySQL の healthcheck 成功後に起動し、起動時に migration を適用します。Frontend は Backend コンテナの起動後に開始します。定期的な Backend API の healthcheck は実行しません。
 
 ### LINE 配信
 
