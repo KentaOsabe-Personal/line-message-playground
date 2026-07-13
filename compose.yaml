@@ -10,7 +10,7 @@ services:
       - frontend_node_modules:/app/node_modules
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
 
   backend:
     build:
@@ -35,12 +35,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/')"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 20s
 
   db:
     image: mysql:8.4
