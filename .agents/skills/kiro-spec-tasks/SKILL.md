@@ -26,6 +26,7 @@ metadata:
 - `.kiro/specs/$1/spec.json`, `requirements.md`, `design.md`
 - `.kiro/specs/$1/tasks.md` (if exists, for merge mode)
 - Core steering context: `product.md`, `tech.md`, `structure.md`
+- Read `.kiro/steering/spec-sizing.md` when it exists; task generation is the final sizing backstop
 - Additional steering files only when directly relevant to requirements coverage, design boundaries, runtime prerequisites, or team conventions that affect task executability
 
 **Validate approvals**:
@@ -67,6 +68,7 @@ After all parallel research completes, synthesize findings before generating tas
 
 - Keep the draft task plan in working memory; do NOT write `tasks.md` yet
 - Run the `Task Plan Review Gate` from `rules/tasks-generation.md`
+- Count executable tasks in the draft (excluding container-only major headings) and apply the Spec Size Gate before any repair loop or write
 - Review coverage:
   - Every requirement ID appears in at least one task
   - Every design component, contract, integration point, runtime prerequisite, and validation concern is represented
@@ -79,6 +81,7 @@ After all parallel research completes, synthesize findings before generating tas
 - If issues are task-plan-local, repair the draft and re-run the review gate before writing
 - Keep the review bounded to at most 2 repair passes
 - If review exposes a real requirements/design gap or contradiction, stop and send the user back to requirements/design instead of inventing filler tasks
+- If the size verdict is `SPLIT_REQUIRED`, stop without writing `tasks.md`; report the actual count and seams, then return to `$kiro-discovery` for roadmap decomposition
 
 ### Step 3.5: Run Task-Graph Sanity Review
 
@@ -177,6 +180,11 @@ Provide brief summary in the language specified in spec.json:
 - **Stop Execution**: Do not write a patched-over `tasks.md`
 - **User Message**: "Requirements/design do not provide enough clear coverage to generate an executable task plan"
 - **Suggested Action**: "Refine requirements.md or design.md, then re-run `$kiro-spec-tasks $1`"
+
+**Spec Size Gate Failed**:
+- **Stop Execution**: Do not write or approve `tasks.md`
+- **User Message**: Report the actual executable task count, boundary evidence, and why local task merging would be unsafe
+- **Suggested Action**: "Run `$kiro-discovery` to split the feature in roadmap.md, then regenerate the affected specs"
 
 **Template/Rules Missing**:
 - **User Message**: "Template or rules files missing in `.kiro/settings/`"
