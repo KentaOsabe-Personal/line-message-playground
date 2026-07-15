@@ -65,3 +65,16 @@ def build_credential_pair(
     token = _validate_secret(access_token)
     secret = _validate_secret(channel_secret)
     return CredentialPair(AccessToken(token), ChannelSecret(secret))
+
+
+def validate_credential_pair(value: CredentialPair) -> CredentialPair:
+    if (
+        not isinstance(value, CredentialPair)
+        or not isinstance(value.access_token, AccessToken)
+        or not isinstance(value.channel_secret, ChannelSecret)
+    ):
+        raise BoundaryValidationError()
+    return build_credential_pair(
+        value.access_token.reveal_for_use(),
+        value.channel_secret.reveal_for_use(),
+    )

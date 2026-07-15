@@ -150,6 +150,88 @@ class ChannelMutationFailed:
     status: Literal["failed"] = "failed"
 
 
+@dataclass(frozen=True, repr=False)
+class RegisterLineChannel:
+    messaging_api_channel_id: str
+    bot_user_id: str
+    label: str
+    credentials: CredentialPair
+    is_active: bool
+
+    def __repr__(self) -> str:
+        return (
+            "<RegisterLineChannel "
+            f"channel_id={self.messaging_api_channel_id} "
+            f"bot_user_id={self.bot_user_id} active={self.is_active} "
+            "credentials=redacted>"
+        )
+
+
+@dataclass(frozen=True, repr=False)
+class UpdateLineChannel:
+    channel_public_id: UUID
+    messaging_api_channel_id: str | None = None
+    bot_user_id: str | None = None
+    label: str | None = None
+    credentials: CredentialPair | None = None
+    is_active: bool | None = None
+
+    def __repr__(self) -> str:
+        fields = (
+            "messaging_api_channel_id",
+            "bot_user_id",
+            "label",
+            "is_active",
+        )
+        specified = ", ".join(
+            field for field in fields if getattr(self, field) is not None
+        )
+        return (
+            f"<UpdateLineChannel public_id={self.channel_public_id} "
+            f"fields=[{specified}] credentials={self.credentials is not None}>"
+        )
+
+
+@dataclass(frozen=True)
+class SetLineChannelActive:
+    channel_public_id: UUID
+    active: bool
+
+
+ManageLineChannelInput = (
+    RegisterLineChannel | UpdateLineChannel | SetLineChannelActive
+)
+
+
+@dataclass(frozen=True, repr=False)
+class ManageLineChannelInputCollected:
+    value: ManageLineChannelInput
+    status: Literal["collected"] = "collected"
+
+    def __repr__(self) -> str:
+        return f"<ManageLineChannelInputCollected value={self.value!r}>"
+
+
+@dataclass(frozen=True)
+class ManageLineChannelInputCancelled:
+    status: Literal["cancelled"] = "cancelled"
+
+
+@dataclass(frozen=True)
+class ManageLineChannelInputInvalid:
+    status: Literal["invalid"] = "invalid"
+
+
+ManageLineChannelInputResult = (
+    ManageLineChannelInputCollected
+    | ManageLineChannelInputCancelled
+    | ManageLineChannelInputInvalid
+)
+
+
+ChannelMutationResult = ChannelMutationSucceeded | ChannelMutationFailed
+
+
 SecretT = TypeVar("SecretT", AccessToken, ChannelSecret)
 
 
