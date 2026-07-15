@@ -19,6 +19,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "health",
     "delivery",
+    "linechannels.apps.LineChannelsConfig",
 ]
 
 MIDDLEWARE = [
@@ -67,3 +68,20 @@ USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "null": {
+            "class": "logging.NullHandler",
+        },
+    },
+    "loggers": {
+        "django.db.backends": {
+            "handlers": ["null"],
+            "level": "CRITICAL",
+            "propagate": False,
+        },
+    },
+}

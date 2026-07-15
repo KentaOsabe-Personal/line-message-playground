@@ -34,15 +34,15 @@ services:
       - ./backend:/app
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-local-development-secret-key}
-      DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
       MYSQL_HOST: db
       MYSQL_PORT: 3306
       MYSQL_DATABASE: ${MYSQL_DATABASE:-line_message}
       MYSQL_USER: ${MYSQL_USER:-line_message}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-line_message_password}
+      LINE_CHANNEL_CREDENTIAL_KEYS: ${LINE_CHANNEL_CREDENTIAL_KEYS:-}
       LINE_CHANNEL_ACCESS_TOKEN: ${LINE_CHANNEL_ACCESS_TOKEN}
-      LINE_CHANNEL_SECRET: ${LINE_CHANNEL_SECRET}
       LINE_USER_ID: ${LINE_USER_ID}
     depends_on:
       db:
@@ -50,6 +50,8 @@ services:
 
   db:
     image: mysql:8.4
+    command:
+      - --general-log=OFF
     ports:
       - "3306:3306"
     environment:
