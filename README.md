@@ -15,6 +15,18 @@ Docker と Docker Compose が利用できることを確認し、リポジトリ
 
 ```bash
 cp .env.example .env
+```
+
+ngrokダッシュボードでauthtokenと割り当て済みの開発用ドメインを確認し、`.env`へ設定します。`NGROK_DOMAIN`にはスキームを付けず、ホスト名だけを指定します。
+
+```dotenv
+NGROK_AUTHTOKEN=your-ngrok-authtoken
+NGROK_DOMAIN=your-domain.ngrok-free.app
+```
+
+設定後、全サービスを起動します。ngrokも通常のComposeサービスとして起動します。
+
+```bash
 docker compose up --build
 ```
 
@@ -26,6 +38,14 @@ docker compose up --build
 
 バックエンドは起動時にマイグレーションを自動適用します。
 
+## スマートフォンからの確認
+
+ngrokの開発用ドメインを使うと、スマートフォンのLINEアプリからローカルのFrontendと`/api`へHTTPSでアクセスできます。
+
+起動後は、設定した開発用ドメイン（例: `https://your-domain.ngrok-free.app`）でFrontendを確認できます。`/api`はViteの既存proxyを経由してBackendへ転送されます。ngrokのローカル検査画面は http://127.0.0.1:4040 です。
+
+現時点の配信APIはローカル利用を前提として認証がないため、公開URLを共有せず、利用後は`docker compose down`で全サービスとトンネルを停止します。ngrokのauthtokenはLINEのチャネル資格情報とは別の秘密情報として`.env`だけで管理します。
+
 ## テスト
 
 ```bash
@@ -36,7 +56,7 @@ docker compose run --rm backend python manage.py test
 ## よく使うコマンド
 
 ```bash
-# バックグラウンド起動
+# バックグラウンド起動（ngrokを含む）
 docker compose up --build -d
 
 # ログ確認

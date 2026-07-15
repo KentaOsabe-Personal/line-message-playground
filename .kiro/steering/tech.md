@@ -5,12 +5,14 @@
 Docker Compose をローカル開発の標準実行環境とし、Frontend、Backend、MySQL を独立サービスとして構成します。
 
 ```text
-Browser -> Vite (/api proxy) -> Django REST API -> MySQL
-                                  |
-                                  +-> LINE Messaging API
+Browser ---------------------> Vite (/api proxy) -> Django REST API -> MySQL
+LINE / Smartphone -> ngrok --/                        |
+                                                      +-> LINE Messaging API
 ```
 
 ブラウザは相対パス `/api/...` で Backend と通信します。データベースと外部 API の認証情報には Backend だけがアクセスします。
+
+ngrokは通常のDocker Composeサービスとして他のサービスと一緒に起動します。単一のHTTPSトンネルをFrontendへ接続し、`/api`は既存のVite proxyを経由させます。
 
 ## コア技術
 
@@ -48,6 +50,7 @@ Frontend は ES Modules、React JSX transform、ES2022 を前提とします。B
 - 環境差分と秘密値は環境変数で注入する
 - `.env.example` には必要なキー名と安全なローカル例だけを置き、実際の `.env` はコミットしない
 - LINE のトークン、シークレット、ユーザー ID は Backend サービスだけへ渡す
+- ngrok の authtoken は開発インフラ用の秘密情報として `.env` から ngrok サービスだけへ渡す
 - リポジトリ内の既定パスワードや secret はローカル開発専用とし、本番相当環境では必ず上書きする
 
 ### テスト
@@ -78,6 +81,8 @@ docker compose down
 ```
 
 `docker compose down -v` はデータベース volume も削除する破壊的操作として区別します。
+
+ngrokの割り当て済み開発用ドメインを`NGROK_DOMAIN`、authtokenを`NGROK_AUTHTOKEN`として`.env`へ設定します。Viteはそのドメインだけを追加Hostとして許可し、任意Hostを許可しません。ngrokの検査APIはホストの`127.0.0.1:4040`にだけ公開します。Compose起動中は公開トンネルも有効になるため、公開URLを共有せず、利用後は全サービスを停止します。
 
 ## 重要な技術判断
 
