@@ -25,6 +25,7 @@ metadata:
    - Read `.kiro/specs/$1/brief.md` if it exists (discovery context: problem, approach, scope decisions, boundary candidates)
    - Read `.kiro/specs/$1/requirements.md` for project description
    - Core steering context: `product.md`, `tech.md`, `structure.md`
+   - Read `.kiro/steering/spec-sizing.md` when it exists; its pre-write gate is mandatory even when Discovery was skipped
    - Additional steering files only when directly relevant to feature scope, user personas, business/domain rules, compliance/security constraints, operational constraints, or existing product boundaries
    - Relevant local agent skills or playbooks only when they clearly match the feature's host environment or use case and contain domain terminology or workflow rules that shape user-observable requirements
 
@@ -66,10 +67,11 @@ After all research completes, synthesize findings in main context before generat
 
 4. **Review Requirements Draft**:
    - Run the `Requirements Review Gate` from `rules/requirements-review-gate.md`
-   - Review coverage, EARS compliance, ambiguity, adjacent expectations, and scope boundaries before finalizing
+   - Review coverage, EARS compliance, ambiguity, adjacent expectations, scope boundaries, and the Spec Size Assessment before finalizing
    - If issues are local to the draft, repair the requirements and review again
    - Keep the review bounded to at most 2 repair passes
    - If the draft exposes a real scope ambiguity or contradiction, stop and ask the user to clarify instead of writing guessed requirements
+   - If the size verdict is `SPLIT_REQUIRED`, stop without writing `requirements.md` and return to `$kiro-discovery` for roadmap decomposition
 
 5. **Finalize and Update Metadata**:
    - Write `.kiro/specs/$1/requirements.md` only after the requirements review gate passes
@@ -127,6 +129,7 @@ Provide output in the language specified in spec.json with:
 - **Steering Directory Empty**: Warn user that project context is missing and may affect requirement quality
 - **Non-numeric Requirement Headings**: If existing headings do not include a leading numeric ID (for example, they use "Requirement A"), normalize them to numeric IDs and keep that mapping consistent (never mix numeric and alphabetic labels).
 - **Scope Ambiguity Found During Requirements Review**: Stop execution, do not write a guessed `requirements.md`, and ask the user to clarify the missing or conflicting scope before re-running `$kiro-spec-requirements $1`
+- **Spec Size Gate Failed**: Stop execution, do not finalize `requirements.md`, report the sizing evidence, and suggest `$kiro-discovery` to split the feature
 
 ### Next Phase: Design Generation
 

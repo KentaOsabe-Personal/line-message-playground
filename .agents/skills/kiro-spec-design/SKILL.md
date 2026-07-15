@@ -26,6 +26,7 @@ metadata:
 - `.kiro/specs/$1/spec.json`, `requirements.md`, `design.md` (if exists)
 - `.kiro/specs/$1/research.md` (if exists, contains gap analysis from `$kiro-validate-gap`)
 - Core steering context: `product.md`, `tech.md`, `structure.md`
+- Read `.kiro/steering/spec-sizing.md` when it exists; its design-stage gate is mandatory
 - Additional steering files only when directly relevant to requirement coverage, architecture boundaries, integrations, runtime prerequisites, security/performance constraints, or team conventions that affect implementation readiness
 - `.kiro/settings/templates/specs/design.md` for document structure
 - Read `rules/design-principles.md` from this skill's directory for design principles
@@ -120,9 +121,11 @@ After all findings return, synthesize in main context before proceeding.
 
 - Read and apply `rules/design-review-gate.md` from this skill's directory
 - Verify requirements coverage, architecture readiness, and implementation executability before finalizing the design
+- Re-estimate executable task count from concrete components, state transitions, integration points, migrations, and tests; record the assessment in `research.md`
 - If issues are local to the draft, repair the design and review again
 - Keep the review bounded to at most 2 repair passes
 - If the draft exposes a real requirements/design gap, stop and return to requirements clarification instead of papering over it in `design.md`
+- If the size verdict is `SPLIT_REQUIRED`, stop without writing `design.md` and return to `$kiro-discovery` for roadmap decomposition
 
 ### Step 6: Finalize Design Document
 
@@ -194,6 +197,11 @@ Provide brief summary in the language specified in spec.json:
 - **Stop Execution**: Do not write a patched-over `design.md`
 - **User Message**: "Design review found a real spec gap or ambiguity that must be resolved before design can be finalized."
 - **Suggested Action**: Clarify or fix `requirements.md`, then re-run `$kiro-spec-design $1`
+
+**Spec Size Gate Failed**:
+- **Stop Execution**: Do not finalize `design.md`
+- **User Message**: Report the projected executable task count and independent responsibility seams that make the spec oversized
+- **Suggested Action**: Return to `$kiro-discovery` and split the work in `roadmap.md`
 
 ### Next Phase: Task Generation
 

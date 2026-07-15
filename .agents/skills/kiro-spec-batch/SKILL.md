@@ -21,17 +21,19 @@ description: Create complete specs (requirements, design, tasks) for all feature
 ## Step 1: Read Roadmap and Validate
 
 1. Read `.kiro/steering/roadmap.md`
-2. Parse the `## Specs (dependency order)` section to extract:
+2. Read `.kiro/steering/spec-sizing.md` when it exists; batch mode must not bypass the per-spec size gate
+3. Parse the `## Specs (dependency order)` section to extract:
    - Feature names
    - One-line descriptions
    - Dependencies for each feature
    - Completion status (`[x]` = done, `[ ]` = pending)
-3. If present, also read for context:
+4. If present, also read for context:
    - `## Existing Spec Updates`
    - `## Direct Implementation Candidates`
    Do not include these in dependency-wave execution; they are awareness-only inputs for sequencing and consistency review.
-4. For each pending feature in `## Specs (dependency order)`, verify `.kiro/specs/<feature>/brief.md` exists
-5. If any brief.md is missing, stop and report: "Missing brief.md for: [list]. Run `$kiro-discovery` to generate briefs first."
+5. For each pending feature in `## Specs (dependency order)`, verify `.kiro/specs/<feature>/brief.md` exists
+6. Read only the `Spec Size Assessment` section of each pending brief and verify it contains `PASS (single-spec)`, a projected executable task range below 20, independent responsibility seams, and rationale
+7. If any brief is missing, unassessed, or marked `SPLIT_REQUIRED`, stop before dispatching sub-agents and report the affected features. Run `$kiro-discovery` to repair the roadmap decomposition first.
 
 ## Step 2: Build Dependency Waves
 
@@ -64,13 +66,14 @@ Create a complete specification for feature "{feature-name}".
 
 1. Read the brief at .kiro/specs/{feature-name}/brief.md for feature context
 2. Read the roadmap at .kiro/steering/roadmap.md for project context
-3. Execute the full spec pipeline. For each phase, read the corresponding skill's SKILL.md for complete instructions (templates, rules, review gates):
+3. Read .kiro/steering/spec-sizing.md and preserve the brief's sizing gate throughout every phase
+4. Execute the full spec pipeline. For each phase, read the corresponding skill's SKILL.md for complete instructions (templates, rules, review gates):
    a. Initialize: Read .agents/skills/kiro-spec-init/SKILL.md, then create spec.json and requirements.md
    b. Generate requirements: Read .agents/skills/kiro-spec-requirements/SKILL.md, then follow its steps
    c. Generate design: Read .agents/skills/kiro-spec-design/SKILL.md, then follow its steps
    d. Generate tasks: Read .agents/skills/kiro-spec-tasks/SKILL.md, then follow its steps
-4. Set all approvals to true in spec.json (auto-approve mode, equivalent of -y flag)
-5. Report completion with file list and task count
+5. Set all approvals to true in spec.json (auto-approve mode, equivalent of -y flag); auto-approval does not override `SPLIT_REQUIRED`
+6. Report completion with file list, executable task count, and final sizing verdict
 ```
 
 If multi-agent is not available, execute features in the wave sequentially.
@@ -106,6 +109,7 @@ Check:
 8. **Roadmap boundary continuity**: If roadmap includes `Existing Spec Updates` or `Direct Implementation Candidates`, do the generated new specs avoid absorbing that work by accident?
 9. **Architecture boundary integrity**: Do the specs preserve clean responsibility seams, avoid shared ownership, keep dependency direction coherent, and include enough revalidation triggers to catch downstream impact?
 10. **Change-friendly decomposition**: Has any spec absorbed multiple independent seams that should probably be split instead of kept together?
+11. **Spec size compliance**: Does every spec remain below 20 executable tasks and retain `PASS (single-spec)` under `.kiro/steering/spec-sizing.md`?
 
 Output: CONSISTENT areas + ISSUES with (which specs, what's inconsistent, suggested fix).
 
@@ -139,7 +143,7 @@ Next: Review generated specs, then start implementation with $kiro-impl <feature
 </instructions>
 
 ## Critical Constraints
-- **Controller stays lightweight**: Only read roadmap.md and brief.md existence checks in main context. All spec generation happens in sub-agents.
+- **Controller stays lightweight**: Only read roadmap.md, the sizing policy, brief.md existence, and each brief's `Spec Size Assessment` in main context. All spec generation happens in sub-agents.
 - **Wave ordering is strict**: Never start a wave until all features in previous waves are complete.
 - **Parallel within waves**: All features in the same wave should be dispatched in parallel if multi-agent is available.
 - **No partial waves**: If a feature in a wave fails, still complete the other features in that wave before reporting.
@@ -160,6 +164,11 @@ Next: Review generated specs, then start implementation with $kiro-impl <feature
 
 **Roadmap not found**:
 - Stop and report: "No roadmap.md found. Run `$kiro-discovery` first."
+
+**Missing or Failed Spec Size Assessment**:
+- Stop before dispatching any generation sub-agents
+- Report each affected feature and its missing/failed evidence
+- Suggest: "Run `$kiro-discovery` to revise the roadmap and regenerate per-spec briefs."
 
 **All specs already complete**:
 - Report: "All specs in roadmap.md are already complete. Nothing to do."

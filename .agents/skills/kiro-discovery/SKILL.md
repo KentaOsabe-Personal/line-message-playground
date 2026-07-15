@@ -20,8 +20,9 @@ description: Entry point for new work. Determines the best action path or work d
 Gather **only metadata** to determine the action path. Do NOT read full file contents yet.
 
 - **Specs inventory**: Scan `.kiro/specs/*/spec.json` for `name`, `phase` fields and `approvals` status. Note feature names and their current status.
-- **Steering existence**: Check which files exist in `.kiro/steering/` (product.md, tech.md, structure.md, roadmap.md). Do NOT read their contents yet.
+- **Steering existence**: Check which files exist in `.kiro/steering/` (product.md, tech.md, structure.md, roadmap.md, spec-sizing.md). Do NOT read their contents yet, except for the two files explicitly required below.
 - **Roadmap check**: If `.kiro/steering/roadmap.md` exists, read it. This contains project-level context (approach, scope, constraints, spec list) from a previous discovery session. Use it to restore project context.
+- **Sizing policy**: Read `.kiro/steering/spec-sizing.md` if it exists. Its gate is mandatory before selecting Path C, D, or E.
 - **Top-level structure**: List the project root directory to note key directories and files. Do NOT recurse into subdirectories.
 
 This step should consume minimal context. If `specs/` is empty and no steering exists, note "greenfield project" and move to Step 2.
@@ -44,15 +45,16 @@ Based on the user's request and the metadata from Step 1, determine which path a
 
 **Path C: New single-scope feature**
 - The request is new, doesn't overlap with existing specs, and fits in one spec
+- The Spec Size Assessment returns `PASS (single-spec)`
 
 **Path D: Multi-scope decomposition needed**
-- The request spans multiple domains or would produce 20+ tasks in a single spec
+- The request spans multiple independently deliverable responsibility seams, would produce 20+ executable tasks in a single spec, or otherwise returns `SPLIT_REQUIRED` under `spec-sizing.md`
 
 **Path E: Mixed decomposition**
 - The request contains a mix of: existing spec extensions, one or more new spec candidates, and optional direct-implementation work
 - Use this path only when at least one genuinely new spec boundary is needed
 
-For Path C/D/E, present the determined path (or mixed decomposition) to the user and confirm before proceeding.
+Before choosing Path C/D/E, perform the Spec Size Assessment required by `spec-sizing.md`. Estimate executable 1-3 hour tasks including testing, migration, and integration work; do not wait for task generation to reveal the size. Present the verdict and evidence with the determined path (or mixed decomposition) to the user and confirm before proceeding.
 For Path A/B, recommend the next action and stop.
 
 ## Step 3: Deep Context Loading
@@ -108,6 +110,7 @@ If the viability check reveals issues, present them to the user and revisit the 
 
 - Address user's questions or concerns about the approaches
 - Narrow scope if needed: favor smaller, deliverable increments and cleaner responsibility seams
+- Re-run the Spec Size Assessment after the approach is selected and scope is refined. Path C may proceed only with `PASS (single-spec)`; otherwise switch to Path D/E.
 - For Path D/E: propose work decomposition with dependency ordering
   - Each new boundary-worthy feature = one spec
   - Existing spec extensions are explicitly listed with their target spec
@@ -158,6 +161,12 @@ Write `.kiro/specs/<feature-name>/brief.md` to disk with this structure:
 - **Extends**: [existing spec(s) this work updates, if any]
 - **Adjacent**: [neighbor specs or modules to avoid overlapping]
 
+## Spec Size Assessment
+- **Verdict**: PASS (single-spec)
+- **Projected executable tasks**: [range, including tests/migrations/integration]
+- **Independent responsibility seams**: [count and names]
+- **Rationale**: [why this remains one spec]
+
 ## Constraints
 [technology, compatibility, or other constraints]
 ```
@@ -191,6 +200,12 @@ Use this roadmap structure:
 ## Boundary Strategy
 - **Why this split**: [why these spec boundaries improve independence]
 - **Shared seams to watch**: [cross-spec boundaries needing careful review]
+
+## Spec Size Assessment
+- **Verdict**: SPLIT_REQUIRED
+- **Projected executable tasks before split**: [range]
+- **Independent responsibility seams**: [count and names]
+- **Rationale**: [which sizing criteria required decomposition]
 
 ## Specs (dependency order)
 - [ ] feature-a -- [one-line description]. Dependencies: none
@@ -251,6 +266,7 @@ If the decomposition contains only existing-spec updates plus direct implementat
 
 ## Critical Constraints
 - **Files on disk are the source of continuity**: For Path C/D/E, write brief.md and roadmap.md to disk as needed before suggesting the next command. Do NOT leave discovery results only in conversation text.
+- **Sizing evidence is mandatory**: Do not write a Path C brief without a `Spec Size Assessment`, and do not silently override `SPLIT_REQUIRED`.
 
 ## Safety & Fallback
 

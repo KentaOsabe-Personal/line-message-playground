@@ -14,6 +14,7 @@ Project memory keeps persistent guidance (steering, specs notes, component docs)
 ### Paths
 - Steering: `.kiro/steering/`
 - Specs: `.kiro/specs/`
+- Spec sizing policy: `.kiro/steering/spec-sizing.md`
 
 ### Steering vs Specification
 
@@ -30,6 +31,7 @@ Project memory keeps persistent guidance (steering, specs notes, component docs)
 ## Minimal Workflow
 - Phase 0 (optional): `$kiro-steering`, `$kiro-steering-custom`
 - Discovery: `$kiro-discovery "idea"` — determines action path, writes brief.md + roadmap.md for multi-spec projects
+- Spec size gate: before choosing or continuing the single-spec path, apply `.kiro/steering/spec-sizing.md`; a projected 20+ executable tasks or multiple independently deliverable responsibility seams defaults to roadmap decomposition
 - Phase 1 (Specification):
   - Single spec: `$kiro-spec-quick {feature} [--auto]` or step by step:
     - `$kiro-spec-init "description"`
@@ -63,6 +65,8 @@ Skills with "Parallel Research" sections identify independent work items that be
 ## Development Rules
 - 3-phase approval workflow: Requirements → Design → Tasks → Implementation
 - Human review required each phase; use `-y` only for intentional fast-track
+- Re-run the spec size gate before Requirements, Design, and Tasks are finalized; `--auto` and `-y` never bypass it
+- When the gate returns `SPLIT_REQUIRED`, stop before writing the phase artifact and return to `$kiro-discovery` instead of compressing or hiding work to keep one spec
 - Keep steering current and verify alignment with `$kiro-spec-status`
 - Follow the user's instructions precisely, and within that scope act autonomously: gather the necessary context and complete the requested work end-to-end in this run, asking questions only when essential information is missing or the instructions are critically ambiguous.
 

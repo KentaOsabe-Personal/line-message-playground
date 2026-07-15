@@ -45,6 +45,13 @@
 - 資格情報暗号文と同じ DB に鍵を保存する構成、`SECRET_KEY` の鍵利用、暗黙の既定鍵
 - 同一チャネル・同一用途の過去の正当な暗号文 replay 防止。これは外部 KMS/単調 version を必要とする将来境界とする。
 
+### Downstream Extension Contract
+
+- `LineChannel`の長期的なデータ所有者は`linechannels`とする。後続の`line-account-linking`仕様は、本基盤の資格情報契約を変更せず、非秘密の`provider_id`とread-onlyのチャネルdirectory契約を互換的に追加できる。
+- `line-account-linking`はその拡張に必要なmigration、legacy backfill、入力検証、management command、safe projection、regression testを所有する。本基盤の既存実装タスクに暗黙に追加しない。
+- directoryは`public_id`、運用者向け名称、`provider_id`、有効状態だけを返し、Messaging API channel ID、bot user ID、credential state、暗号文を含めない。
+- `CredentialRepository`、認証付き暗号、用途別復号、ローテーション、秘密非露出の既存契約はこの拡張で変更しない。
+
 ### Legacy Environment Variable Migration
 
 | Variable | This Spec Completion | Removal Point |
@@ -92,6 +99,7 @@
 ### Revalidation Triggers
 
 - `public_id`、`messaging_api_channel_id`、`bot_user_id` の型・一意性・意味の変更
+- `provider_id`の型・nullable/backfill・更新規則、または非秘密チャネルdirectoryのprojection・availability契約の変更
 - `CredentialRepository` の入力、成功型、failure code、用途別復号境界の変更
 - 認証済み envelope の format version、credential kind、context binding の変更
 - `LINE_CHANNEL_CREDENTIAL_KEYS` の構文、先頭鍵の意味、起動時必須条件の変更

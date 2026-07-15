@@ -16,6 +16,15 @@ Before writing `design.md`, review the draft design and repair local issues unti
 - Build-vs-adopt decisions that materially affect architecture must be captured in `design.md`, with deeper investigation left in `research.md` when present.
 - Runtime prerequisites, migrations, rollout constraints, validation hooks, and failure modes must be surfaced when they materially affect implementation order or risk.
 
+## Spec Size Review
+
+- Read and apply `.kiro/steering/spec-sizing.md` when it exists.
+- Re-estimate executable 1-3 hour tasks using the concrete components, contracts, state transitions, external integrations, migrations, setup, and testing strategy in the draft.
+- Treat 20+ projected executable tasks as `SPLIT_REQUIRED` by default, even when every requirement is technically traceable.
+- Return `SPLIT_REQUIRED` below that threshold when the design contains multiple responsibility seams that can be delivered, changed, or reviewed independently, multiple independent state/compensation workflows, or repeated cross-boundary integration.
+- Record the verdict, projected task range, independent seams, and rationale in `research.md`.
+- A size failure cannot be repaired by hiding components or combining tasks. Stop without writing `design.md` and return to roadmap discovery.
+
 ## Boundary Readiness Review
 
 - The design must explicitly state what this spec owns.
@@ -41,6 +50,7 @@ Before applying judgment, verify these mechanically:
 - **File Structure Plan populated**: The File Structure Plan section must contain concrete file paths (not just "TBD" or empty). Scan for placeholder text in that section.
 - **Boundary ↔ file structure alignment**: The File Structure Plan must reflect the stated responsibility boundary. If files imply broader ownership than the boundary section claims, report a mismatch.
 - **No orphan components**: Every component mentioned in the design must appear in the File Structure Plan with a file path. Scan for component names that have no corresponding file entry.
+- **Spec size assessed**: Verify that `research.md` contains the current design-stage verdict and evidence.
 
 ## Review Loop
 

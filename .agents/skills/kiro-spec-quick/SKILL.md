@@ -16,6 +16,7 @@ In Automatic Mode:
 - IGNORE any "Next Step" messages from Phase 2-4 (they are for standalone usage)
 - After Phase 4, run the final sanity review before exiting
 - Stop ONLY after the sanity review completes or if error occurs
+- NEVER bypass the Spec Size Gate; `--auto` stops before file creation when the feature requires decomposition
 
 ---
 
@@ -55,20 +56,26 @@ Execute these 4 phases in order:
    - If `.kiro/specs/{feature-name}/brief.md` exists (created by `$kiro-discovery`), read it for discovery context (problem, approach, scope, constraints)
    - Use brief content as the project description instead of `$ARGUMENTS`
 
-2. **Generate Feature Name**:
+2. **Run Spec Size Gate Before Writing**:
+   - Read `.kiro/steering/spec-sizing.md` if it exists
+   - Validate the brief's `Spec Size Assessment`, or perform one from the description when it is missing
+   - Estimate executable 1-3 hour tasks including testing, migration, and integration work
+   - If the verdict is `SPLIT_REQUIRED`, or there is not enough evidence for `PASS (single-spec)`, stop before creating files and direct the user to `$kiro-discovery "<description>"`
+
+3. **Generate Feature Name**:
    - Convert description to kebab-case
    - Example: "User profile with avatar upload" → "user-profile-avatar-upload"
    - Keep name concise (2-4 words ideally)
 
-3. **Check Uniqueness**:
+4. **Check Uniqueness**:
    - Use Glob to check `.kiro/specs/*/`
    - If directory exists with only `brief.md` (no `spec.json`), use that directory (discovery created it)
    - Otherwise if feature name exists, append `-2`, `-3`, etc.
 
-4. **Create Directory**:
+5. **Create Directory**:
    - Use Bash: `mkdir -p .kiro/specs/{feature-name}` (skip if already exists from discovery)
 
-5. **Initialize Files from Templates**:
+6. **Initialize Files from Templates**:
 
    a. Read templates:
    ```
@@ -90,7 +97,7 @@ Execute these 4 phases in order:
    - .kiro/specs/{feature-name}/requirements.md
    ```
 
-6. **Output Progress**: "Phase 1/4 complete: Spec initialized at .kiro/specs/{feature-name}/"
+7. **Output Progress**: "Phase 1/4 complete: Spec initialized at .kiro/specs/{feature-name}/"
 
 **Automatic Mode**: IMMEDIATELY continue to Phase 2.
 
@@ -150,6 +157,7 @@ After Phase 4, run a lightweight sanity review before claiming completion.
   - Do requirements, design, and tasks tell a coherent story?
   - Are there obvious contradictions, missing prerequisites, or missing task coverage for required design work?
   - Are `_Depends:_`, `_Boundary:_`, and `(P)` markers plausible for implementation?
+  - Does the final task count and boundary graph still satisfy `.kiro/steering/spec-sizing.md`?
 - If the review finds only task-plan-local issues, repair or update the generated `tasks.md` once, then re-run the sanity review.
 - If the review finds a real requirements/design gap or contradiction, stop and report follow-up instead of claiming the quick spec is implementation-ready.
 
@@ -244,6 +252,11 @@ Sanity review: PASSED | FOLLOW-UP REQUIRED
 - Stop workflow
 - Show current state and completed phases
 - Suggest: "Continue manually from `$kiro-spec-{next-phase} {feature}`"
+
+**Spec Size Gate Failed**:
+- Stop immediately without treating partial generation as complete
+- Report the projected/actual executable task count and independent responsibility seams
+- Suggest `$kiro-discovery "<description>"` to create or revise roadmap decomposition
 
 **Sanity Review Failed**:
 - Stop workflow

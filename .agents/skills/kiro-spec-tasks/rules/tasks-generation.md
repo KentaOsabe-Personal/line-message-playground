@@ -113,6 +113,15 @@ Focus on capabilities and outcomes, not code structure.
 
 Before writing `tasks.md`, review the draft task plan and repair local issues until the plan passes or a true spec gap is discovered.
 
+### Spec Size Backstop
+
+- Read and apply `.kiro/steering/spec-sizing.md` when it exists.
+- Count executable task checkboxes in the draft. Exclude major headings that only group child tasks; include implementation, setup, migration, integration, and test tasks.
+- If the draft contains 20 or more executable tasks, return `SPLIT_REQUIRED` by default and stop without writing `tasks.md`.
+- Also return `SPLIT_REQUIRED` when multiple independently deliverable responsibility seams or repeated cross-boundary integrations are visible, even below 20 tasks.
+- Report the actual count, independent seams, and a proposed roadmap split. Do not merge unrelated outcomes, enlarge tasks beyond 1-3 hours, omit validation, or hide prerequisites merely to fall below the threshold.
+- Continue only when the verdict is `PASS (single-spec)`, or when the user has explicitly accepted and recorded the exception required by `spec-sizing.md`.
+
 ### Coverage Review
 
 - Every requirement ID from `requirements.md` must appear in at least one task.
