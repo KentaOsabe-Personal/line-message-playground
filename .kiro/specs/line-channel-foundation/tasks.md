@@ -107,8 +107,8 @@
   - 完了時には、登録・更新・状態変更の dispatch テストが公開結果だけを出し、失敗・取消経路で秘密と DB 部分変更が観測されない
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 7.1, 7.2, 7.3, 7.4, 7.5_
 
-- [ ] 4. 中断・再実行可能な鍵ローテーションを構築する
-- [ ] 4.1 (P) ローテーション専用の snapshot と行更新境界を実装する
+- [x] 4. 中断・再実行可能な鍵ローテーションを構築する
+- [x] 4.1 (P) ローテーション専用の snapshot と行更新境界を実装する
   - 資格情報を持つ公開 UUID の安定した昇順 snapshot を返し、final sweep では新しい snapshot を取得する
   - 呼出し側の行単位 transaction 内だけで資格情報行を lock 後に読み直し、検証済みペアを単一更新する
   - transaction 外利用、行消失、deadlock、timeout、storage failure を値や SQL なしの安全な分類へ置換する
@@ -118,7 +118,7 @@
   - _Boundary: RotationCredentialRepository_
   - _Depends: 2.1_
 
-- [ ] 4.2 (P) 二重ローテーションを防ぐ advisory lock 境界を実装する
+- [x] 4.2 (P) 二重ローテーションを防ぐ advisory lock 境界を実装する
   - 同一 MySQL connection で command scope lock を取得し、競合中は例外でなく busy として走査前に返す
   - transaction の commit/rollback を解放とみなさず、正常、busy、storage error、予期しない例外、割込みの全終了経路で明示解放する
   - lock 名、SQL、接続情報を結果・例外・通常ログへ含めない
@@ -127,7 +127,7 @@
   - _Boundary: RotationLock_
   - _Depends: 1.5_
 
-- [ ] 4.3 (P) 1資格情報ペアの再暗号化と primary 検証を実装する
+- [x] 4.3 (P) 1資格情報ペアの再暗号化と primary 検証を実装する
   - 両値がすでに現用鍵と期待 context で読める場合は暗号文を変更せず verified とする
   - それ以外は全 keyring で両値を復号し、現用鍵へ再暗号化後、primary-only で元値・context 一致を再検証する
   - 片側破損、context 不一致、再暗号化・再検証失敗では新ペアを返さず安全な失敗分類だけを返す
@@ -137,7 +137,7 @@
   - _Boundary: CredentialRotationItemProcessor_
   - _Depends: 1.4_
 
-- [ ] 4.4 ローテーション全件処理と最終完了判定を統合する
+- [x] 4.4 ローテーション全件処理と最終完了判定を統合する
   - 旧鍵がない場合は repository、DB、advisory lock を呼ぶ前に変更ゼロの configuration-required 結果を返す
   - 準備完了時だけ batch lock を取得し、snapshot の各資格情報を別 transaction で lock・判定・必要時更新する
   - 行失敗は rollback して公開 UUID と安全な code だけを集計し、割込み時は処理中の1行だけを rollback する
@@ -147,7 +147,7 @@
   - _Requirements: 4.6, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 7.1, 7.2, 7.3_
   - _Depends: 4.1, 4.2, 4.3_
 
-- [ ] 4.5 鍵素材を受け取らないローテーションコマンドを実装する
+- [x] 4.5 鍵素材を受け取らないローテーションコマンドを実装する
   - process の検証済み keyring だけで全件処理を起動し、鍵を option、argument、stdin から受け付けない
   - complete では件数と旧鍵撤去可否、incomplete では失敗公開 UUID と安全な code、busy/configuration-required では行動可能な非完了結果だけを表示する
   - incomplete、busy、configuration-required を非完了 exit へ写像し、raw 例外を出力へ連結しない
