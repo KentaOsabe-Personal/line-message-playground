@@ -199,11 +199,12 @@ class DjangoLineChannelRepositoryTests(TransactionTestCase):
         self.assertEqual(str(captured.exception), "unique_conflict")
         self.assertNotIsInstance(captured.exception, IntegrityError)
 
-    # テストケース: DBがdeadlockまたは一般storage errorを返す
+    # テストケース: DBがtimeout、deadlock、または一般storage errorを返す
     # 期待値: SQLや値を含めずretryableまたはstorage_unavailableへ分類する
     def test_database_failures_are_safely_classified(self):
         canary = "raw-sql-and-value-canary"
         cases = (
+            (OperationalError(1205, canary), "retryable"),
             (OperationalError(1213, canary), "retryable"),
             (DatabaseError(canary), "storage_unavailable"),
         )

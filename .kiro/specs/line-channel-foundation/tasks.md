@@ -154,8 +154,8 @@
   - 完了時には、全結果経路の stdout/stderr に鍵、鍵数、平文、暗号文がなく、exit status が集計状態と一致する
   - _Requirements: 6.1, 6.3, 6.6, 6.7, 6.8, 7.1, 7.2, 7.3_
 
-- [ ] 5. 各境界を接続し、セキュリティ・競合・回帰を検証する
-- [ ] 5.1 検証済み keyring から concrete 依存を一意に組み立てる
+- [x] 5. 各境界を接続し、セキュリティ・競合・回帰を検証する
+- [x] 5.1 検証済み keyring から concrete 依存を一意に組み立てる
   - composition root だけが runtime の検証済み state から暗号境界、通常 repository、用途別 repository、channel service、rotation components、prompt を構築する
   - rotation service と1行 processor は同じ暗号 instance を共有し、command lifecycle ごとに必要な factory を一度だけ呼ぶ
   - factory は raw environment、Django settings、DB query、readiness policy、秘密値へ触れず、future consumer には用途別 repository 契約だけを公開する
@@ -164,63 +164,63 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 4.1, 4.6, 4.7, 5.1, 5.3, 5.4, 5.5, 5.6, 5.7, 6.1, 6.8, 7.1, 7.3, 7.4_
   - _Depends: 2.3, 3.4, 4.5_
 
-- [ ] 5.2 起動設定と settings 列挙の秘密非露出を検証する
+- [x] 5.2 起動設定と settings 列挙の秘密非露出を検証する
   - 本番設定を使う子 process で、鍵未指定・空・不正・重複、`DEBUG=True`、`SECRET_KEY` だけの起動が DB access 前に失敗することを検証する
   - 正しい canary key で settings 列挙と差分表示を実行し、raw keyring の属性・値が stdout/stderr、例外、ログへ出ないことを検証する
   - 起動 hook の複数呼出しと runtime state の再初期化条件が、秘密値なしで冪等または安全な失敗になることを検証する
   - 完了時には、全 startup subprocess assertion が通り、設定不備経路も秘密値なしで fail closed になる
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 7.1, 7.3_
 
-- [ ] 5.3 資格情報操作の query・log 非露出を検証する
+- [x] 5.3 資格情報操作の query・log 非露出を検証する
   - `DEBUG=false` で資格情報の登録、用途別取得、rotation を実行し、canary の平文・暗号文・鍵を観測する
   - `connection.queries`、DB logger、safe exception、command の stdout/stderr に canary が一切存在しないことを検証する
   - DB logger が SQL parameter handler を持たず伝播しないことと、構成上 MySQL general query log が無効であることを確認する
   - 完了時には、登録・取得・rotation の全 canary assertion が query capture と通常ログの両方で通る
   - _Requirements: 3.7, 5.7, 6.8, 7.1, 7.2, 7.3_
 
-- [ ] 5.4 登録・資格情報置換・状態遷移の原子性を検証する
+- [x] 5.4 登録・資格情報置換・状態遷移の原子性を検証する
   - duplicate、2件目暗号化失敗、資格情報 pair 置換失敗で channel/credential の作成・更新全体が rollback することを検証する
   - disable 後の暗号文保持と、保存済み完全 pair を使う enable が同じ公開 ID で取得対象へ戻ることを検証する
   - 破損した保存済み pair だけでの enable は全変更を拒否し、新 pair と同時 enable では primary 検証後に metadata と同時 commit して復旧できることを検証する
   - 完了時には、失敗シナリオで対象 channel の metadata・状態・資格情報が一切変わらず、成功時だけ更新日時が進む
   - _Requirements: 1.4, 1.5, 1.6, 1.7, 2.1, 2.3, 2.4, 2.5, 5.4, 5.5, 7.3_
 
-- [ ] 5.5 通常チャネル更新の並行競合を検証する
+- [x] 5.5 通常チャネル更新の並行競合を検証する
   - 独立 DB connection と行 lock を使い、同一 channel への並行 metadata・資格情報更新を競合させる
   - lock 後に読み直した最新値へ各更新が収束し、lost update や別 channel への変更が発生しないことを検証する
   - unique race、deadlock、timeout が raw DB 情報なしの conflict/retryable 分類となり、transaction が rollback することを検証する
   - 完了時には、競合テストが対象 channel だけの一貫した最終状態と更新日時を観測し、部分 pair を一件も残さない
   - _Requirements: 1.4, 1.5, 2.3, 2.4, 5.4, 7.3_
 
-- [ ] 5.6 対話管理操作の端末安全性と公開出力を結合検証する
+- [x] 5.6 対話管理操作の端末安全性と公開出力を結合検証する
   - 登録、部分更新、有効化、無効化を対話入力から application operation まで通し、hidden pair と指定項目だけが渡ることを検証する
   - 非 TTY、hidden input 警告、EOF、割込み、取消、不正 UUID、not found では service mutation ゼロかつ暗黙 create なしを検証する
   - 成功・失敗出力に公開 summary と安全な code だけが現れ、既存値、新しい平文、暗号文、鍵が現れないことを canary で検証する
   - 完了時には、全 action の command test が結果と exit behavior を再現し、資格情報の表示・copy・export 経路が存在しない
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 7.1, 7.2, 7.3, 7.4, 7.5_
 
-- [ ] 5.7 ローテーションの中断・再実行と破損行保持を検証する
+- [x] 5.7 ローテーションの中断・再実行と破損行保持を検証する
   - N件目で強制割込みし、処理中の1行だけが rollback され、commit 済み行と未処理行を新旧 keyring で取得できることを検証する
   - 再実行で primary 済み行を変更せず、残りの旧鍵行だけが現用鍵へ収束することを検証する
   - 破損行は元暗号文のまま保持され、失敗があれば完了非報告、修復後の再実行でのみ完了になることを検証する
   - 完了時には、中断前後の件数・公開 UUID・安全な failure code が一致し、未検証暗号文への上書きが一件もない
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 7.1, 7.2, 7.3_
 
-- [ ] 5.8 ローテーションと通常更新の競合・final sweep を検証する
+- [x] 5.8 ローテーションと通常更新の競合・final sweep を検証する
   - 通常資格情報更新と rotation を独立 connection で競合させ、行 lock 後の最新 pair が失われないことを検証する
   - 初回 snapshot 後に追加・更新された資格情報も fresh snapshot の final sweep で検査されることを検証する
   - final sweep が primary-only 検証だけを行い、旧鍵 fallback、再暗号化、DB 更新を実行しないことを確認する
   - 完了時には、全最新 pair が primary で読める場合だけ旧鍵撤去可能となり、一件でも旧鍵専用または破損 pair があれば incomplete になる
   - _Requirements: 1.5, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 7.3_
 
-- [ ] 5.9 二重ローテーションと advisory lock の全終了経路を検証する
+- [x] 5.9 二重ローテーションと advisory lock の全終了経路を検証する
   - 同時 command の一方だけが lock を取得し、もう一方は busy で走査・変更せず終了することを検証する
   - 正常、busy、行失敗、storage error、予期しない例外、割込みの各経路を発生させる
   - 各経路の終了後に別 connection から同じ advisory lock を再取得でき、lock 名・SQL・接続情報が出力されないことを検証する
   - 完了時には、二重実行で暗号文更新が重複せず、全終了経路で lock 解放と安全な exit/output が観測できる
   - _Requirements: 6.1, 6.3, 6.5, 6.8, 7.1, 7.2, 7.3_
 
-- [ ] 5.10 Backend 全体の migration・設定・既存配信回帰を確認する
+- [x] 5.10 Backend 全体の migration・設定・既存配信回帰を確認する
   - 新 app の migration 作成状態と system check を検証し、schema 制約と startup gate が標準コンテナ手順で有効になることを確認する
   - Backend 全テストを隔離テスト設定で実行し、各テストの日本語ケース・期待値コメント規約を満たす
   - 既存配信テストを実行し、access token と固定 user ID の環境変数契約が維持され、channel secret 注入削除で配信 behavior が変わらないことを確認する

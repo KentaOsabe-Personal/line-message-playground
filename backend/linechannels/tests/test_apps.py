@@ -25,6 +25,10 @@ class LineChannelsConfigTests(SimpleTestCase):
             ({}, None),
             ({"LINE_CHANNEL_CREDENTIAL_KEYS": ""}, None),
             ({"LINE_CHANNEL_CREDENTIAL_KEYS": "invalid-key-canary"}, "invalid-key-canary"),
+            (
+                {"LINE_CHANNEL_CREDENTIAL_KEYS": f"{valid_key},{valid_key}"},
+                valid_key,
+            ),
             ({"DJANGO_SECRET_KEY": "secret-key-only-canary"}, "secret-key-only-canary"),
             (
                 {
