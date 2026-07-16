@@ -1,49 +1,49 @@
 # Implementation Plan
 
-- [ ] 1. 実装に必要な依存・runtime・公開origin設定を整える
-- [ ] 1.1 Backendへ固定HTTP client依存を追加する
+- [x] 1. 実装に必要な依存・runtime・公開origin設定を整える
+- [x] 1.1 Backendへ固定HTTP client依存を追加する
   - LINE remote API用の同期HTTP clientを設計指定バージョンで固定する
   - 既存Backend testが依存追加後も起動できることを確認する
   - 完了時には、Backendコンテナで固定バージョンをimportできる
   - _Requirements: 2.1, 7.11_
 
-- [ ] 1.2 LINE Login用runtime設定をfail closedで読み込む
+- [x] 1.2 LINE Login用runtime設定をfail closedで読み込む
   - チャネルID・secret、provider、LIFF直結チャネルID、owner digestをBackend専用の不変なruntimeへ変換する
   - 必須値の欠落・空値・非canonical値を秘密情報なしの起動エラーにし、owner digest未設定だけは認証拒否用sentinelへ変換する
   - 完了時には、DB接続前に設定不備が検出され、raw secretとowner digestがDjango settingsや例外へ載らない
   - _Requirements: 2.1, 3.1, 3.2, 3.3, 3.8, 7.9, 7.10, 7.11, 8.4, 8.5, 8.6_
 
-- [ ] 1.3 Django署名secretを厳密に検証する
+- [x] 1.3 Django署名secretを厳密に検証する
   - Django署名secretの明示設定・最小長・既知default禁止を起動時に検証する
   - 不正値をsecret長・断片・既知値なしの起動エラーへ変換する
   - 完了時には、安全なsecretだけがunlink confirmation署名へ利用できる
   - _Requirements: 7.1, 8.4, 8.5, 8.6_
 
-- [ ] 1.4 Frontend設定processへLIFF IDとexact allowed hostを分離する
+- [x] 1.4 Frontend設定processへLIFF IDとexact allowed hostを分離する
   - clientへ公開するLIFF IDと、config processだけが読む公開hostを別の環境境界として扱う
   - 公開hostからexact allowed hostを構成し、重複するLIFF URLやallowed-host環境値を作らない
   - 完了時には、Frontend bundleがLIFF IDだけを参照し、Backend秘密値や公開host設定値をclient変数として含まない
   - _Requirements: 1.1, 1.3, 3.8, 8.1, 8.4, 8.5_
 
-- [ ] 1.5 test起動用の安全なruntime bootstrapを用意する
+- [x] 1.5 test起動用の安全なruntime bootstrapを用意する
   - base settings読込前にprocess固有のDjango secretとLINE Login test secretを供給する
   - syntheticなhost・channel・provider・UUIDをtest用に注入し、owner digestはtestごとに明示できるようにする
   - 完了時には、repositoryへ固定secret canaryを保存せず、全Backend testが本番相当の起動時検証を通過できる
   - _Requirements: 2.1, 3.2, 3.8, 8.1, 8.4, 8.5, 8.6_
 
-- [ ] 1.6 owner適格条件を秘密値なしで生成する
+- [x] 1.6 owner適格条件を秘密値なしで生成する
   - providerと非echo入力された本人識別情報からcanonicalなowner digestだけを導出する
   - owner digest未設定のruntimeでも生成処理を許可し、本人識別情報・入力長・断片を出力やログへ残さない
   - 完了時には、標準出力へdigestだけが返り、その値を設定すると事前許可ownerを照合できる
   - _Requirements: 3.1, 3.2, 3.3, 3.8, 8.4, 8.5, 8.6_
 
-- [ ] 1.7 Frontendへ固定LIFF SDK依存を追加する
+- [x] 1.7 Frontendへ固定LIFF SDK依存を追加する
   - LIFF SDKを設計指定バージョンで固定し、再現可能なlockfileへ組み込む
   - 既存Frontend testとproduction buildが依存追加後も起動できることを確認する
   - 完了時には、Frontendコンテナで固定SDKをimportできる
   - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ] 1.8 公開hostを厳密に検証する
+- [x] 1.8 公開hostを厳密に検証する
   - 公開hostは単一ASCII hostnameだけを許し、scheme・port・path・wildcard・空白を拒否する
   - 検証済みhostからexact HTTPS trusted originを導出する
   - 完了時には、不正hostが設定段階で拒否され、安全なoriginだけが後続のCSRF設定へ渡る

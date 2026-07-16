@@ -24,6 +24,40 @@ NGROK_AUTHTOKEN=your-ngrok-authtoken
 NGROK_DOMAIN=your-domain.ngrok-free.app
 ```
 
+### LINE Login / LIFF runtime
+
+Backend の署名 secret は既知値や短い値を使用せず、ローカル環境ごとに生成します。次のコマンドは Django を起動せず、生成値だけを標準出力へ表示します。
+
+```bash
+docker compose run --rm --no-deps backend python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+生成値と LINE Developers Console の設定を `.env` へ保存します。`LINE_LOGIN_CHANNEL_SECRET` と `LINE_OWNER_SUBJECT_DIGEST` は Backend だけへ渡され、Frontend の環境や bundle には含まれません。
+
+```dotenv
+DJANGO_SECRET_KEY=<生成した値>
+VITE_LIFF_ID=<LIFF ID>
+LINE_LOGIN_CHANNEL_ID=<LINE Login channel ID>
+LINE_LOGIN_CHANNEL_SECRET=<LINE Login channel secret>
+LINE_LOGIN_PROVIDER_ID=<provider ID>
+LINE_LIFF_LINKED_CHANNEL_PUBLIC_ID=<登録済みMessaging API channelのpublic UUID>
+LINE_OWNER_SUBJECT_DIGEST=
+```
+
+LIFF は `VITE_LIFF_ID` から `https://liff.line.me/${VITE_LIFF_ID}` を導出します。LINE Developers Console の LIFF Endpoint URL は `https://${NGROK_DOMAIN}/liff`、scope は `openid profile` に設定し、LIFF と LINE Login と Messaging API channel が同じ provider に属することを確認してください。`NGROK_DOMAIN` を変更した場合は Console の Endpoint URL も同時に更新します。scheme、port、path、wildcard、空白を含む `NGROK_DOMAIN` は起動時に拒否されます。
+
+他の必須値を設定し `LINE_OWNER_SUBJECT_DIGEST` だけを空にした状態では、Backend は起動できますが owner 認証は fail closed になります。次のコマンドで本人識別情報を非表示入力し、表示された lowercase SHA-256 digest だけを `.env` の `LINE_OWNER_SUBJECT_DIGEST` へ設定して Backend を再起動します。本人識別情報を引数、README、ログへ保存しないでください。
+
+```bash
+docker compose run --rm backend python manage.py derive_line_owner_digest
+```
+
+既存の Backend 専用 `LINE_USER_ID` を入力源にする場合だけ、`--use-line-user-id` を指定できます。このコマンドも本人識別情報自体は出力しません。
+
+```bash
+docker compose run --rm backend python manage.py derive_line_owner_digest --use-line-user-id
+```
+
 設定後、全サービスを起動します。ngrokも通常のComposeサービスとして起動します。
 
 ### チャネル資格情報の暗号化キー
