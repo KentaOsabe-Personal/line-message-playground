@@ -119,6 +119,7 @@ class LineChannelModelTests(TestCase):
     def test_schema_fields_follow_the_non_exposure_contract(self):
         public_id = LineChannel._meta.get_field("public_id")
         active = LineChannel._meta.get_field("is_active")
+        provider = LineChannel._meta.get_field("provider_id")
         credential_fields = (
             LineChannelCredential._meta.get_field("access_token_ciphertext"),
             LineChannelCredential._meta.get_field("channel_secret_ciphertext"),
@@ -127,6 +128,12 @@ class LineChannelModelTests(TestCase):
         self.assertTrue(public_id.unique)
         self.assertFalse(public_id.editable)
         self.assertTrue(active.db_index)
+        self.assertTrue(provider.null)
+        self.assertEqual(provider.max_length, 64)
+        self.assertEqual(
+            [index.fields for index in LineChannel._meta.indexes],
+            [["provider_id", "is_active"]],
+        )
         for field in credential_fields:
             self.assertFalse(field.null)
             self.assertFalse(field.editable)

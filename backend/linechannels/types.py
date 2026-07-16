@@ -124,6 +124,15 @@ class PublicChannelSummary:
     credentials_configured: bool
     created_at: datetime
     updated_at: datetime
+    provider_id: str | None = None
+
+
+@dataclass(frozen=True)
+class LinkableChannelSummary:
+    public_id: UUID
+    label: str
+    provider_id: str
+    is_active: bool
 
 
 MutationFailureCode = Literal[
@@ -157,12 +166,14 @@ class RegisterLineChannel:
     label: str
     credentials: CredentialPair
     is_active: bool
+    provider_id: str | None = None
 
     def __repr__(self) -> str:
         return (
             "<RegisterLineChannel "
             f"channel_id={self.messaging_api_channel_id} "
-            f"bot_user_id={self.bot_user_id} active={self.is_active} "
+            f"bot_user_id={self.bot_user_id} provider_id={self.provider_id} "
+            f"active={self.is_active} "
             "credentials=redacted>"
         )
 
@@ -175,6 +186,7 @@ class UpdateLineChannel:
     label: str | None = None
     credentials: CredentialPair | None = None
     is_active: bool | None = None
+    provider_id: str | None = None
 
     def __repr__(self) -> str:
         fields = (
@@ -182,6 +194,7 @@ class UpdateLineChannel:
             "bot_user_id",
             "label",
             "is_active",
+            "provider_id",
         )
         specified = ", ".join(
             field for field in fields if getattr(self, field) is not None

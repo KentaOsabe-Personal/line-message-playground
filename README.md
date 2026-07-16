@@ -86,6 +86,16 @@ docker compose up --build
 
 チャネル管理コマンドで現在のアクセストークンとチャネルシークレットを初期登録し、登録済み資格情報を正常に利用できることを確認した後、従来の `LINE_CHANNEL_SECRET` がローカル `.env` に残っていれば削除してください。既存配信が利用する `LINE_CHANNEL_ACCESS_TOKEN` と `LINE_USER_ID` は、配信機能の移行が完了するまで維持します。
 
+新しいチャネルの登録時は、LINE Developers Consoleで確認したprovider IDを入力します。provider IDは1〜64文字のASCII数字列としてそのまま保存され、空白除去・整数化・leading zero除去は行いません。既存チャネルはmigration後もprovider未設定のまま利用できますが、アカウント連携候補には表示されません。既存チャネルの公開UUIDを指定して、次の非対話コマンドで安全にbackfillします。
+
+```bash
+docker compose run --rm backend python manage.py manage_line_channel \
+  --channel-public-id <既存チャネルの公開UUID> \
+  --provider-id <LINE provider ID>
+```
+
+出力の `provider_id` が設定値と完全一致することを確認してください。出力にはチャネル資格情報は含まれません。`LINE_LIFF_LINKED_CHANNEL_PUBLIC_ID` が指すチャネルには、`LINE_LOGIN_PROVIDER_ID` と完全一致するprovider IDを設定する必要があります。
+
 ### 暗号化キーのローテーション
 
 1. 新しい鍵を一度だけ生成し、`LINE_CHANNEL_CREDENTIAL_KEYS` の先頭へ追加します。旧鍵は後続に残します。

@@ -63,6 +63,7 @@ class DefaultLineChannelServiceRegisterTests(TransactionTestCase):
             "label": "メインチャネル",
             "credentials": build_credential_pair("token-canary", "secret-canary"),
             "is_active": True,
+            "provider_id": "000123",
         }
         values.update(overrides)
         return RegisterLineChannel(**values)
@@ -141,6 +142,7 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
                 label="登録時名称",
                 credentials=build_credential_pair("token-canary", "secret-canary"),
                 is_active=True,
+                provider_id="000123",
             )
         )
         self.assertEqual(registered.status, "succeeded")
@@ -167,11 +169,39 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
         self.assertEqual(after.messaging_api_channel_id, "1234567890")
         self.assertEqual(after.bot_user_id, "U" + "1" * 32)
         self.assertEqual(after.label, "更新後名称")
+        self.assertEqual(after.provider_id, "000123")
         self.assertGreater(after.updated_at, before.updated_at)
         self.assertEqual(
             (bytes(credential.access_token_ciphertext), bytes(credential.channel_secret_ciphertext)),
             ciphertexts,
         )
+
+    def test_provider_is_required_for_register_and_can_backfill_legacy_channel(self):
+        missing_provider = self.service.register(
+            RegisterLineChannel(
+                messaging_api_channel_id="999",
+                bot_user_id="U" + "9" * 32,
+                label="providerなし",
+                credentials=build_credential_pair("token", "secret"),
+                is_active=True,
+                provider_id=None,
+            )
+        )
+        channel = LineChannel.objects.get(public_id=self.public_id)
+        channel.provider_id = None
+        channel.save(update_fields=("provider_id",))
+
+        backfilled = self.service.update(
+            UpdateLineChannel(self.public_id, provider_id="000456")
+        )
+
+        channel.refresh_from_db()
+        self.assertEqual(
+            (missing_provider.status, missing_provider.code),
+            ("failed", "invalid_input"),
+        )
+        self.assertEqual(backfilled.status, "succeeded")
+        self.assertEqual(channel.provider_id, "000456")
 
     # テストケース: チャネルを無効化した後、保存済み資格情報だけで再有効化する
     # 期待値: 暗号文を保持し、両用途の復号検証に成功した同じチャネルを有効へ戻す

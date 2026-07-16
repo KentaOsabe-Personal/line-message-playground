@@ -49,32 +49,32 @@
   - 完了時には、不正hostが設定段階で拒否され、安全なoriginだけが後続のCSRF設定へ渡る
   - _Requirements: 1.1, 1.3, 8.1, 8.2, 8.3_
 
-- [ ] 2. provider付きチャネル参照の上流契約を拡張する
-- [ ] 2.1 provider識別子の共通検証契約を追加する
+- [x] 2. provider付きチャネル参照の上流契約を拡張する
+- [x] 2.1 provider識別子の共通検証契約を追加する
   - providerを1〜64文字のASCII数字列として扱い、trim・整数化・leading zero除去を行わない
   - 新規チャネル入力ではproviderを必須とし、既存チャネル更新では安全なbackfillを許可する
   - 完了時には、LINE Login runtimeとMessaging APIチャネルが同じ完全一致規則で検証される
   - _Requirements: 5.3, 5.4, 6.4, 8.5_
 
-- [ ] 2.2 既存チャネルを維持するnullable provider migrationを追加する
+- [x] 2.2 既存チャネルを維持するnullable provider migrationを追加する
   - 既存チャネルを削除・変更せずprovider列と検索索引を追加する
   - legacy未設定値を許容しながら、新しいチャネルでは検証済みproviderを保存できるようにする
   - 完了時には、migration適用後も既存配信チャネルが利用でき、provider未設定を明示的に識別できる
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 6.4, 6.6_
 
-- [ ] 2.3 チャネル管理操作へprovider backfillを追加する
+- [x] 2.3 チャネル管理操作へprovider backfillを追加する
   - 対話入力と非対話入力の両方でproviderを安全に登録・更新できるようにする
   - 表示時にprovider以外の秘密credentialを混在させず、未設定チャネルを明確に判別する
   - 完了時には、既存チャネルへproviderをbackfillし、後続のaccount link候補へ移行できる
   - _Requirements: 5.1, 5.3, 5.4, 6.4, 6.6, 8.4, 8.5_
 
-- [ ] 2.4 秘密を含まないread-onlyチャネルdirectoryを提供する
+- [x] 2.4 秘密を含まないread-onlyチャネルdirectoryを提供する
   - activeかつprovider設定済みのチャネルだけを登録候補として返す
   - 既存recipient用にはinactiveチャネルも不透明ID・名称・provider・状態だけで取得できるようにする
   - 完了時には、Messaging API内部ID・bot user ID・credential状態を含まないsafe projectionだけをaccount境界へ返せる
   - _Requirements: 5.1, 5.3, 5.4, 5.9, 6.4, 6.6, 8.5_
 
-- [ ] 2.5 LIFF直結チャネルをserver-side policyとして確立する
+- [x] 2.5 LIFF直結チャネルをserver-side policyとして確立する
   - 設定済みチャネルIDをdirectoryで解決し、存在・provider binding・LINE Login provider一致を確認する
   - policy未確立時は全account operationを安全な設定エラーで拒否する
   - 完了時には、検証済みの1チャネルだけをLIFF直結と判定でき、serviceが環境変数を直接参照しない

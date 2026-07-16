@@ -9,11 +9,20 @@ from linechannels.validators import (
     validate_bot_user_id,
     validate_label,
     validate_messaging_api_channel_id,
+    validate_provider_id,
     validate_public_id,
 )
 
 
 class BoundaryValidatorTests(SimpleTestCase):
+    def test_provider_id_is_opaque_ascii_digits_without_normalization(self):
+        self.assertEqual(validate_provider_id("000123"), "000123")
+        self.assertEqual(validate_provider_id("9" * 64), "9" * 64)
+
+        for value in (None, "", " 123", "123 ", "1.0", "+1", "１２３", "1" * 65):
+            with self.subTest(value=value), self.assertRaises(BoundaryValidationError):
+                validate_provider_id(value)  # type: ignore[arg-type]
+
     # テストケース: LINE識別情報、名称、公開UUIDを正しい形式で渡す
     # 期待値: 正規化済みの値とUUIDが返る
     def test_accepts_and_normalizes_valid_non_secret_fields(self):

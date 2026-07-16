@@ -51,7 +51,7 @@ class GetPassManageLineChannelPromptsTests(SimpleTestCase):
     # 期待値: 2秘密をhidden inputだけで収集し、promptや結果表現へ露出しない
     def test_register_collects_confirmed_secrets_only_through_hidden_input(self):
         harness = PromptHarness(
-            ["register", "1234567890", "U" + "1" * 32, "メイン", "yes"],
+            ["register", "1234567890", "000123", "U" + "1" * 32, "メイン", "yes"],
             ["token-canary", "token-canary", "secret-canary", "secret-canary"],
         )
 
@@ -59,6 +59,7 @@ class GetPassManageLineChannelPromptsTests(SimpleTestCase):
 
         self.assertEqual(result.status, "collected")
         self.assertIsInstance(result.value, RegisterLineChannel)
+        self.assertEqual(result.value.provider_id, "000123")
         self.assertEqual(len(harness.hidden_prompts), 4)
         visible_text = "".join(harness.visible_prompts)
         self.assertNotIn("token-canary", visible_text)
@@ -71,7 +72,7 @@ class GetPassManageLineChannelPromptsTests(SimpleTestCase):
     def test_update_without_replacement_never_reads_existing_or_new_secrets(self):
         public_id = uuid.uuid4()
         harness = PromptHarness(
-            ["update", str(public_id), "", "", "更新後", "no", "keep"]
+            ["update", str(public_id), "", "000456", "", "更新後", "no", "keep"]
         )
 
         result = harness.prompts().collect()
@@ -80,6 +81,7 @@ class GetPassManageLineChannelPromptsTests(SimpleTestCase):
         self.assertIsInstance(result.value, UpdateLineChannel)
         self.assertEqual(result.value.channel_public_id, public_id)
         self.assertEqual(result.value.label, "更新後")
+        self.assertEqual(result.value.provider_id, "000456")
         self.assertIsNone(result.value.credentials)
         self.assertEqual(harness.hidden_prompts, [])
 
@@ -103,7 +105,7 @@ class GetPassManageLineChannelPromptsTests(SimpleTestCase):
             PromptHarness([], stream=NonTTYStream()),
             PromptHarness(["cancel"]),
             PromptHarness(
-                ["register", "1234567890", "U" + "1" * 32, "メイン", "yes"],
+                ["register", "1234567890", "000123", "U" + "1" * 32, "メイン", "yes"],
                 ["token-canary", "different-token"],
             ),
         )
@@ -117,7 +119,7 @@ class GetPassManageLineChannelPromptsTests(SimpleTestCase):
     def test_empty_update_and_terminal_input_failures_are_invalid(self):
         public_id = uuid.uuid4()
         empty_update = PromptHarness(
-            ["update", str(public_id), "", "", "", "no", "keep"]
+            ["update", str(public_id), "", "", "", "", "no", "keep"]
         ).prompts()
 
         def fail_with(error):
@@ -129,7 +131,7 @@ class GetPassManageLineChannelPromptsTests(SimpleTestCase):
             )
 
         warning_harness = PromptHarness(
-            ["register", "1234567890", "U" + "1" * 32, "メイン", "yes"]
+            ["register", "1234567890", "000123", "U" + "1" * 32, "メイン", "yes"]
         )
         def warn_about_echo(_prompt):
             warnings.warn("echo fallback", getpass.GetPassWarning)
@@ -154,7 +156,7 @@ class GetPassManageLineChannelPromptsTests(SimpleTestCase):
     # 期待値: cancelledへ分類し、秘密を含むmutation用入力を生成しない
     def test_hidden_cancel_is_cancelled_without_mutation_input(self):
         harness = PromptHarness(
-            ["register", "1234567890", "U" + "1" * 32, "メイン", "yes"],
+            ["register", "1234567890", "000123", "U" + "1" * 32, "メイン", "yes"],
             ["cancel"],
         )
 

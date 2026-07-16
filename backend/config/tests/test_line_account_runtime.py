@@ -58,6 +58,14 @@ class LineAccountRuntimeTests(SimpleTestCase):
 
         self.assertIsInstance(runtime.owner_eligibility, OwnerEligibilityUnavailable)
 
+    def test_runtime_rejects_values_rejected_by_shared_provider_contract(self):
+        for provider_id in (" 456", "456 ", "１２３", "1" * 65):
+            with self.subTest(provider_id=provider_id):
+                environment = valid_environment()
+                environment["LINE_LOGIN_PROVIDER_ID"] = provider_id
+                with self.assertRaises(ImproperlyConfigured):
+                    load_line_account_runtime(environment)
+
     # テストケース: 必須値の欠落・非canonical値を runtime へ読み込む。
     # 期待値: raw 値を含まない安定した起動エラーで fail closed になる。
     def test_rejects_missing_and_noncanonical_values_without_echo(self):

@@ -6,7 +6,9 @@ from .management.prompts import GetPassManageLineChannelPrompts, ManageLineChann
 from .repositories import (
     CredentialRepository,
     DjangoCredentialRepository,
+    DjangoLineChannelDirectory,
     DjangoLineChannelRepository,
+    LineChannelDirectory,
 )
 from .rotation import CredentialRotationService, DefaultCredentialRotationService
 from .rotation_item import DefaultCredentialRotationItemProcessor
@@ -21,6 +23,10 @@ def _build_cipher() -> FernetCredentialCipher:
 
 def build_credential_repository() -> CredentialRepository:
     return DjangoCredentialRepository(_build_cipher())
+
+
+def build_line_channel_directory() -> LineChannelDirectory:
+    return DjangoLineChannelDirectory()
 
 
 def build_line_channel_service() -> LineChannelService:

@@ -99,6 +99,7 @@ class LineChannelConcurrencyIntegrationTests(TransactionTestCase):
                 "before",
                 build_credential_pair("token-before", "secret-before"),
                 True,
+                "000123",
             )
         )
         self.assertEqual(result.status, "succeeded")
