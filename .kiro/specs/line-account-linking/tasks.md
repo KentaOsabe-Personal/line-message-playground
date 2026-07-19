@@ -113,32 +113,32 @@
   - 完了時には、公開APIが定義済み安全形式以外のエラーbodyを返さない
   - _Requirements: 2.2, 3.6, 3.8, 8.4, 8.5, 8.6_
 
-- [ ] 4. LINE Platform gatewayを実装する
-- [ ] 4.1 LINE read-only通信の共通transport policyを実装する
+- [x] 4. LINE Platform gatewayを実装する
+- [x] 4.1 LINE read-only通信の共通transport policyを実装する
   - verify・profile・friendship・stateless token発行へredirect禁止とconnect・read・write・pool timeout上限を適用する
   - 400系を再送せず、429・5xx・transport timeoutだけを最大2回の短いjitter付きretryへ限定する
   - 完了時には、read-only LINE通信が共通のbounded execution結果へ収束する
   - _Requirements: 2.1, 5.7, 7.11, 8.6_
 
-- [ ] 4.2 ID tokenの本人証明をremote検証する
+- [x] 4.2 ID tokenの本人証明をremote検証する
   - LINE verify応答のissuer・audience・expiry・subject・nameを防御的に確認する
   - 対象チャネル・provider不一致、期限切れ、改変、scope不足をsession作成前の安全な失敗へ変換する
   - 完了時には、有効なraw ID tokenだけが検証済みidentityとなり、Frontend profileだけでは認証できない
   - _Requirements: 2.1, 2.2, 2.3, 4.1, 4.3, 8.6_
 
-- [ ] 4.3 user access tokenとprofileの本人bindingを検証する
+- [x] 4.3 user access tokenとprofileの本人bindingを検証する
   - tokenのclient ID・有効期限・必要scopeを確認し、profile subjectを保存identityとconstant-timeで比較する
   - 無効token・本人不一致・対象チャネル不一致を外部作用前に拒否する
   - 完了時には、現在owner本人のfresh tokenだけがrecipient登録または全解除の証明として利用できる
   - _Requirements: 5.4, 5.7, 7.9, 7.10, 8.4, 8.5, 8.6_
 
-- [ ] 4.4 LIFF直結チャネルの友だち状態を取得する
+- [x] 4.4 LIFF直結チャネルの友だち状態を取得する
   - 検証済みuser tokenでfriendshipを取得し、boolean以外の応答を安全なdependency errorへ変換する
   - read-only呼出しへredirect禁止・明示timeout・限定retryを適用する
   - 完了時には、directチャネルだけがLINE確認済みfriendshipを取得でき、非directチャネルはLINEを呼ばない
   - _Requirements: 5.7, 5.8, 5.9, 6.2, 6.5, 8.6_
 
-- [ ] 4.5 stateless channel tokenと認可取消結果を扱う
+- [x] 4.5 stateless channel tokenと認可取消結果を扱う
   - Backend内で短期channel tokenを発行し、検証済みuser tokenを認可取消へ送る
   - 204だけを外部成功応答とし、400・429・5xx・timeout・接続切断を拒否または結果不確定へ分類する
   - 完了時には、認可取消POSTが同一request内で自動再送されず、channel tokenとsecretも保存されない
