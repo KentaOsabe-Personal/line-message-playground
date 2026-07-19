@@ -77,6 +77,10 @@ USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "lineaccounts.errors.safe_exception_handler",
+}
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

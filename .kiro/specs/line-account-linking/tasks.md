@@ -81,33 +81,33 @@
   - _Depends: 1.2, 2.4_
   - _Requirements: 5.4, 5.7, 5.8, 6.4, 7.9, 7.10_
 
-- [ ] 3. accountデータと安全な境界型を構築する
-- [ ] 3.1 owner・identity・session・recipientの不変条件を定義する
+- [x] 3. accountデータと安全な境界型を構築する
+- [x] 3.1 owner・identity・session・recipientの不変条件を定義する
   - 単一ownerの4状態、provider単位のidentity一意性、端末別session、identityとチャネルのrecipient一意性を表現する
   - unlink generationと認可取消確認時刻の組合せを制約し、不可能な解除stageを拒否する
   - 完了時には、重複owner・identity・recipientと矛盾した解除状態がmodel validationで検出される
   - _Requirements: 2.4, 2.6, 3.4, 4.1, 4.2, 4.8, 5.2, 5.6, 6.1, 6.3, 7.2, 7.4, 7.12, 7.14, 7.15_
 
-- [ ] 3.2 account schemaとowner singleton seedをmigrationする
+- [x] 3.2 account schemaとowner singleton seedをmigrationする
   - provider付きチャネルmigrationへ明示依存し、identity・owner・session・recipient schemaを作成する
   - owner singletonをseedし、配信監査へidentity外部キーを追加しない
   - 完了時には、空DBからmigrationでき、owner slotが1行だけ存在し、既存配信監査が独立して保持される
   - _Depends: 2.2_
   - _Requirements: 3.4, 4.2, 5.6, 7.2, 7.3, 7.4, 7.8_
 
-- [ ] 3.3 LINE credentialをredactedな値境界へ閉じ込める
+- [x] 3.3 LINE credentialをredactedな値境界へ閉じ込める
   - ID token、user access token、channel access token、本人識別情報をimmutableかつserialization不能として扱う
   - repr・例外・通常ログへraw値が展開されないようにする
   - 完了時には、秘密値canaryが値の表示・serialization・例外出力へ現れない
   - _Requirements: 2.2, 2.3, 3.8, 4.5, 4.7, 8.4, 8.5, 8.6_
 
-- [ ] 3.4 strict request境界を作る
+- [x] 3.4 strict request境界を作る
   - 未知field、user ID、profile object、token aliasをmutation前に拒否する
   - field errorへcredentialや入力値をechoしない
   - 完了時には、定義済みfieldだけがdomain処理へ渡る
   - _Requirements: 2.3, 4.5, 5.5, 8.5_
 
-- [ ] 3.5 safe errorの共通変換境界を作る
+- [x] 3.5 safe errorの共通変換境界を作る
   - 下位例外とLINE raw errorを安全なcode・概要・field errorへ変換する
   - token・subject・session ID・secretを成功応答とエラー応答の双方から除外する
   - 完了時には、公開APIが定義済み安全形式以外のエラーbodyを返さない
