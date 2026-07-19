@@ -144,38 +144,38 @@
   - 完了時には、認可取消POSTが同一request内で自動再送されず、channel tokenとsecretも保存されない
   - _Requirements: 7.5, 7.11, 7.13, 7.14, 7.15, 8.4, 8.5, 8.6_
 
-- [ ] 5. account aggregateの永続化境界を実装する
-- [ ] 5.1 owner lockとidentity bindingを永続化する
+- [x] 5. account aggregateの永続化境界を実装する
+- [x] 5.1 owner lockとidentity bindingを永続化する
   - owner singletonをlock rootとして取得し、適格identityの初回bindingと再認証時の表示名更新をtransaction化する
   - providerとsubjectの自然一意性を保ち、異provider identityを自動統合しない
   - 完了時には、並行初回認証でも単一identityだけがownerへbindされる
   - _Requirements: 2.4, 3.1, 3.3, 3.4, 4.1, 4.2, 4.3, 4.8_
 
-- [ ] 5.2 端末別owner session ledgerを永続化する
+- [x] 5.2 端末別owner session ledgerを永続化する
   - 端末ごとにopaque session IDと期限を作成・検索・削除する
   - 期限切れと現在端末logoutを他端末sessionへ影響なく処理する
   - 完了時には、追加端末sessionが併存し、1端末のlogout・expiryで他端末が維持される
   - _Requirements: 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11_
 
-- [ ] 5.3 recipient mutationをowner lock上で永続化する
+- [x] 5.3 recipient mutationをowner lock上で永続化する
   - recipientの一覧・作成・有効状態変更・対象削除をactive ownerのidentity一致時だけ許可する
   - duplicate作成を既存projectionへ収束させ、対象不在では他行を変更しない
   - 完了時には、並行登録でも一意性が保たれ、解除fence後のrecipient mutationが拒否される
   - _Requirements: 5.2, 5.6, 6.1, 6.3, 6.7, 6.8, 6.9, 6.10, 7.12_
 
-- [ ] 5.4 unlink snapshotとgeneration fenceを永続化する
+- [x] 5.4 unlink snapshotとgeneration fenceを永続化する
   - owner lock下で一貫した解除snapshotを取得し、activeから新generation付きpendingだけを開始する
   - snapshot検証とfence開始を同一transactionへ置く
   - 完了時には、stale snapshotではpendingが作られず、成功時だけ新generationが耐久化される
   - _Requirements: 7.1, 7.5, 7.12, 7.13_
 
-- [ ] 5.5 LINE認可取消成功markerを永続化する
+- [x] 5.5 LINE認可取消成功markerを永続化する
   - expected generation一致時だけLINE成功時刻とlocal deletion pendingを同一commitへ保存する
   - stale generationとmarker保存失敗を既存pending状態へ収束させる
   - 完了時には、stale requestが再link後の新attemptへ成功markerを適用できない
   - _Requirements: 7.5, 7.13, 7.14, 7.15_
 
-- [ ] 5.6 unlinkのローカルfinalizeを原子的に永続化する
+- [x] 5.6 unlinkのローカルfinalizeを原子的に永続化する
   - local deletion pendingとexpected generationを確認してから全recipient・全session・owner binding・identityを削除する
   - statement失敗時は全変更をrollbackし、markerと再試行可能stageを保持する
   - 完了時には、成功時だけownerがvacantへ戻り、失敗時に個人データの部分削除が残らない
