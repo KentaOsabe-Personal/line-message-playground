@@ -741,14 +741,14 @@
   - _Depends: 7.2, 7.6, 11.27, 11.37_
   - _Requirements: 2.6, 7.2, 7.5, 7.12, 7.13, 7.14, 7.15_
 
-- [ ] 12. 全自動検証と実LIFF環境の技術受入を完了する
-- [ ] 12.1 Compose環境でmigration・全自動test・production buildを完走させる
+- [x] 12. 全自動検証と実LIFF環境の技術受入を完了する
+- [x] 12.1 Compose環境でmigration・全自動test・production buildを完走させる
   - provider backfill後のmigration整合、Backend test、Frontend test、production buildを同じCompose構成で実行する
   - production bundleへBackend秘密値とsecret canaryが含まれないことを確認する
   - 完了時には、全自動検証とbuildが成功し、認証済みconsoleを有効化できる
   - _Requirements: 1.1, 1.3, 2.4, 2.10, 3.5, 4.5, 5.1, 7.12, 8.1, 8.4, 8.5, 8.7, 8.8_
 
-- [ ] 12.2 実LIFF受入に必要な公開HTTPS前提を検証する
+- [x] 12.2 実LIFF受入に必要な公開HTTPS前提を検証する
   - operator提供済みのLINE Login credential・LIFF ID・公開domain・linked channel IDが安全な環境から読み込めることを確認する
   - 既存チャネルproviderをbackfillし、owner digestを生成してBackendへ設定する
   - operatorが設定済みのLINE Developers Console Endpoint `/liff`、`openid profile` scope、LIFF・Login・Messaging provider整合を照合する
@@ -756,7 +756,7 @@
   - _Depends: 12.1_
   - _Requirements: 1.1, 1.2, 1.3, 2.1, 3.1, 3.2, 5.4, 5.7, 7.9, 7.11, 8.1, 8.4, 8.5_
 
-- [ ] 12.3 公開HTTPS originでLIFF技術受入を確認する
+- [x] 12.3 公開HTTPS originでLIFF技術受入を確認する
   - LIFF browser認証と外部browser login復帰を画面・session API結果で確認する
   - 不正path・host、login取消、検証失敗で保護UIと状態変更が拒否されることを確認する
   - recipient全操作と通常のunlink成功後のanonymous化をLINE user ID表示なしで確認する
