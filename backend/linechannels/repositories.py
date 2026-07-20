@@ -18,6 +18,8 @@ from .types import (
     LinkableChannelSummary,
     PublicChannelSummary,
     SecretT,
+    WebhookChannelAvailable,
+    WebhookChannelResult,
 )
 
 
@@ -99,6 +101,11 @@ class CredentialRepository(Protocol):
         self,
         channel_public_id: UUID,
     ) -> CredentialAvailable[ChannelSecret] | CredentialUnavailable: ...
+
+
+@runtime_checkable
+class WebhookCredentialRepository(Protocol):
+    def get(self, channel_public_id: UUID) -> WebhookChannelResult: ...
 
 
 @runtime_checkable
@@ -404,3 +411,57 @@ class DjangoCredentialRepository:
         if not isinstance(secret, expected_type):
             return CredentialUnavailable("credential_unreadable")
         return CredentialAvailable(secret)
+
+
+class DjangoWebhookCredentialRepository:
+    def __init__(
+        self,
+        cipher: _CredentialDecryptor,
+        using: str = "default",
+    ) -> None:
+        self._cipher = cipher
+        self.using = using
+
+    def get(self, channel_public_id: UUID) -> WebhookChannelResult:
+        try:
+            row = (
+                LineChannel.objects.using(self.using)
+                .filter(public_id=channel_public_id)
+                .values(
+                    "public_id",
+                    "bot_user_id",
+                    "is_active",
+                    "credential__channel_secret_ciphertext",
+                )
+                .first()
+            )
+        except DatabaseError:
+            return CredentialUnavailable("credential_unreadable")
+
+        if row is None:
+            return CredentialUnavailable("channel_not_found")
+        if not row["is_active"]:
+            return CredentialUnavailable("channel_inactive")
+
+        ciphertext = row["credential__channel_secret_ciphertext"]
+        if ciphertext is None:
+            return CredentialUnavailable("credentials_incomplete")
+
+        try:
+            secret = self._cipher.decrypt(
+                EncryptedCredential(bytes(ciphertext)),
+                CredentialContext(
+                    channel_public_id=channel_public_id,
+                    kind="channel_secret",
+                ),
+            )
+        except (CredentialCryptoError, TypeError, ValueError):
+            return CredentialUnavailable("credential_unreadable")
+        if not isinstance(secret, ChannelSecret):
+            return CredentialUnavailable("credential_unreadable")
+
+        return WebhookChannelAvailable(
+            channel_public_id=row["public_id"],  # type: ignore[arg-type]
+            bot_user_id=row["bot_user_id"],  # type: ignore[arg-type]
+            channel_secret=secret,
+        )

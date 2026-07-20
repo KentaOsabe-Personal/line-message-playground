@@ -14,7 +14,7 @@
 
 ## Approach
 
-既存の配信サービスと状態機械を維持しながら、送信commandへ内部`channelId`と`recipientId`を追加する。Backendで所有権、有効状態、チャネル別友だち状態を検証し、確認トークンとcontent fingerprintへ対象contextを含める。Gatewayは環境変数を直接読まず、選択チャネルの資格情報をrepositoryから受け取る。必要に応じて署名付きpostbackトークンを含む「受け取りました」操作を送り、Webhook dispatcher経由で当該配信だけを確認済みにする。
+既存の配信サービスと状態機械を維持しながら、送信commandへ内部`channelId`と`recipientId`を追加する。Backendで所有権、有効状態、チャネル別友だち状態を検証し、確認トークンとcontent fingerprintへ対象contextを含める。Gatewayは環境変数を直接読まず、選択チャネルの資格情報をrepositoryから受け取る。必要に応じて署名付きpostbackトークンを含む「受け取りました」操作を送り、`line-webhook-command-dispatch`のaction契約経由で当該配信だけを確認済みにする。
 
 ## Scope
 
@@ -38,13 +38,13 @@
 
 ## Upstream / Downstream
 
-- **Upstream**: 実装済み`line-message-delivery`、`line-channel-foundation`、`line-account-linking`、`line-webhook-interaction`
+- **Upstream**: 実装済み`line-message-delivery`、`line-channel-foundation`、`line-account-linking`、`line-friendship-sync`、`line-webhook-command-dispatch`
 - **Downstream**: `line-channel-admin-ui`、配信履歴画面、月間利用量確認、将来の複数宛先配信
 
 ## Existing Spec Touchpoints
 
 - **Extends**: なし。既存`line-message-delivery`を初期版の承認済み仕様として残し、本specが後続migrationと新しい公開契約を所有する
-- **Adjacent**: 既存のformatting、confirmation、delivery service、gateway、Frontend reducerを再利用・拡張する。Webhook受付自体は`line-webhook-interaction`が所有する
+- **Adjacent**: 既存のformatting、confirmation、delivery service、gateway、Frontend reducerを再利用・拡張する。Webhook受付は`line-webhook-ingress`、汎用postback振り分けは`line-webhook-command-dispatch`が所有し、本specは受取確認tokenの検証と配信記録更新を所有する
 
 ## Constraints
 

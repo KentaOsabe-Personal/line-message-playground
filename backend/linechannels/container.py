@@ -8,7 +8,9 @@ from .repositories import (
     DjangoCredentialRepository,
     DjangoLineChannelDirectory,
     DjangoLineChannelRepository,
+    DjangoWebhookCredentialRepository,
     LineChannelDirectory,
+    WebhookCredentialRepository,
 )
 from .rotation import CredentialRotationService, DefaultCredentialRotationService
 from .rotation_item import DefaultCredentialRotationItemProcessor
@@ -23,6 +25,10 @@ def _build_cipher() -> FernetCredentialCipher:
 
 def build_credential_repository() -> CredentialRepository:
     return DjangoCredentialRepository(_build_cipher())
+
+
+def build_webhook_credential_repository() -> WebhookCredentialRepository:
+    return DjangoWebhookCredentialRepository(_build_cipher())
 
 
 def build_line_channel_directory() -> LineChannelDirectory:

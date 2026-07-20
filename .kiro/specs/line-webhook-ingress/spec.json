@@ -1,0 +1,22 @@
+{
+  "feature_name": "line-webhook-ingress",
+  "created_at": "2026-07-20T17:50:55+09:00",
+  "updated_at": "2026-07-20T19:51:06+09:00",
+  "language": "ja",
+  "phase": "tasks-approved",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}
