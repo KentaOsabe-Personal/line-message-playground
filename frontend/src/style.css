@@ -133,3 +133,27 @@ h1 {
     padding: 1.25rem;
   }
 }
+.auth-gate,
+.auth-profile {
+  border: 1px solid #d8dee4;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.auth-profile {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.auth-profile p {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+}
+
+.eyebrow {
+  color: #57606a;
+  font-size: 0.8rem;
+}

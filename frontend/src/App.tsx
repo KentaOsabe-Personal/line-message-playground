@@ -1,3 +1,4 @@
+import AuthGate from './AuthGate'
 import DeliveryForm from './DeliveryForm'
 
 export default function App() {
@@ -5,7 +6,9 @@ export default function App() {
     <main>
       <h1>LINE Message Playground</h1>
       <p>LINE配信機能の検証環境</p>
-      <DeliveryForm />
+      <AuthGate>
+        <DeliveryForm />
+      </AuthGate>
     </main>
   )
 }

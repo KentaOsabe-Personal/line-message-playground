@@ -305,8 +305,8 @@
   - 完了時には、解除停滞をsafe stateと経過時間だけで運用確認できる
   - _Requirements: 7.5, 7.12, 7.13, 7.15, 8.4, 8.5, 8.6_
 
-- [ ] 8. LIFF認証Frontendを構築する
-- [ ] 8.1 (P) LIFF URLと固定entry pathの設定契約を実装する
+- [x] 8. LIFF認証Frontendを構築する
+- [x] 8.1 (P) LIFF URLと固定entry pathの設定契約を実装する
   - LIFF IDからLIFF URLを、現在originと固定pathからendpoint・redirect URIを一意に導出する
   - 非HTTPS origin・path不一致・空LIFF IDをSDK初期化前に拒否する
   - 完了時には、query・fragmentを保持しつつ安全性判定がoriginと`/liff`だけで行われる
@@ -314,7 +314,7 @@
   - _Depends: 1.4_
   - _Requirements: 1.1, 1.3, 1.5, 8.1_
 
-- [ ] 8.2 (P) LIFF SDKをtyped adapterへ隔離する
+- [x] 8.2 (P) LIFF SDKをtyped adapterへ隔離する
   - SDK初期化、browser種別、login状態、明示login、raw token取得を小さな外部境界へ閉じ込める
   - decoded tokenとFrontend profileをBackend認証根拠として使用しない
   - 完了時には、認証controllerがSDK実装へ直接依存せず、失敗とtoken欠落を安全な結果として受け取れる
@@ -322,7 +322,7 @@
   - _Depends: 1.7_
   - _Requirements: 1.1, 1.2, 1.3, 1.5, 1.6, 2.3, 8.4_
 
-- [ ] 8.3 (P) same-origin sessionとCSRFを扱うHTTP clientを実装する
+- [x] 8.3 (P) same-origin sessionとCSRFを扱うHTTP clientを実装する
   - same-origin credentialを使い、unsafe要求はCSRF cookieとheaderが揃う場合だけ送信する
   - 401をtoken再送で隠さず認証状態へsession失効を通知する
   - 完了時には、Frontendの全保護要求が共通cookie・CSRF・safe error契約を通る
@@ -330,21 +330,21 @@
   - _Depends: 6.4_
   - _Requirements: 2.5, 2.10, 8.1, 8.2, 8.3, 8.5, 8.7_
 
-- [ ] 8.4 session APIのstrict DTOとclientを実装する
+- [x] 8.4 session APIのstrict DTOとclientを実装する
   - 匿名・認証済み・解除pendingの応答unionを未知field拒否で検証する
   - session bootstrap・raw ID token login・logoutを共通HTTP client経由で呼び出す
   - 完了時には、表示名と連携状態だけを認証controllerへ渡し、曖昧な応答を認証済みとして扱わない
   - _Depends: 6.5, 8.3_
   - _Requirements: 1.1, 2.5, 2.7, 2.10, 4.4, 4.5, 7.12, 8.5_
 
-- [ ] 8.5 LIFF認証の純粋な状態遷移を実装する
+- [x] 8.5 LIFF認証の純粋な状態遷移を実装する
   - initializing・login required・verifying・anonymous・authenticated・unlinking・errorをイベントから一意に遷移させる
   - 外部browser login復帰・取消・init失敗・Backend検証失敗・401 expiryをfail closedで扱う
   - 完了時には、各イベント列から保護UIの可否と安全な再試行導線が決定できる
   - _Depends: 8.1, 8.2, 8.4_
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.10, 7.12_
 
-- [ ] 8.6 認証gateと端末logout UIを実装する
+- [x] 8.6 認証gateと端末logout UIを実装する
   - 認証中・未認証・取消・失敗・unlinkingでは配信画面とaccount管理画面をmountしない
   - login・再試行・現在端末logoutを状態controllerへ接続する
   - 完了時には、authenticated ownerだけが表示名付き保護consoleへ進み、LINE user IDは表示されない
