@@ -79,6 +79,10 @@ class RecipientStateRequestSerializer(StrictRequestSerializer):
     enabled = StrictBooleanField()
 
 
+class EmptyRequestSerializer(StrictRequestSerializer):
+    pass
+
+
 class UnlinkRequestSerializer(StrictRequestSerializer):
     confirmationToken = _sensitive_string_field(required=False)
     userAccessToken = SensitiveCharField(

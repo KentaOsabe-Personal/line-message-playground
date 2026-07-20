@@ -75,6 +75,7 @@ class OwnerSessionView:
     public_id: UUID
     owner_slot: int
     identity_id: UUID
+    display_name: str
     owner_state: str
     expires_at: datetime
 
@@ -106,6 +107,8 @@ class UnlinkSnapshot:
 
 @runtime_checkable
 class AccountRepository(Protocol):
+    def get_identity(self, public_id: UUID) -> LineIdentityView | None: ...
+
     def lock_owner_account(self) -> LockedOwnerAccount: ...
 
     def upsert_identity(self, identity: VerifiedLineIdentity) -> LineIdentityView: ...
@@ -129,6 +132,20 @@ class AccountRepository(Protocol):
     def create_recipient(
         self, owner: LockedOwnerAccount, command: NewRecipient
     ) -> RecipientView: ...
+
+    def get_recipient(
+        self,
+        owner: LockedOwnerAccount,
+        identity_id: UUID,
+        channel_id: UUID,
+    ) -> RecipientView | None: ...
+
+    def get_recipient_by_id(
+        self,
+        owner: LockedOwnerAccount,
+        identity_id: UUID,
+        recipient_id: UUID,
+    ) -> RecipientView | None: ...
 
     def set_recipient_enabled(
         self,
@@ -167,6 +184,15 @@ class DjangoAccountRepository:
 
     def __init__(self, using: str = "default") -> None:
         self.using = using
+
+    def get_identity(self, public_id: UUID) -> LineIdentityView | None:
+        with self._translate_database_errors():
+            identity = (
+                LineIdentity.objects.using(self.using)
+                .filter(public_id=public_id)
+                .first()
+            )
+            return None if identity is None else self._identity_view(identity)
 
     def lock_owner_account(self) -> LockedOwnerAccount:
         self._require_transaction()
@@ -328,6 +354,48 @@ class DjangoAccountRepository:
                         .get(identity=stored_owner.identity, line_channel=channel)
                     )
             return self._recipient_view(recipient)
+
+    def get_recipient(
+        self,
+        owner: LockedOwnerAccount,
+        identity_id: UUID,
+        channel_id: UUID,
+    ) -> RecipientView | None:
+        self._require_transaction()
+        with self._translate_database_errors():
+            stored_owner = self._active_owner_for_identity(owner, identity_id)
+            recipient = (
+                DeliveryRecipient.objects.using(self.using)
+                .select_for_update()
+                .select_related("identity", "line_channel")
+                .filter(
+                    identity=stored_owner.identity,
+                    line_channel__public_id=channel_id,
+                )
+                .first()
+            )
+            return None if recipient is None else self._recipient_view(recipient)
+
+    def get_recipient_by_id(
+        self,
+        owner: LockedOwnerAccount,
+        identity_id: UUID,
+        recipient_id: UUID,
+    ) -> RecipientView | None:
+        self._require_transaction()
+        with self._translate_database_errors():
+            stored_owner = self._active_owner_for_identity(owner, identity_id)
+            recipient = (
+                DeliveryRecipient.objects.using(self.using)
+                .select_for_update()
+                .select_related("identity", "line_channel")
+                .filter(
+                    identity=stored_owner.identity,
+                    public_id=recipient_id,
+                )
+                .first()
+            )
+            return None if recipient is None else self._recipient_view(recipient)
 
     def set_recipient_enabled(
         self,
@@ -567,6 +635,7 @@ class DjangoAccountRepository:
             public_id=session.public_id,
             owner_slot=owner.slot,
             identity_id=owner.identity.public_id,
+            display_name=owner.identity.display_name,
             owner_state=owner.state,
             expires_at=session.expires_at,
         )

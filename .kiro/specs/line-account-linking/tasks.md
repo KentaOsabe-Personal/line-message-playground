@@ -181,42 +181,42 @@
   - 完了時には、成功時だけownerがvacantへ戻り、失敗時に個人データの部分削除が残らない
   - _Requirements: 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.14, 7.15_
 
-- [ ] 6. owner session・recipient・保護APIを実装する
-- [ ] 6.1 事前許可ownerの適格性とidentity bindingを実装する
+- [x] 6. owner session・recipient・保護APIを実装する
+- [x] 6.1 事前許可ownerの適格性とidentity bindingを実装する
   - 検証済みprovider・subjectのdigestを事前許可値とconstant-timeで照合する
   - vacantでは適格identityだけをbindし、activeでは同じprovider・subjectだけを許可する
   - 完了時には、未設定・不一致・別identityが同じ安全な拒否へ収束し、最初の訪問者がownerを先取りできない
   - _Depends: 1.2, 4.2, 5.1_
   - _Requirements: 2.4, 3.1, 3.2, 3.3, 3.4, 4.1, 4.2, 4.3, 4.8_
 
-- [ ] 6.2 端末別sessionの確立・更新・終了を実装する
+- [x] 6.2 端末別sessionの確立・更新・終了を実装する
   - 初回・追加端末・通常再認証・pending再認証ごとに新しいsession ledgerを作る
   - 表示名更新、現在端末logout、expiryを他端末・identity・recipientへ影響なく処理する
   - 完了時には、同一ownerの複数端末sessionが併存し、pending再認証でもowner状態をactiveへ戻さない
   - _Depends: 4.2, 5.1, 5.2, 6.1_
   - _Requirements: 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 4.3, 4.6, 4.7, 7.6, 7.7, 7.12_
 
-- [ ] 6.3 owner session認証と状態別permissionを実装する
+- [x] 6.3 owner session認証と状態別permissionを実装する
   - Django sessionのopaque IDをledger・期限・owner状態と毎request照合する
   - active ownerだけへ通常操作を許可し、pendingではstatus・現在端末logout・unlink再開だけを許可する
   - 完了時には、未認証・期限切れ・非owner・pendingの要求がhandlerと入力検証より先に拒否される
   - _Requirements: 2.5, 2.10, 2.11, 3.5, 3.6, 3.7, 3.8, 7.6, 7.12, 8.7_
 
-- [ ] 6.4 exact OriginとCSRFによる状態変更保護を実装する
+- [x] 6.4 exact OriginとCSRFによる状態変更保護を実装する
   - 検証済み公開hostから導出した単一のexact HTTPS Originを全unsafe APIで必須化する
   - missing・複数値・null・scheme/host/port差異とcookie/header token不備をmutationなしで拒否する
   - 完了時には、loginを含む状態変更が正規originとCSRF tokenの両方を満たす場合だけ実行される
   - _Depends: 1.8_
   - _Requirements: 8.1, 8.2, 8.3, 8.7_
 
-- [ ] 6.5 session APIへservice・認証・CSRFを統合する
+- [x] 6.5 session APIへservice・認証・CSRFを統合する
   - 匿名・認証済み・解除pendingの状態確認、raw ID token login、現在端末logoutを公開する
   - login成功時にsession keyをrotateしてからowner session IDを保存し、保存失敗を認証済みとして返さない
   - 完了時には、表示名と連携状態だけを返すsession APIがCSRF cookie bootstrapと端末別logoutを提供する
   - _Depends: 3.4, 3.5, 6.2, 6.3, 6.4_
   - _Requirements: 1.1, 1.4, 1.5, 1.6, 2.4, 2.5, 2.7, 2.10, 3.5, 3.6, 4.4, 4.5, 7.12, 8.5, 8.7_
 
-- [ ] 6.6 (P) recipient登録候補一覧を実装する
+- [x] 6.6 (P) recipient登録候補一覧を実装する
   - provider一致のactiveチャネルと既存recipientチャネルをsafe projectionへ統合する
   - inactive既存チャネルを残し、配信可否を秘密情報なしで導出する
   - 完了時には、ownerが登録候補と既存リンクを名称・状態・不透明IDだけで一覧できる
@@ -224,26 +224,26 @@
   - _Depends: 2.4, 2.5, 5.3_
   - _Requirements: 5.1, 5.3, 5.4, 5.9, 6.6_
 
-- [ ] 6.7 recipient登録を本人bindingとfriendshipで実装する
+- [x] 6.7 recipient登録を本人bindingとfriendshipで実装する
   - directチャネルでは検証済みtokenからfriendshipを保存し、非directではLINEを呼ばずunknownを保存する
   - channel存在・active・provider一致をmutation前に確認し、duplicateを既存projectionへ収束させる
   - 完了時には、user ID入力なしで重複しないrecipientを登録できる
   - _Depends: 4.3, 4.4, 5.3, 6.6_
   - _Requirements: 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9_
 
-- [ ] 6.8 recipientの無効化と再有効化を実装する
+- [x] 6.8 recipientの無効化と再有効化を実装する
   - disableでは関係を保持し、enableではchannel active・provider一致を再検証する
   - 配信可否をrecipient enabled・friendship friend・channel activeの積として導出する
   - 完了時には、対象recipientの有効状態だけが変わり、unknownやinactiveは配信不可のままになる
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.9, 6.10_
 
-- [ ] 6.9 recipientのチャネル別解除を実装する
+- [x] 6.9 recipientのチャネル別解除を実装する
   - owner lock下で対象recipientだけを削除し、identity・他recipient・全sessionを維持する
   - 対象不在では他の永続状態を変更しない
   - 完了時には、選択チャネルのリンクだけが一覧から消える
   - _Requirements: 6.7, 6.8, 6.9, 6.10_
 
-- [ ] 6.10 recipient APIへserviceとowner保護を統合する
+- [x] 6.10 recipient APIへserviceとowner保護を統合する
   - 一覧・登録・有効状態変更・対象解除を不透明IDとstrict requestだけで公開する
   - domain結果を安全なsuccess projectionと404・409・422・503へ対応付ける
   - 完了時には、active ownerだけがLINE user IDなしでrecipient全操作を実行できる
