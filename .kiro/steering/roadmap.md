@@ -42,7 +42,7 @@ LINE Message Playground を、固定設定の自分宛て配信から、LIFF／L
 ## Specs (dependency order)
 
 - [x] line-channel-foundation -- 複数Messaging APIチャネルと暗号化資格情報をDBで管理し、安全な取得・初期登録・鍵ローテーション境界を提供する。Dependencies: ngrok-compose-development-tunnel
-- [ ] line-account-linking -- LIFF／LINEログインで本人確認し、LINE identityとチャネル別配信先関係を登録・解除する。Dependencies: line-channel-foundation
+- [x] line-account-linking -- LIFF／LINEログインで本人確認し、LINE identityとチャネル別配信先関係を登録・解除する。Dependencies: line-channel-foundation
 - [ ] line-webhook-interaction -- チャネル別Webhookを検証・重複排除し、友だち状態、メッセージ、postbackを安全に処理する。Dependencies: line-channel-foundation, line-account-linking
 - [ ] linked-recipient-delivery -- 登録済みチャネルと配信先を選び、既存の確認・冪等性・監査を維持してpushし、明示的な受取確認を追跡する。Dependencies: line-channel-foundation, line-account-linking, line-webhook-interaction
 - [ ] line-channel-admin-ui -- 自分専用の認証済み画面からチャネルとwrite-only資格情報を登録・更新・無効化する。Dependencies: line-channel-foundation, line-account-linking, line-webhook-interaction, linked-recipient-delivery
