@@ -388,36 +388,36 @@
   - _Depends: 8.6, 9.2, 9.3, 9.4_
   - _Requirements: 1.4, 4.4, 4.5, 5.9, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.12, 7.13, 7.14, 7.15_
 
-- [ ] 10. 既存システムと公開HTTPS構成へ統合する
-- [ ] 10.1 account Backendの依存構成・設定・URLを統合する
+- [x] 10. 既存システムと公開HTTPS構成へ統合する
+- [x] 10.1 account Backendの依存構成・設定・URLを統合する
   - runtime・directory policy・gateway・repository・services・認証境界を明示的に合成する
   - account APIを共通URL配下へ接続し、Secure cookie・safe exception・exact trusted originを適用する
   - 完了時には、全account endpointが同じ安全な既定値と依存構成で起動・応答する
   - _Depends: 1.2, 1.3, 1.8, 2.5, 6.5, 6.10, 7.7, 7.8_
   - _Requirements: 2.5, 3.5, 3.6, 7.12, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7_
 
-- [ ] 10.2 既存配信APIをowner先行認可で保護する
+- [x] 10.2 既存配信APIをowner先行認可で保護する
   - 無認証overrideを共通owner保護へ置き換え、未認証・非owner・pendingを入力検証とLINE呼出しより先に拒否する
   - active ownerでは本文確認・冪等性・結果状態・監査の既存契約を変更しない
   - 完了時には、不正配信がLINEへ到達せず、ownerの既存201・200・202契約が維持される
   - _Depends: 6.3, 6.4, 10.1_
   - _Requirements: 3.7, 3.8, 7.8, 7.12, 8.4, 8.5, 8.6, 8.7, 8.8_
 
-- [ ] 10.3 既存配信Frontendを保護HTTPと認証失効へ接続する
+- [x] 10.3 既存配信Frontendを保護HTTPと認証失効へ接続する
   - 配信要求を共通HTTP clientとCSRF headerへ移行する
   - 401・logout・pendingで配信状態を破棄し、認証gateへ制御を戻す
   - 完了時には、active ownerの既存配信UIを保ちながら未認証時の送信操作が表示されない
   - _Depends: 8.3, 10.2_
   - _Requirements: 2.10, 3.7, 7.12, 8.2, 8.3, 8.7, 8.8_
 
-- [ ] 10.4 `/liff`の認証済みconsoleへ管理画面と配信画面を統合する
+- [x] 10.4 `/liff`の認証済みconsoleへ管理画面と配信画面を統合する
   - 固定entry pathで同じSPAを描画し、認証gate内にaccount consoleと配信画面を配置する
   - 認証・recipient・unlink pendingを判別できる最小限の視覚状態を整える
   - 完了時には、LINEアプリ内と外部browserの両方でownerだけが統合consoleを利用できる
   - _Depends: 8.6, 9.5, 10.3_
   - _Requirements: 1.1, 1.3, 1.4, 1.6, 3.5, 4.4, 4.5, 5.9, 7.12, 8.7, 8.8_
 
-- [ ] 10.5 Composeの環境注入と単一公開originを統合する
+- [x] 10.5 Composeの環境注入と単一公開originを統合する
   - LIFF IDだけをFrontendへ、LINE Login secret・owner digestをBackendだけへ注入する
   - 同じ公開domainからVite allowed hostとBackend trusted originを構成し、既知secret fallbackを除去する
   - 完了時には、安全な環境例からComposeを構成でき、Frontend bundleへBackend秘密値が含まれない

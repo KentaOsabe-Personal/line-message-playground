@@ -84,6 +84,12 @@ CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = "Lax"
 
 REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "lineaccounts.authentication.OwnerSessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "lineaccounts.permissions.IsActiveOwner",
+    ],
     "EXCEPTION_HANDLER": "lineaccounts.errors.safe_exception_handler",
 }
 

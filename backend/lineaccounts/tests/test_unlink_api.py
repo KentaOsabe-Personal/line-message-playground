@@ -172,7 +172,7 @@ class UnlinkAPITests(TestCase):
         client, csrf = self.owner_client()
 
         with patch(
-            "lineaccounts.views.resolve_liff_linked_channel_policy",
+            "lineaccounts.container.resolve_liff_linked_channel_policy",
             side_effect=ImproperlyConfigured("unsafe-config-canary"),
         ):
             response = self.post(

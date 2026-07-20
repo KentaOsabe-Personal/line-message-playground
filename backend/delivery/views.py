@@ -3,7 +3,8 @@ from uuid import UUID
 from rest_framework.exceptions import ParseError, UnsupportedMediaType
 from rest_framework import status
 from rest_framework.response import Response
-from rest_framework.views import APIView
+
+from lineaccounts.views import OwnerProtectedAPIView
 
 from .confirmation import ConfirmationError, ConfirmationTokenService
 from .formatters import MessageValidationError, format_message
@@ -88,10 +89,7 @@ def safe_delivery_summary(failure_type):
     return summaries.get(failure_type, summaries["unexpected"])
 
 
-class LocalDeliveryAPIView(APIView):
-    authentication_classes = []
-    permission_classes = []
-
+class LocalDeliveryAPIView(OwnerProtectedAPIView):
     def handle_exception(self, exc):
         if isinstance(exc, (ParseError, UnsupportedMediaType)):
             return error_response("validation_error", status.HTTP_400_BAD_REQUEST)

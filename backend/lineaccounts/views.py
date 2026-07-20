@@ -10,23 +10,21 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .authentication import OWNER_SESSION_KEY, OwnerPrincipal, OwnerSessionAuthentication
+from .container import (
+    build_recipient_service,
+    build_session_service,
+    build_unlink_service,
+)
 from .csrf import ExactOriginCsrfMixin
 from .errors import SafeAPIError
-from .gateway import HttpxLinePlatformGateway
 from .permissions import HasOwnerSession, IsActiveOwner
 from .recipient_services import (
-    DefaultRecipientService,
     RecipientMutationFailed,
     RecipientMutationSucceeded,
 )
 from .repositories import (
     AccountPersistenceError,
     AccountStateError,
-    DjangoAccountRepository,
-)
-from .runtime import (
-    get_line_account_runtime,
-    resolve_liff_linked_channel_policy,
 )
 from .serializers import (
     EmptyRequestSerializer,
@@ -38,52 +36,16 @@ from .serializers import (
 from .session_services import (
     AnonymousSessionStatus,
     AuthenticatedSessionStatus,
-    DefaultAccountSessionService,
     EstablishSessionRejected,
     UnlinkingSessionStatus,
 )
-from linechannels.repositories import DjangoLineChannelDirectory, PersistenceError
-from .unlink_execution_lock import MySQLUnlinkExecutionLock
+from linechannels.repositories import PersistenceError
 from .unlink_services import (
-    DefaultAccountUnlinkService,
     UnlinkCompleted,
     UnlinkPendingLocalRetry,
     UnlinkPendingReauthentication,
     UnlinkRejected,
 )
-
-
-def build_session_service() -> DefaultAccountSessionService:
-    runtime = get_line_account_runtime()
-    return DefaultAccountSessionService(
-        HttpxLinePlatformGateway(runtime),
-        DjangoAccountRepository(),
-        runtime.owner_eligibility,
-    )
-
-
-def build_recipient_service() -> DefaultRecipientService:
-    runtime = get_line_account_runtime()
-    directory = DjangoLineChannelDirectory()
-    policy = resolve_liff_linked_channel_policy(runtime, directory)
-    return DefaultRecipientService(
-        directory,
-        DjangoAccountRepository(),
-        HttpxLinePlatformGateway(runtime),
-        policy,
-    )
-
-
-def build_unlink_service() -> DefaultAccountUnlinkService:
-    runtime = get_line_account_runtime()
-    directory = DjangoLineChannelDirectory()
-    resolve_liff_linked_channel_policy(runtime, directory)
-    return DefaultAccountUnlinkService(
-        HttpxLinePlatformGateway(runtime),
-        DjangoAccountRepository(),
-        MySQLUnlinkExecutionLock(),
-        directory,
-    )
 
 
 def _session_id_from_cookie(request) -> UUID | None:
