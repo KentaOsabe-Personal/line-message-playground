@@ -2,6 +2,8 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 
+from ...validators import BoundaryValidationError, validate_provider_id, validate_public_id
+
 from ...types import (
     ChannelMutationFailed,
     ChannelMutationSucceeded,
@@ -29,11 +31,27 @@ def build_manage_line_channel_prompts():
 class Command(BaseCommand):
     help = "Manage LINE channels without exposing credentials."
 
+    def add_arguments(self, parser):
+        parser.add_argument("--channel-public-id")
+        parser.add_argument("--provider-id")
+
     def handle(self, *args, **options):
         try:
-            prompts = build_manage_line_channel_prompts()
             service = build_line_channel_service()
-            collected = prompts.collect()
+            public_id = options.get("channel_public_id")
+            provider_id = options.get("provider_id")
+            if public_id is not None or provider_id is not None:
+                if public_id is None or provider_id is None:
+                    raise BoundaryValidationError()
+                collected = ManageLineChannelInputCollected(
+                    UpdateLineChannel(
+                        channel_public_id=validate_public_id(public_id),
+                        provider_id=validate_provider_id(provider_id),
+                    )
+                )
+            else:
+                prompts = build_manage_line_channel_prompts()
+                collected = prompts.collect()
             if isinstance(collected, ManageLineChannelInputCancelled):
                 self.stdout.write(self._json({"status": "cancelled"}))
                 return
@@ -65,6 +83,7 @@ class Command(BaseCommand):
                             ),
                             "bot_user_id": channel.bot_user_id,
                             "label": channel.label,
+                            "provider_id": channel.provider_id,
                             "is_active": channel.is_active,
                             "credentials_configured": (
                                 channel.credentials_configured
@@ -81,7 +100,7 @@ class Command(BaseCommand):
                 )
                 return
             raise TypeError
-        except (EOFError, KeyboardInterrupt):
+        except (EOFError, KeyboardInterrupt, BoundaryValidationError):
             raise CommandError("line channel management cancelled") from None
         except Exception:
             raise CommandError("line channel management failed") from None

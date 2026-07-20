@@ -122,6 +122,7 @@ class CredentialIntegrationSecurityTests(TransactionTestCase):
                     "plaintext-token-canary", "plaintext-secret-canary"
                 ),
                 True,
+                "000123",
             )
         )
         self.assertEqual(result.status, "succeeded")

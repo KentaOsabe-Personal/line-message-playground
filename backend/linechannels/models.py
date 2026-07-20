@@ -11,9 +11,13 @@ class LineChannel(models.Model):
     messaging_api_channel_id = models.CharField(max_length=64, unique=True)
     bot_user_id = models.CharField(max_length=33, unique=True)
     label = models.CharField(max_length=255)
+    provider_id = models.CharField(max_length=64, null=True)
     is_active = models.BooleanField(db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=("provider_id", "is_active"), name="linech_provider_active_idx")]
 
     @classmethod
     def from_db(cls, db, field_names, values):

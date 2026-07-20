@@ -1,5 +1,7 @@
 import { parseDeliveryResult, parseErrorResponse, parsePreviewResponse } from './deliveryDto'
 import type { DeliveryResult, Parsed, PreviewResponse, SafeError } from './deliveryDto'
+import { createProtectedHttpClient, ProtectedHttpClientError } from './httpApi'
+import type { ProtectedHttpClient } from './httpApi'
 
 export type PreviewRequest = { subject: string; body: string }
 export type SendDeliveryRequest = PreviewRequest & { operationId: string; confirmationToken: string }
@@ -19,16 +21,19 @@ export interface DeliveryApiClient {
 
 const networkError: SafeError = { code: 'network_error', summary: 'Backendに接続できません。' }
 
-async function request<T>(url: string, parse: (value: unknown) => Parsed<T>, body?: unknown): Promise<T> {
+async function requestProtected<T>(
+  client: ProtectedHttpClient,
+  url: string,
+  parse: (value: unknown) => Parsed<T>,
+  body?: unknown,
+): Promise<T> {
   let response: Response
-  const options: RequestInit = { method: 'POST' }
-  if (body !== undefined) {
-    options.headers = { 'Content-Type': 'application/json' }
-    options.body = JSON.stringify(body)
-  }
   try {
-    response = await fetch(url, options)
-  } catch {
+    response = await client.request({ path: url, method: 'POST', body })
+  } catch (error) {
+    if (error instanceof ProtectedHttpClientError) {
+      throw new DeliveryApiError({ code: error.code, summary: error.summary })
+    }
     throw new DeliveryApiError(networkError)
   }
 
@@ -48,7 +53,14 @@ async function request<T>(url: string, parse: (value: unknown) => Parsed<T>, bod
   return parsed.value
 }
 
-export function createDeliveryApiClient(): DeliveryApiClient {
+export function createDeliveryApiClient(
+  protectedClient: ProtectedHttpClient = createProtectedHttpClient(),
+): DeliveryApiClient {
+  const request = <T>(
+    url: string,
+    parse: (value: unknown) => Parsed<T>,
+    body?: unknown,
+  ) => requestProtected(protectedClient, url, parse, body)
   return {
     preview: (input) => request('/api/deliveries/preview/', parsePreviewResponse, input),
     send: (input) => request('/api/deliveries/', parseDeliveryResult, input),

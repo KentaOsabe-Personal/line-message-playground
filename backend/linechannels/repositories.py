@@ -15,6 +15,7 @@ from .types import (
     CredentialUnavailable,
     EncryptedCredential,
     EncryptedCredentialPair,
+    LinkableChannelSummary,
     PublicChannelSummary,
     SecretT,
 )
@@ -27,6 +28,7 @@ class NewLineChannel:
     bot_user_id: str
     label: str
     is_active: bool
+    provider_id: str
 
 
 @dataclass(frozen=True, repr=False)
@@ -36,6 +38,7 @@ class PersistedChannelMutation:
     label: str | None = None
     is_active: bool | None = None
     encrypted_credentials: EncryptedCredentialPair | None = None
+    provider_id: str | None = None
 
     def __repr__(self) -> str:
         fields = (
@@ -43,6 +46,7 @@ class PersistedChannelMutation:
             "bot_user_id",
             "label",
             "is_active",
+            "provider_id",
         )
         specified = ", ".join(
             field_name for field_name in fields if getattr(self, field_name) is not None
@@ -97,6 +101,39 @@ class CredentialRepository(Protocol):
     ) -> CredentialAvailable[ChannelSecret] | CredentialUnavailable: ...
 
 
+@runtime_checkable
+class LineChannelDirectory(Protocol):
+    def list_active_bound(self) -> tuple[LinkableChannelSummary, ...]: ...
+
+    def get(self, public_id: UUID) -> LinkableChannelSummary | None: ...
+
+
+class DjangoLineChannelDirectory:
+    def __init__(self, using: str = "default") -> None:
+        self.using = using
+
+    def list_active_bound(self) -> tuple[LinkableChannelSummary, ...]:
+        rows = LineChannel.objects.using(self.using).filter(
+            is_active=True, provider_id__isnull=False
+        ).order_by("id").values("public_id", "label", "provider_id", "is_active")
+        return tuple(self._summary(row) for row in rows)
+
+    def get(self, public_id: UUID) -> LinkableChannelSummary | None:
+        row = LineChannel.objects.using(self.using).filter(
+            public_id=public_id, provider_id__isnull=False
+        ).values("public_id", "label", "provider_id", "is_active").first()
+        return None if row is None else self._summary(row)
+
+    @staticmethod
+    def _summary(row: dict[str, object]) -> LinkableChannelSummary:
+        return LinkableChannelSummary(
+            public_id=row["public_id"],  # type: ignore[arg-type]
+            label=row["label"],  # type: ignore[arg-type]
+            provider_id=row["provider_id"],  # type: ignore[arg-type]
+            is_active=row["is_active"],  # type: ignore[arg-type]
+        )
+
+
 class _CredentialDecryptor(Protocol):
     def decrypt(
         self,
@@ -144,6 +181,7 @@ class DjangoLineChannelRepository:
                 bot_user_id=channel.bot_user_id,
                 label=channel.label,
                 is_active=channel.is_active,
+                provider_id=channel.provider_id,
             )
             LineChannelCredential.objects.using(self.using).create(
                 line_channel=stored,
@@ -212,6 +250,7 @@ class DjangoLineChannelRepository:
                 "bot_user_id",
                 "label",
                 "is_active",
+                "provider_id",
             ):
                 value = getattr(mutation, field_name)
                 if value is not None:
@@ -265,6 +304,7 @@ class DjangoLineChannelRepository:
                 mutation.label is not None,
                 mutation.is_active is not None,
                 mutation.encrypted_credentials is not None,
+                mutation.provider_id is not None,
             )
         )
 
@@ -289,6 +329,7 @@ class DjangoLineChannelRepository:
             credentials_configured=credentials_configured,
             created_at=channel.created_at,
             updated_at=channel.updated_at,
+            provider_id=channel.provider_id,
         )
 
 

@@ -19,6 +19,7 @@ from ..validators import (
     validate_bot_user_id,
     validate_label,
     validate_messaging_api_channel_id,
+    validate_provider_id,
     validate_public_id,
 )
 
@@ -78,6 +79,7 @@ class GetPassManageLineChannelPrompts:
         channel_id = validate_messaging_api_channel_id(
             self._ask("Messaging API channel ID: ")
         )
+        provider_id = validate_provider_id(self._ask("LINE provider ID: "))
         bot_user_id = validate_bot_user_id(self._ask("Bot user ID: "))
         label = validate_label(self._ask("Operator label: "))
         active = self._yes_no(self._ask("Initially active? (yes/no): "))
@@ -88,11 +90,13 @@ class GetPassManageLineChannelPrompts:
             label,
             credentials,
             active,
+            provider_id,
         )
 
     def _collect_update(self) -> UpdateLineChannel:
         public_id = validate_public_id(self._ask("Channel public UUID: "))
         channel_id_raw = self._ask("Messaging API channel ID (blank keeps): ")
+        provider_id_raw = self._ask("LINE provider ID (blank keeps): ")
         bot_user_id_raw = self._ask("Bot user ID (blank keeps): ")
         label_raw = self._ask("Operator label (blank keeps): ")
         replace = self._yes_no(self._ask("Replace credentials? (yes/no): "))
@@ -114,6 +118,9 @@ class GetPassManageLineChannelPrompts:
             is_active=(
                 None if state == "keep" else state == "enable"
             ),
+            provider_id=(
+                validate_provider_id(provider_id_raw) if provider_id_raw else None
+            ),
         )
         if all(
             value is None
@@ -123,6 +130,7 @@ class GetPassManageLineChannelPrompts:
                 command.label,
                 command.credentials,
                 command.is_active,
+                command.provider_id,
             )
         ):
             raise BoundaryValidationError()

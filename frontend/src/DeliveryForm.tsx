@@ -1,13 +1,15 @@
-import { useReducer, useRef } from 'react'
+import { useMemo, useReducer, useRef } from 'react'
 
 import { createDeliveryApiClient, DeliveryApiError } from './deliveryApi'
 import type { DeliveryApiClient, SendDeliveryRequest } from './deliveryApi'
 import type { DeliveryResult } from './deliveryDto'
 import { initialDeliveryState, transitionDelivery } from './deliveryState'
+import { createProtectedHttpClient } from './httpApi'
 
 type Props = {
   client?: DeliveryApiClient
   createOperationId?: () => string
+  onSessionInvalid?: () => void
 }
 
 const fieldErrors = (error: DeliveryApiError) => ({
@@ -16,7 +18,13 @@ const fieldErrors = (error: DeliveryApiError) => ({
   message: error.error.fields?.message?.[0] ?? (error.error.fields ? undefined : error.error.summary),
 })
 
-export default function DeliveryForm({ client = createDeliveryApiClient(), createOperationId = () => crypto.randomUUID() }: Props) {
+export default function DeliveryForm({ client, createOperationId = () => crypto.randomUUID(), onSessionInvalid }: Props) {
+  const deliveryClient = useMemo(
+    () => client ?? createDeliveryApiClient(createProtectedHttpClient({
+      onSessionInvalid,
+    })),
+    [client, onSessionInvalid],
+  )
   const [state, dispatch] = useReducer(transitionDelivery, initialDeliveryState)
   const submitInFlight = useRef(false)
 
@@ -29,7 +37,7 @@ export default function DeliveryForm({ client = createDeliveryApiClient(), creat
   const preview = async () => {
     if (state.phase !== 'editing') return
     try {
-      const result = await client.preview({ subject: state.subject, body: state.body })
+      const result = await deliveryClient.preview({ subject: state.subject, body: state.body })
       dispatch({ type: 'previewed', subject: state.subject, body: state.body, ...result })
     } catch (error) {
       const apiError = error instanceof DeliveryApiError ? error : new DeliveryApiError({ code: 'unexpected', summary: '配信処理を完了できませんでした。' })
@@ -39,7 +47,7 @@ export default function DeliveryForm({ client = createDeliveryApiClient(), creat
 
   const send = async (request: SendDeliveryRequest) => {
     try {
-      applyResult(await client.send(request))
+      applyResult(await deliveryClient.send(request))
     } catch (error) {
       if (error instanceof DeliveryApiError && error.error.code !== 'network_error') dispatch({ type: 'rejected', error: error.error })
       else dispatch({ type: 'networkFailed' })
@@ -63,7 +71,7 @@ export default function DeliveryForm({ client = createDeliveryApiClient(), creat
     const operationId = state.operationId
     dispatch({ type: 'checkStarted' })
     try {
-      applyResult(await client.checkStatus(operationId))
+      applyResult(await deliveryClient.checkStatus(operationId))
     } catch (error) {
       if (error instanceof DeliveryApiError && error.httpStatus === 404) dispatch({ type: 'statusMissing' })
       else dispatch({ type: 'networkFailed' })

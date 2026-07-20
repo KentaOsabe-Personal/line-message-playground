@@ -5,6 +5,7 @@ from .types import AccessToken, ChannelSecret, CredentialPair
 
 
 _CHANNEL_ID_PATTERN = re.compile(r"^[0-9]{1,64}$")
+_PROVIDER_ID_PATTERN = re.compile(r"^[0-9]{1,64}$", re.ASCII)
 _BOT_USER_ID_PATTERN = re.compile(r"^U[0-9a-f]{32}$")
 _MAX_LABEL_LENGTH = 255
 _MAX_SECRET_BYTES = 16 * 1024
@@ -17,6 +18,12 @@ class BoundaryValidationError(ValueError):
 
 def validate_messaging_api_channel_id(value: str) -> str:
     if not isinstance(value, str) or _CHANNEL_ID_PATTERN.fullmatch(value) is None:
+        raise BoundaryValidationError()
+    return value
+
+
+def validate_provider_id(value: str) -> str:
+    if not isinstance(value, str) or _PROVIDER_ID_PATTERN.fullmatch(value) is None:
         raise BoundaryValidationError()
     return value
 

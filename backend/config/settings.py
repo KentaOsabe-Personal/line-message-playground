@@ -1,11 +1,18 @@
 import os
 from pathlib import Path
 
+from .public_origin import build_trusted_https_origin, validate_public_host
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "local-development-secret-key")
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "")
 DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
-ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+PUBLIC_HOST = validate_public_host(os.getenv("NGROK_DOMAIN", ""))
+ALLOWED_HOSTS = [
+    *os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(","),
+    PUBLIC_HOST,
+]
+CSRF_TRUSTED_ORIGINS = [build_trusted_https_origin(PUBLIC_HOST)]
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 LINE_USER_ID = os.getenv("LINE_USER_ID", "")
 
@@ -20,6 +27,7 @@ INSTALLED_APPS = [
     "health",
     "delivery",
     "linechannels.apps.LineChannelsConfig",
+    "lineaccounts.apps.LineAccountsConfig",
 ]
 
 MIDDLEWARE = [
@@ -68,6 +76,22 @@ USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = "Lax"
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "lineaccounts.authentication.OwnerSessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "lineaccounts.permissions.IsActiveOwner",
+    ],
+    "EXCEPTION_HANDLER": "lineaccounts.errors.safe_exception_handler",
+}
 
 LOGGING = {
     "version": 1,

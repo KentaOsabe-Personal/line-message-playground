@@ -25,8 +25,18 @@ const input = async (name: string, value: string) => {
   await act(async () => element.dispatchEvent(new Event('input', { bubbles: true })))
 }
 
-const renderForm = async (client: DeliveryApiClient, createOperationId = () => 'operation-1') => {
-  await act(async () => root.render(<DeliveryForm client={client} createOperationId={createOperationId} />))
+const renderForm = async (
+  client?: DeliveryApiClient,
+  createOperationId = () => 'operation-1',
+  onSessionInvalid?: () => void,
+) => {
+  await act(async () => root.render(
+    <DeliveryForm
+      client={client}
+      createOperationId={createOperationId}
+      onSessionInvalid={onSessionInvalid}
+    />,
+  ))
 }
 
 describe('DeliveryForm', () => {
@@ -227,5 +237,24 @@ describe('DeliveryForm', () => {
     expect(container.querySelector('[name="accessToken"]')).toBeNull()
     expect(container.textContent).not.toContain('LINE_CHANNEL_ACCESS_TOKEN')
     expect(container.textContent).not.toContain('LINE_USER_ID')
+  })
+
+  // テストケース: default配信clientが401を受け取る。
+  // 期待値: 配信要求を再送せずsession失効を認証gateへ通知する。
+  test('notifies the authentication gate when the delivery session expires', async () => {
+    document.cookie = 'csrftoken=csrf-value; path=/'
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ error: { code: 'authentication_required', summary: '再認証してください。' } }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } },
+    ))
+    const onSessionInvalid = vi.fn()
+    await renderForm(undefined, () => 'operation-1', onSessionInvalid)
+    await input('subject', '件名')
+    await input('body', '本文')
+
+    await click('送信内容を確認')
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(onSessionInvalid).toHaveBeenCalledTimes(1)
   })
 })

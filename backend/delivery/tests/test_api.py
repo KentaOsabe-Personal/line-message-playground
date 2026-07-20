@@ -2,14 +2,20 @@ from datetime import timedelta
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
+from django.db import transaction
 from django.test import override_settings
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 from django.utils import timezone
 
 from delivery.confirmation import ConfirmationTokenService
 from delivery.formatters import format_message
 from delivery.gateway import LINEGateway, LinePushAccepted, LinePushRejected, LinePushUnknown
 from delivery.models import DeliveryAttempt
+from lineaccounts.authentication import OWNER_SESSION_KEY
+from lineaccounts.gateway import VerifiedLineIdentity
+from lineaccounts.models import OwnerAccount
+from lineaccounts.repositories import DjangoAccountRepository
+from lineaccounts.types import LineSubject
 
 
 class FakeGateway:
@@ -23,6 +29,32 @@ class FakeGateway:
 
 
 class DeliveryApiTests(APITestCase):
+    def setUp(self):
+        self.origin = "https://test.example.ngrok.app"
+        repository = DjangoAccountRepository()
+        with transaction.atomic():
+            owner = repository.lock_owner_account()
+            identity = repository.upsert_identity(
+                VerifiedLineIdentity(
+                    "0012345678", LineSubject(f"U{uuid4().hex}"), "Owner"
+                )
+            )
+            owner = repository.bind_owner_identity(owner, identity.public_id)
+            self.owner_session = repository.create_owner_session(
+                owner, timezone.now() + timedelta(hours=8)
+            )
+
+        client = APIClient(enforce_csrf_checks=True)
+        session = client.session
+        session[OWNER_SESSION_KEY] = str(self.owner_session.public_id)
+        session.save()
+        bootstrap = client.get("/api/account/session/")
+        client.credentials(
+            HTTP_ORIGIN=self.origin,
+            HTTP_X_CSRFTOKEN=bootstrap.cookies["csrftoken"].value,
+        )
+        self.client = client
+
     def create_processing_attempt(self, *, expires_at=None):
         message = format_message("処理中", str(uuid4()))
         now = timezone.now()
@@ -37,7 +69,7 @@ class DeliveryApiTests(APITestCase):
             processing_expires_at=expires_at or now + timedelta(seconds=30),
         )
 
-    # テストケース: 有効な件名と本文をpreviewする
+    # テストケース: active ownerが有効な件名と本文をpreviewする
     # 期待値: 正規テキストとopaqueな確認トークンだけを200で返す
     def test_preview_returns_formatted_text_and_confirmation_token(self):
         response = self.client.post(
@@ -117,8 +149,8 @@ class DeliveryApiTests(APITestCase):
         self.assertEqual(DeliveryAttempt.objects.count(), 0)
         self.assertEqual(gateway.commands, [])
 
-    # テストケース: 確認済み内容を最終送信する
-    # 期待値: 無認証で201成功応答を返し、安全な公開項目だけを含める
+    # テストケース: active ownerが確認済み内容を最終送信する
+    # 期待値: 201成功応答を返し、安全な公開項目だけを含める
     def test_send_confirmed_content_returns_created_success(self):
         message = format_message("件名", "本文")
         token = ConfirmationTokenService().issue(message)
@@ -141,6 +173,64 @@ class DeliveryApiTests(APITestCase):
         self.assertNotIn("confirmationToken", response.data)
         self.assertNotIn("target", response.data)
         self.assertEqual(len(gateway.commands), 1)
+
+    # テストケース: 匿名利用者が不正payloadで配信APIを操作する
+    # 期待値: serializerとLINE gatewayより先に全endpointを401で拒否する
+    def test_anonymous_requests_are_rejected_before_validation_and_gateway(self):
+        client = APIClient(enforce_csrf_checks=True)
+        bootstrap = client.get("/api/account/session/")
+        client.credentials(
+            HTTP_ORIGIN=self.origin,
+            HTTP_X_CSRFTOKEN=bootstrap.cookies["csrftoken"].value,
+        )
+        gateway = FakeGateway()
+
+        with patch("delivery.views.LINEGateway", return_value=gateway):
+            responses = (
+                client.post(
+                    "/api/deliveries/preview/",
+                    {"subject": [], "body": {}},
+                    format="json",
+                ),
+                client.post("/api/deliveries/", {}, format="json"),
+                client.post(
+                    "/api/deliveries/not-a-uuid/status/", {}, format="json"
+                ),
+            )
+
+        self.assertTrue(all(response.status_code == 401 for response in responses))
+        self.assertEqual(DeliveryAttempt.objects.count(), 0)
+        self.assertEqual(gateway.commands, [])
+
+    # テストケース: unlink pendingのownerが不正payloadで配信を要求する
+    # 期待値: serializerとLINE gatewayより先に403で拒否する
+    def test_pending_owner_is_rejected_before_validation_and_gateway(self):
+        OwnerAccount.objects.filter(slot=1).update(
+            state=OwnerAccount.State.DEAUTHORIZATION_PENDING,
+            unlink_generation=uuid4(),
+        )
+        gateway = FakeGateway()
+
+        with patch("delivery.views.LINEGateway", return_value=gateway):
+            response = self.client.post("/api/deliveries/", {}, format="json")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(DeliveryAttempt.objects.count(), 0)
+        self.assertEqual(gateway.commands, [])
+
+    # テストケース: active ownerがOriginなしで配信を要求する
+    # 期待値: payload処理とLINE gatewayより先に403 csrf_failedで拒否する
+    def test_delivery_requires_exact_origin_and_csrf_before_handler(self):
+        gateway = FakeGateway()
+        self.client.credentials()
+
+        with patch("delivery.views.LINEGateway", return_value=gateway):
+            response = self.client.post("/api/deliveries/", {}, format="json")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"]["code"], "csrf_failed")
+        self.assertEqual(DeliveryAttempt.objects.count(), 0)
+        self.assertEqual(gateway.commands, [])
 
     # テストケース: 編集後の内容を古い確認トークンで送る
     # 期待値: confirmation errorを返し、DB作成とLINE呼出しを行わない

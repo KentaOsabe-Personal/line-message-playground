@@ -133,3 +133,102 @@ h1 {
     padding: 1.25rem;
   }
 }
+.auth-gate,
+.auth-profile {
+  border: 1px solid #d8dee4;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.auth-profile {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.auth-profile p {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+}
+
+.eyebrow {
+  color: #57606a;
+  font-size: 0.8rem;
+}
+
+.account-console {
+  border-top: 1px solid #dfe7e3;
+  margin-top: 2rem;
+  padding-top: 2rem;
+}
+
+.account-console button {
+  border: 0;
+  border-radius: 0.5rem;
+  background: #087f3e;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.7rem 1rem;
+}
+
+.account-console button.secondary {
+  background: #e6ece9;
+  color: #17202a;
+}
+
+.account-console button.danger {
+  background: #a22b21;
+}
+
+.account-console button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.channel-list {
+  display: grid;
+  gap: 1rem;
+  list-style: none;
+  padding: 0;
+}
+
+.channel-card {
+  border: 1px solid #c8d5ce;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.channel-card h4 {
+  margin-top: 0;
+}
+
+.channel-card dl {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.channel-card dl div {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+}
+
+.channel-card dd {
+  margin: 0;
+}
+
+.unlink-panel {
+  border-top: 1px solid #dfe7e3;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+}
+
+.unlink-recovery {
+  border: 1px solid #b07800;
+  border-radius: 0.75rem;
+  background: #fff9e8;
+  padding: 1rem;
+}

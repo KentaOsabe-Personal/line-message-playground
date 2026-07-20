@@ -38,6 +38,7 @@ class ManageLineChannelCommandTests(SimpleTestCase):
                 credentials_configured=True,
                 created_at=now,
                 updated_at=now,
+                provider_id="000123",
             )
         )
 
@@ -69,6 +70,7 @@ class ManageLineChannelCommandTests(SimpleTestCase):
             "メイン",
             build_credential_pair("token-canary", "secret-canary"),
             True,
+            "000123",
         )
         inputs = (
             (register, "register", (register,)),
@@ -132,3 +134,23 @@ class ManageLineChannelCommandTests(SimpleTestCase):
         with self.assertRaises(CommandError) as captured:
             self.invoke(ManageLineChannelInputCollected(command), broken_service)
         self.assertNotIn(canary, str(captured.exception))
+
+    def test_noninteractive_provider_backfill_dispatches_safe_update(self):
+        service = Mock()
+        service.update.return_value = self.success
+        stdout = io.StringIO()
+        with patch(
+            f"{COMMAND_PATH}.build_line_channel_service", return_value=service
+        ), patch(f"{COMMAND_PATH}.build_manage_line_channel_prompts") as prompts:
+            call_command(
+                "manage_line_channel",
+                channel_public_id=str(self.public_id),
+                provider_id="000123",
+                stdout=stdout,
+            )
+
+        prompts.assert_not_called()
+        service.update.assert_called_once_with(
+            UpdateLineChannel(self.public_id, provider_id="000123")
+        )
+        self.assertIn('"provider_id": "000123"', stdout.getvalue())

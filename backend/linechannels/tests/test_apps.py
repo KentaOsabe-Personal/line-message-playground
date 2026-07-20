@@ -1,6 +1,8 @@
 import os
+import secrets
 import subprocess
 import sys
+from uuid import uuid4
 
 from cryptography.fernet import Fernet
 from django.apps import apps
@@ -54,6 +56,7 @@ class LineChannelsConfigTests(SimpleTestCase):
     def test_production_startup_accepts_valid_safe_configuration(self):
         completed = self._run_django_setup(
             {
+                "DJANGO_SECRET_KEY": secrets.token_urlsafe(48),
                 "LINE_CHANNEL_CREDENTIAL_KEYS": Fernet.generate_key().decode("ascii"),
                 "DJANGO_DEBUG": "false",
             }
@@ -95,6 +98,7 @@ class LineChannelsConfigTests(SimpleTestCase):
         environment = self._base_environment()
         environment.update(
             {
+                "DJANGO_SECRET_KEY": secrets.token_urlsafe(48),
                 "LINE_CHANNEL_CREDENTIAL_KEYS": raw_key,
                 "DJANGO_DEBUG": "false",
             }
@@ -132,6 +136,12 @@ class LineChannelsConfigTests(SimpleTestCase):
         environment["DJANGO_SETTINGS_MODULE"] = "config.settings"
         environment["DJANGO_DEBUG"] = "false"
         environment["MYSQL_HOST"] = "database-must-not-be-contacted.invalid"
+        environment["NGROK_DOMAIN"] = "test.example.ngrok.app"
+        environment["LINE_LOGIN_CHANNEL_ID"] = "1234567890"
+        environment["LINE_LOGIN_CHANNEL_SECRET"] = secrets.token_urlsafe(48)
+        environment["LINE_LOGIN_PROVIDER_ID"] = "0012345678"
+        environment["LINE_LIFF_LINKED_CHANNEL_PUBLIC_ID"] = str(uuid4())
+        environment.pop("LINE_OWNER_SUBJECT_DIGEST", None)
         environment.pop("LINE_CHANNEL_CREDENTIAL_KEYS", None)
         environment.pop("DJANGO_SECRET_KEY", None)
         return environment

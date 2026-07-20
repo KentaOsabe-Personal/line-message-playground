@@ -32,6 +32,7 @@ class DjangoLineChannelRepositoryTests(TransactionTestCase):
             "bot_user_id": f"U{suffix}",
             "label": "repository検証用",
             "is_active": True,
+            "provider_id": "000123",
         }
         values.update(overrides)
         return NewLineChannel(**values)

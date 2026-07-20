@@ -1,5 +1,6 @@
 Django==6.0.7
 cryptography==49.0.0
 djangorestframework==3.17.1
+httpx==0.28.1
 line-bot-sdk==3.25.0
 mysqlclient==2.2.7

@@ -30,6 +30,7 @@ from .validators import (
     validate_credential_pair,
     validate_label,
     validate_messaging_api_channel_id,
+    validate_provider_id,
     validate_public_id,
 )
 
@@ -89,6 +90,7 @@ class DefaultLineChannelService:
                 bot_user_id=validated.bot_user_id,
                 label=validated.label,
                 is_active=validated.is_active,
+                provider_id=validated.provider_id,
             )
         except BoundaryValidationError:
             return ChannelMutationFailed("invalid_input")
@@ -148,6 +150,7 @@ class DefaultLineChannelService:
                         label=validated.label,
                         is_active=validated.is_active,
                         encrypted_credentials=encrypted,
+                        provider_id=validated.provider_id,
                     ),
                 )
         except CredentialCryptoError as error:
@@ -178,6 +181,7 @@ class DefaultLineChannelService:
             label=validate_label(command.label),
             credentials=validate_credential_pair(command.credentials),
             is_active=command.is_active,
+            provider_id=validate_provider_id(command.provider_id),
         )
 
     @staticmethod
@@ -192,6 +196,7 @@ class DefaultLineChannelService:
                 command.label,
                 command.credentials,
                 command.is_active,
+                command.provider_id,
             )
         ):
             raise BoundaryValidationError()
@@ -216,6 +221,11 @@ class DefaultLineChannelService:
                 else None
             ),
             is_active=command.is_active,
+            provider_id=(
+                validate_provider_id(command.provider_id)
+                if command.provider_id is not None
+                else None
+            ),
         )
 
     def _encrypt_pair(
