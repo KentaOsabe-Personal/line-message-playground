@@ -7,6 +7,7 @@ Docker Compose をローカル開発の標準実行環境とし、Frontend、Bac
 ```text
 Browser ---------------------> Vite (/api proxy) -> Django REST API -> MySQL
 LINE / Smartphone -> ngrok --/                        |
+                         LIFF / LINE Login ------------+
                                                       +-> LINE Messaging API
 ```
 
@@ -14,12 +15,16 @@ LINE / Smartphone -> ngrok --/                        |
 
 ngrokは通常のDocker Composeサービスとして他のサービスと一緒に起動します。単一のHTTPSトンネルをFrontendへ接続し、`/api`は既存のVite proxyを経由させます。
 
+認証付きの owner 操作と LINE Webhook は同じ Django API に到達しますが、信頼境界は分けます。owner 操作は Backend が検証した LINE identity、サーバー側 session、exact-origin CSRF で保護し、公開 Webhook はチャネル別 URL と署名検証によって認証します。
+
 ## コア技術
 
 - **Frontend**: TypeScript 6、React 19、Vite 8
 - **Backend**: Python 3.14、Django 6、Django REST Framework 3
 - **Database**: MySQL 8.4、文字セット `utf8mb4`
 - **Runtime**: Docker、Docker Compose
+- **LINE integration**: LIFF SDK、LINE Bot SDK、HTTPX
+- **Credential encryption**: `cryptography` の Fernet／MultiFernet
 
 Frontend は ES Modules、React JSX transform、ES2022 を前提とします。Backend は日本語、Asia/Tokyo、timezone-aware datetime を既定とします。
 
@@ -44,14 +49,19 @@ Frontend は ES Modules、React JSX transform、ES2022 を前提とします。B
 - HTTP API は `/api/` 配下に置く
 - Django REST Framework の View と Response を使い、公開契約を HTTP テストで検証する
 - 外部サービス呼び出しは Backend に閉じ込め、Frontend から LINE API を直接呼ばない
+- owner 向け API はサーバー側 session で本人状態を確認し、状態変更では exact origin と CSRF token の両方を検証する
+- 公開 Webhook は owner session の対象外とし、署名検証前の body や識別情報を信頼しない
 
 ### 秘密情報と環境設定
 
 - 環境差分と秘密値は環境変数で注入する
 - `.env.example` には必要なキー名と安全なローカル例だけを置き、実際の `.env` はコミットしない
 - LINE のトークン、シークレット、ユーザー ID は Backend サービスだけへ渡す
+- Messaging API チャネルのアクセストークンとシークレットは認証付き暗号で DB へ保存し、専用 keyring だけを Backend の環境変数へ渡す
+- LINE Login の secret と owner allowlist 用 digest は Backend に閉じ込め、LIFF ID だけを公開設定として Frontend へ渡す
 - ngrok の authtoken は開発インフラ用の秘密情報として `.env` から ngrok サービスだけへ渡す
 - リポジトリ内の既定パスワードや secret はローカル開発専用とし、本番相当環境では必ず上書きする
+- 秘密情報を含む DB の general query log は無効にし、ログや例外は秘密値を保持しない安全な分類へ変換する
 
 ### テスト
 
@@ -70,7 +80,7 @@ docker compose up --build
 docker compose run --rm frontend npm test
 
 # Backend テスト
-docker compose run --rm backend python manage.py test
+docker compose run --rm backend python manage.py test --settings=config.test_settings
 
 # Frontend production build
 docker compose run --rm frontend npm run build
@@ -98,11 +108,19 @@ Backend は MySQL の healthcheck 成功後に起動し、起動時に migration
 
 配信状態は `processing`、`succeeded`、`failed`、`unknown` を区別します。タイムアウト等の結果不明時は自動再送せず、状態確認 API で既存操作を確認してから明示的な再試行を許可します。LINE SDK の生の例外や認証情報、固定宛先は公開 API や通常ログへ出さず、安全なエラー分類へ変換します。
 
-現在の push 送信が参照する秘密値はアクセストークンと固定ユーザー ID です。チャネルシークレットは Webhook の署名検証を導入するまで送信処理で使用しません。利用上限確認は将来の運用機能として扱います。
+現在の push 送信が参照する秘密値はアクセストークンと固定ユーザー ID です。チャネルシークレットは push 送信では使用せず、Webhook 境界だけが署名検証のために参照します。利用上限確認は将来の運用機能として扱います。
+
+### LINE アカウントとチャネル資格情報
+
+LIFF から得た token は Backend の LINE Login 境界で検証し、provider と owner allowlist に一致した identity だけをサーバー側 session へ結び付けます。Frontend は session cookie を直接解釈せず、session API の安全な状態表現を使います。
+
+複数 Messaging API チャネルの資格情報は DB へ暗号化して保存し、復号可能な値を repository 境界の外へ不必要に広げません。keyring の先頭を現用鍵とし、旧鍵を残した再暗号化、検証、撤去の順でローテーションします。鍵を失った DB は復号できないため、バックアップと旧鍵の保持期間を一体で判断します。
 
 ### Webhook
 
-導入時は生の request body に対する HMAC-SHA256 署名検証を JSON 解析より先に行います。`webhookEventId` で重複を排除し、重い処理はレスポンス返却から分離します。
+チャネル別の不透明な UUID から有効な資格情報を選び、生の request body に対する HMAC-SHA256 署名検証を JSON 解析より先に行います。署名後も `destination` と payload 上限を検証し、検証前後の失敗を安全な公開エラーへ縮約します。
+
+`webhookEventId` はイベント台帳の一意キーとして重複を排除し、検証済みの immutable envelope だけを handler へ渡します。受付は軽量な同期処理とし、未対応イベントも台帳へ明示的に記録します。状態同期や reply の外部作用は handler 側の別責任とし、将来重い処理が必要になった場合はレスポンス返却から分離します。
 
 ---
-_更新日: 2026-07-12。技術判断と標準を記録し、依存パッケージ一覧にはしない。_
+_更新日: 2026-07-20。owner 認証、暗号化チャネル資格情報、検証済み Webhook 受付の実装パターンを反映。技術判断と標準を記録し、依存パッケージ一覧にはしない。_
