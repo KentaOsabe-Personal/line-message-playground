@@ -114,8 +114,8 @@
   - _Requirements: 4.3, 4.5, 4.6, 6.1, 6.2, 6.3, 8.3, 8.5_
   - _Boundary: EventReceiptRepository_
 
-- [ ] 4. 検証、受付、dispatch を公開 HTTP 境界へ統合する
-- [ ] 4.1 request 全体の信頼遷移と batch 受付を順序制御する
+- [x] 4. 検証、受付、dispatch を公開 HTTP 境界へ統合する
+- [x] 4.1 request 全体の信頼遷移と batch 受付を順序制御する
   - canonical な公開識別子から資格情報を解決し、署名成功前に payload を解析せず、全 payload 検証完了前に receipt を作成しない
   - 空 events は台帳と handler を使わず安全に受付監査し、非空 batch は support 判定後に原子的な受付へ渡す
   - channel、credential、signature、destination、受付上限、payload、受付保存の失敗を安全な request 結果へ分類する
@@ -125,7 +125,7 @@
   - _Boundary: WebhookIngressService Integration_
   - _Depends: 2.3, 3.1, 3.2, 3.3_
 
-- [ ] 4.2 新規受付 event だけを dispatch して結果と deadline を分類する
+- [x] 4.2 新規受付 event だけを dispatch して結果と deadline を分類する
   - commit 済みの新規 processing event だけから検証済み envelope を作り、handler を transaction 外で payload 順に呼び出す
   - unsupported と全重複では handler を呼ばず、保存済み分類と初回 metadata を維持する
   - handler の安全な失敗と生例外を handler_failed へ置換し、失敗後も後続 event の分類を継続する
@@ -135,7 +135,7 @@
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 5.1, 5.2, 5.3, 5.4, 5.5, 6.1, 6.2, 6.3, 6.4, 7.1, 7.2, 7.3, 7.4, 7.5, 8.1, 8.2, 8.3, 8.5_
   - _Boundary: WebhookIngressService Integration_
 
-- [ ] 4.3 channel 別の匿名 POST と安全な HTTP 応答を実装する
+- [x] 4.3 channel 別の匿名 POST と安全な HTTP 応答を実装する
   - 専用 URL の path parameter を候補選択にだけ渡し、request body を一度だけ raw bytes として取得する
   - owner 認証、permission、body parser を受付境界で無効化し、request data を参照しない
   - POST 以外は service を呼ばない固定405とし、acceptedを空200、payload/destinationを400、signatureを401、channel/credentialを404、storage/unexpectedを503へ写像する
@@ -145,7 +145,7 @@
   - _Boundary: WebhookAPIView_
   - _Depends: 4.2_
 
-- [ ] 4.4 concrete component を合成して公開 route へ接続する
+- [x] 4.4 concrete component を合成して公開 route へ接続する
   - credential、署名、payload、台帳、registry、監査、clock、service を composition root だけで合成する
   - app-local route を root API prefix へ接続し、既存 owner API の認証設定へ影響を与えない
   - 空 registry を既定とし、上限内の valid non-empty event を unsupported として安全に受け付ける
