@@ -74,8 +74,8 @@
   - _Requirements: 3.5, 3.6, 5.2, 5.3, 7.3_
   - _Boundary: WebhookPayloadValidator_
 
-- [ ] 3. 一意な受付、handler 解決、安全な監査を実装する
-- [ ] 3.1 (P) 検証済み event type を単一の同期 handler へ解決する
+- [x] 3. 一意な受付、handler 解決、安全な監査を実装する
+- [x] 3.1 (P) 検証済み event type を単一の同期 handler へ解決する
   - 起動時に event type ごと最大一件を登録し、request 処理中は registry を変更しない
   - 登録済み type だけに検証済み envelope を渡し、未登録 type は handler を呼ばず unsupported と判定する
   - registry は handler contract を保持するが、具体 handler の100 ms性能検証は登録側仕様と最終 performance gate に委ねる
@@ -85,7 +85,7 @@
   - _Boundary: HandlerRegistry_
   - _Depends: 1.2_
 
-- [ ] 3.2 (P) 内容を受け取れない安全な Webhook 監査を実装する
+- [x] 3.2 (P) 内容を受け取れない安全な Webhook 監査を実装する
   - channel、署名、payload の拒否、空受付、新規・重複・未対応、handler 成功・失敗、保存層障害、deadline 超過を whitelist 分類する
   - outcome、観測時刻、許可された非秘密 metadata だけを構造化記録する
   - deadline 超過時だけ非負の elapsed milliseconds を記録し、他 outcome では経過時間を保持しない
@@ -95,7 +95,7 @@
   - _Boundary: SafeWebhookAuditLogger_
   - _Depends: 1.2_
 
-- [ ] 3.3 (P) event batch の新規受付権を原子的に確定する
+- [x] 3.3 (P) event batch の新規受付権を原子的に確定する
   - request 内の全 candidate を短い単一 transaction で受付し、保存層障害時は新規行を全 rollback する
   - webhookEventId の一意制約を線形化点として、同一 request と別 request の重複を既存 receipt へ収束させる
   - candidate と同じ件数・順序の判定を返し、同一 request 内では最初の occurrence だけに新規処理権を与える
@@ -105,7 +105,7 @@
   - _Boundary: EventReceiptRepository_
   - _Depends: 1.2, 1.5_
 
-- [ ] 3.4 handler 結果を台帳へ単調に確定する
+- [x] 3.4 handler 結果を台帳へ単調に確定する
   - processing の receipt だけを processed または handler_failed 付き failed へ条件付き更新する
   - 更新対象を status、failure code、completed time、updated time に限定し、初回 metadata を書き換えない
   - terminal または unsupported の receipt、重複観測、競合した確定処理では保存済み分類を維持する
