@@ -4,7 +4,7 @@ from datetime import timedelta
 from unittest import mock
 from uuid import uuid4
 
-from django.db import DatabaseError, close_old_connections, transaction
+from django.db import DatabaseError, OperationalError, close_old_connections, transaction
 from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
@@ -367,6 +367,60 @@ class AccountRepositoryTests(TestCase):
         self.assertEqual(stored.line_deauthorized_at, confirmed_at)
         self.assertTrue(LineIdentity.objects.filter(public_id=identity.public_id).exists())
 
+    # テストケース: 旧unlink完了後に新identity・session・recipientを再linkし、新generation開始後へ旧marker/finalizeを送る。
+    # 期待値: 両方をstaleとして拒否し、再link後の全個人データと新generationを変更しない。
+    def test_old_generation_cannot_mutate_relinked_identity_session_or_recipient(self):
+        _, _, old_generation, _ = self.begin_local_deletion()
+        with transaction.atomic():
+            locked = self.repository.lock_owner_account()
+            self.repository.finalize_unlink(locked, old_generation)
+
+        channel = self.create_channel()
+        with transaction.atomic():
+            owner = self.repository.lock_owner_account()
+            new_identity = self.repository.upsert_identity(
+                self.verified_identity(subject=f"U{uuid4().hex}", display_name="New")
+            )
+            owner = self.repository.bind_owner_identity(
+                owner, new_identity.public_id
+            )
+            new_session = self.repository.create_owner_session(
+                owner, timezone.now() + timedelta(hours=8)
+            )
+            new_recipient = self.repository.create_recipient(
+                owner,
+                NewRecipient(
+                    new_identity.public_id,
+                    channel.public_id,
+                    DeliveryRecipient.FriendshipState.FRIEND,
+                ),
+            )
+            new_generation = uuid4()
+            self.repository.begin_unlink(owner, new_generation)
+
+        for operation in ("marker", "finalize"):
+            with self.subTest(operation=operation), self.assertRaises(
+                AccountStateError
+            ) as raised, transaction.atomic():
+                locked = self.repository.lock_owner_account()
+                if operation == "marker":
+                    self.repository.mark_line_deauthorized(
+                        locked, old_generation, timezone.now()
+                    )
+                else:
+                    self.repository.finalize_unlink(locked, old_generation)
+            self.assertEqual(raised.exception.code, "unlink_attempt_stale")
+
+        owner = OwnerAccount.objects.get(slot=1)
+        self.assertEqual(owner.identity.public_id, new_identity.public_id)
+        self.assertEqual(owner.unlink_generation, new_generation)
+        self.assertTrue(
+            OwnerSession.objects.filter(public_id=new_session.public_id).exists()
+        )
+        self.assertTrue(
+            DeliveryRecipient.objects.filter(public_id=new_recipient.public_id).exists()
+        )
+
     # テストケース: recipient削除後のsession削除statementでDB障害を発生させる
     # 期待値: transaction全体をrollbackして全個人データと成功markerを保持する
     def test_finalize_failure_rolls_back_all_deletions_and_keeps_marker(self):
@@ -424,6 +478,19 @@ class AccountRepositoryTransactionTests(TransactionTestCase):
             repository.lock_owner_account()
 
         self.assertEqual(raised.exception.code, "transaction_required")
+
+    # テストケース: MySQLのlock timeoutまたはdeadlockをrepository境界で受け取る。
+    # 期待値: raw DB例外を漏らさず同じretryable永続化結果へ分類する。
+    def test_classifies_mysql_lock_timeout_and_deadlock_as_retryable(self):
+        repository = DjangoAccountRepository()
+
+        for error_code in (1205, 1213):
+            with self.subTest(error_code=error_code):
+                with self.assertRaises(AccountPersistenceError) as raised:
+                    with repository._translate_database_errors():
+                        raise OperationalError(error_code, "database-detail")
+                self.assertEqual(raised.exception.code, "retryable")
+                self.assertNotIn("database-detail", str(raised.exception))
 
 
 class AccountRepositoryConcurrencyTests(TransactionTestCase):

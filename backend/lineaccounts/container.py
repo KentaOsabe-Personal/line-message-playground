@@ -12,6 +12,7 @@ from linechannels.repositories import DjangoLineChannelDirectory
 
 def build_session_service() -> DefaultAccountSessionService:
     runtime = get_line_account_runtime()
+    resolve_liff_linked_channel_policy(runtime, DjangoLineChannelDirectory())
     return DefaultAccountSessionService(
         HttpxLinePlatformGateway(runtime),
         DjangoAccountRepository(),

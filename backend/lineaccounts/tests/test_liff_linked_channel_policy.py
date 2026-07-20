@@ -24,6 +24,8 @@ class LiffLinkedChannelPolicyTests(SimpleTestCase):
             owner_eligibility=OwnerEligibilityUnavailable(),
         )
 
+    # テストケース: runtimeと同じproviderへboundされたLIFF直結チャネルを解決する。
+    # 期待値: 対象UUIDだけをdirectとするimmutable policyが得られる。
     def test_resolves_matching_bound_channel_into_immutable_policy(self):
         directory = Mock()
         directory.get.return_value = LinkableChannelSummary(
@@ -36,6 +38,8 @@ class LiffLinkedChannelPolicyTests(SimpleTestCase):
         self.assertFalse(policy.is_direct(uuid.uuid4()))
         directory.get.assert_called_once_with(self.public_id)
 
+    # テストケース: LIFF直結チャネルが未設定・unboundまたはprovider不一致である。
+    # 期待値: account操作を有効化せず同じ安全な設定エラーでfail closedになる。
     def test_fails_closed_for_missing_unbound_or_provider_mismatch(self):
         cases = (
             None,

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import liff from '@line/liff'
 
 import { validatePublicHost } from '../vite.config'
+import publicHostFixture from './fixtures/public-hosts.json'
 
 describe('task 1 runtime dependencies and public host', () => {
   // テストケース: 固定した LIFF SDK を module として import する。
@@ -19,19 +20,13 @@ describe('task 1 runtime dependencies and public host', () => {
 
   // テストケース: scheme、port、path、wildcard、空白等を Vite 設定へ渡す。
   // 期待値: すべて設定エラーとして拒否される。
-  it.each([
-    '',
-    'https://example.ngrok.app',
-    'example.ngrok.app:443',
-    'example.ngrok.app/liff',
-    '*.ngrok.app',
-    ' example.ngrok.app',
-    'example.ngrok.app ',
-    'example..ngrok.app',
-    '-example.ngrok.app',
-    'example_.ngrok.app',
-    '例え.jp',
-  ])('rejects a noncanonical public host: %s', (host) => {
+  it.each(publicHostFixture.invalid)('rejects a noncanonical public host: %s', (host) => {
     expect(() => validatePublicHost(host)).toThrow('PUBLIC_HOST_INVALID')
+  })
+
+  // テストケース: Backend と Vite が共有する公開host fixtureの正常値を検証する。
+  // 期待値: すべてのcanonical hostがexact allowed hostとして保持される。
+  it.each(publicHostFixture.valid)('accepts a host from the shared fixture: %s', (host) => {
+    expect(validatePublicHost(host)).toBe(host)
   })
 })

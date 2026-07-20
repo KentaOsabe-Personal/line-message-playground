@@ -1,9 +1,11 @@
 from datetime import timedelta
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 from uuid import uuid4
 
-from django.db import transaction
-from django.test import TestCase
+from django.db import close_old_connections, transaction
+from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
 from lineaccounts.authentication import OwnerPrincipal
@@ -16,11 +18,14 @@ from lineaccounts.gateway import (
 )
 from delivery.models import DeliveryAttempt
 from lineaccounts.models import DeliveryRecipient, OwnerAccount, OwnerSession
+from lineaccounts.recipient_services import DefaultRecipientService
 from lineaccounts.repositories import (
     AccountPersistenceError,
+    AccountStateError,
     DjangoAccountRepository,
     NewRecipient,
 )
+from lineaccounts.unlink_execution_lock import MySQLUnlinkExecutionLock
 from lineaccounts.types import LineSubject, UserAccessToken
 from lineaccounts.unlink_services import (
     DefaultAccountUnlinkService,
@@ -46,6 +51,20 @@ class _Gateway:
 
     def deauthorize(self, token):
         self.deauthorize_calls += 1
+        return self.deauthorization
+
+
+class _BlockingGateway(_Gateway):
+    def __init__(self, entered: threading.Event, release: threading.Event):
+        super().__init__()
+        self.entered = entered
+        self.release = release
+
+    def deauthorize(self, token):
+        self.deauthorize_calls += 1
+        self.entered.set()
+        if not self.release.wait(timeout=5):
+            raise AssertionError("deauthorize release timed out")
         return self.deauthorization
 
 
@@ -372,7 +391,18 @@ class AccountUnlinkServiceTests(TestCase):
             new_identity = self.repository.upsert_identity(
                 VerifiedLineIdentity("0012345678", self.subject, "Owner")
             )
-            self.repository.bind_owner_identity(owner, new_identity.public_id)
+            owner = self.repository.bind_owner_identity(owner, new_identity.public_id)
+            new_session = self.repository.create_owner_session(
+                owner, now + timedelta(hours=8)
+            )
+            new_recipient = self.repository.create_recipient(
+                owner,
+                NewRecipient(
+                    new_identity.public_id,
+                    self.channel.public_id,
+                    "friend",
+                ),
+            )
 
         replay = service.execute(
             self.principal,
@@ -385,6 +415,12 @@ class AccountUnlinkServiceTests(TestCase):
         self.assertEqual(
             OwnerAccount.objects.get(slot=1).identity.public_id,
             new_identity.public_id,
+        )
+        self.assertTrue(
+            OwnerSession.objects.filter(public_id=new_session.public_id).exists()
+        )
+        self.assertTrue(
+            DeliveryRecipient.objects.filter(public_id=new_recipient.public_id).exists()
         )
 
     # テストケース: 各owner stageへ許可されないcredential組合せを渡す
@@ -433,3 +469,108 @@ class AccountUnlinkServiceTests(TestCase):
         self.assertGreaterEqual(metrics.oldest_deauthorization_pending_seconds, 29)
         self.assertNotIn("Owner", repr(metrics))
         self.assertNotIn(str(self.identity.public_id), repr(metrics))
+
+
+class AccountUnlinkMySQLConcurrencyTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        OwnerAccount.objects.get_or_create(slot=1)
+        self.repository = DjangoAccountRepository()
+        self.subject = LineSubject(f"U{uuid4().hex}")
+        with transaction.atomic():
+            owner = self.repository.lock_owner_account()
+            self.identity = self.repository.upsert_identity(
+                VerifiedLineIdentity("0012345678", self.subject, "Owner")
+            )
+            owner = self.repository.bind_owner_identity(
+                owner, self.identity.public_id
+            )
+            self.session = self.repository.create_owner_session(
+                owner, timezone.now() + timedelta(hours=8)
+            )
+        self.channel = LineChannel.objects.create(
+            messaging_api_channel_id="9876543210",
+            bot_user_id=f"U{uuid4().hex}",
+            label="競合チャネル",
+            provider_id="0012345678",
+            is_active=True,
+        )
+        with transaction.atomic():
+            owner = self.repository.lock_owner_account()
+            self.recipient = self.repository.create_recipient(
+                owner,
+                NewRecipient(
+                    self.identity.public_id, self.channel.public_id, "friend"
+                ),
+            )
+        self.principal = OwnerPrincipal(
+            self.session.public_id, self.identity.public_id, "active"
+        )
+
+    @staticmethod
+    def independently(operation):
+        close_old_connections()
+        try:
+            return operation()
+        finally:
+            close_old_connections()
+
+    # テストケース: MySQL実接続で初回unlinkをLINE呼出し中に停止し、同時resumeとrecipient mutationを実行する。
+    # 期待値: resumeはsingle-flight lockでLINE未呼出し、recipient mutationはgeneration fenceで拒否される。
+    def test_unlink_is_single_flight_and_fences_recipient_mutation(self):
+        entered = threading.Event()
+        release = threading.Event()
+        first_gateway = _BlockingGateway(entered, release)
+        first_service = DefaultAccountUnlinkService(
+            first_gateway,
+            DjangoAccountRepository(),
+            MySQLUnlinkExecutionLock(),
+            DjangoLineChannelDirectory(),
+        )
+        preview = first_service.preview(self.principal, timezone.now())
+
+        def first_unlink():
+            return first_service.execute(
+                self.principal,
+                preview.confirmation_token,
+                UserAccessToken("first-token"),
+                timezone.now(),
+            )
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(self.independently, first_unlink)
+            self.assertTrue(entered.wait(timeout=5))
+            pending_principal = OwnerPrincipal(
+                self.session.public_id,
+                self.identity.public_id,
+                "deauthorization_pending",
+            )
+            second_gateway = _Gateway()
+            second_service = DefaultAccountUnlinkService(
+                second_gateway,
+                DjangoAccountRepository(),
+                MySQLUnlinkExecutionLock(),
+                DjangoLineChannelDirectory(),
+            )
+            second = second_service.execute(
+                pending_principal,
+                None,
+                UserAccessToken("second-token"),
+                timezone.now(),
+            )
+            recipient_service = DefaultRecipientService(
+                DjangoLineChannelDirectory(), DjangoAccountRepository()
+            )
+            with self.assertRaises(AccountStateError) as fenced:
+                recipient_service.set_enabled(
+                    self.identity.public_id, self.recipient.public_id, False
+                )
+            release.set()
+            first = future.result(timeout=10)
+
+        self.assertEqual(second, UnlinkRejected("unlink_in_progress"))
+        self.assertEqual(second_gateway.deauthorize_calls, 0)
+        self.assertEqual(fenced.exception.code, "owner_not_active")
+        self.assertIsInstance(first, UnlinkCompleted)
+        self.assertEqual(first_gateway.deauthorize_calls, 1)

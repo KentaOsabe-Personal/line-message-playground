@@ -58,6 +58,8 @@ class LineAccountRuntimeTests(SimpleTestCase):
 
         self.assertIsInstance(runtime.owner_eligibility, OwnerEligibilityUnavailable)
 
+    # テストケース: shared provider contractが拒否する非canonical値をruntimeへ渡す。
+    # 期待値: providerを正規化せず秘密値なしの設定エラーでfail closedになる。
     def test_runtime_rejects_values_rejected_by_shared_provider_contract(self):
         for provider_id in (" 456", "456 ", "１２３", "1" * 65):
             with self.subTest(provider_id=provider_id):

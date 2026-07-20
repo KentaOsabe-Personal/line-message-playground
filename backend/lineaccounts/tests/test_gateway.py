@@ -383,6 +383,33 @@ class DeauthorizeTests(TestCase):
         self.assertEqual(deauthorize_attempts, 1)
         self.assertNotIn("user-token-canary", repr(result))
 
+    # テストケース: deauthorize本体が429 rate limitを返す。
+    # 期待値: 自動再送せず外部結果不確定へ分類し、tokenを結果へ露出しない。
+    def test_classifies_deauthorize_429_as_uncertain_without_retry(self) -> None:
+        deauthorize_attempts = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal deauthorize_attempts
+            if request.url.path == "/oauth2/v3/token":
+                return httpx.Response(
+                    200,
+                    json={
+                        "token_type": "Bearer",
+                        "access_token": "channel-token-canary",
+                        "expires_in": 900,
+                    },
+                )
+            deauthorize_attempts += 1
+            return httpx.Response(429, json={"message": "user-token-canary"})
+
+        result = gateway_for(handler).deauthorize(
+            UserAccessToken("user-token-canary")
+        )
+
+        self.assertIsInstance(result, DeauthorizeUncertain)
+        self.assertEqual(deauthorize_attempts, 1)
+        self.assertNotIn("user-token-canary", repr(result))
+
     # テストケース: deauthorize本体が400を返す
     # 期待値: 成功扱いせず、認可取消拒否として返す
     def test_classifies_deauthorize_400_as_rejected(self) -> None:

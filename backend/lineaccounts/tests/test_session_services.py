@@ -190,6 +190,22 @@ class AccountSessionServiceTests(TestCase):
         self.assertEqual(LineIdentity.objects.count(), 1)
         self.assertEqual(gateway.calls, 2)
 
+    # テストケース: active ownerの端末session状態を代表データ量で取得する。
+    # 期待値: identityを含む固定1 queryで解決しrecipientやcredential tableを参照しない。
+    def test_active_session_status_uses_one_safe_query(self):
+        service, _ = self.service()
+        established = service.establish(IdToken("proof"), self.now)
+        for _ in range(8):
+            self.create_recipient()
+
+        with self.assertNumQueries(1) as captured:
+            status = service.get_status(established.session.public_id, self.now)
+
+        self.assertIsInstance(status, AuthenticatedSessionStatus)
+        sql = "\n".join(query["sql"].lower() for query in captured.captured_queries)
+        self.assertNotIn("linechannels_linechannelcredential", sql)
+        self.assertNotIn("lineaccounts_deliveryrecipient", sql)
+
     # テストケース: active ownerが新しい検証済み表示名で通常再認証する
     # 期待値: bindingを維持し表示名を更新して新しい端末sessionを返す
     def test_reauthentication_updates_profile_and_creates_new_session(self):

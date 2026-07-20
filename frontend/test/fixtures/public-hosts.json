@@ -1,0 +1,19 @@
+{
+  "valid": [
+    "example.ngrok.app",
+    "a-b.example.com"
+  ],
+  "invalid": [
+    "",
+    "https://example.ngrok.app",
+    "example.ngrok.app:443",
+    "example.ngrok.app/liff",
+    "*.ngrok.app",
+    " example.ngrok.app",
+    "example.ngrok.app ",
+    "example..ngrok.app",
+    "-example.ngrok.app",
+    "example_.ngrok.app",
+    "例え.jp"
+  ]
+}

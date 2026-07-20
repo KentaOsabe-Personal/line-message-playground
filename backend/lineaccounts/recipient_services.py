@@ -7,6 +7,7 @@ from uuid import UUID
 from django.db import transaction
 
 from linechannels.repositories import LineChannelDirectory
+from linechannels.types import LinkableChannelSummary
 
 from .gateway import (
     FriendshipSucceeded,
@@ -80,10 +81,14 @@ class DefaultRecipientService:
             for channel in self._directory.list_active_bound()
             if channel.provider_id == identity.provider_id
         }
-        for channel_id in recipients:
-            channel = self._directory.get(channel_id)
-            if channel is not None:
-                channels[channel_id] = channel
+        for recipient in recipients.values():
+            if recipient.channel_id not in channels:
+                channels[recipient.channel_id] = LinkableChannelSummary(
+                    public_id=recipient.channel_id,
+                    label=recipient.channel_label,
+                    provider_id=recipient.channel_provider_id or "",
+                    is_active=recipient.channel_is_active,
+                )
 
         return tuple(
             self._project(channels[channel_id], recipients.get(channel_id))

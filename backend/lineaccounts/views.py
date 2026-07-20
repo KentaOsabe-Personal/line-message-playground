@@ -81,7 +81,7 @@ def _status_response(status):
 def _storage_safe(operation):
     try:
         return operation()
-    except AccountPersistenceError:
+    except (AccountPersistenceError, ImproperlyConfigured):
         raise SafeAPIError("storage_unavailable") from None
 
 

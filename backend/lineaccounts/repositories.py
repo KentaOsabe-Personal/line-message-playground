@@ -87,6 +87,9 @@ class RecipientView:
     channel_id: UUID
     enabled: bool
     friendship_state: str
+    channel_label: str
+    channel_provider_id: str | None
+    channel_is_active: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -648,4 +651,7 @@ class DjangoAccountRepository:
             channel_id=recipient.line_channel.public_id,
             enabled=recipient.enabled,
             friendship_state=recipient.friendship_state,
+            channel_label=recipient.line_channel.label,
+            channel_provider_id=recipient.line_channel.provider_id,
+            channel_is_active=recipient.line_channel.is_active,
         )

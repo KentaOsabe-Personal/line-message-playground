@@ -3,6 +3,8 @@ from uuid import uuid4
 
 from django.db import transaction
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
+from django.db import connection
 from django.utils import timezone
 
 from lineaccounts.gateway import (
@@ -154,6 +156,21 @@ class RecipientChannelListingTests(TestCase):
         self.assertEqual(items[0].recipient_id, recipient.public_id)
         self.assertEqual(items[0].channel_state, "inactive")
         self.assertFalse(items[0].delivery_available)
+
+    # テストケース: inactiveな既存recipientを1件と12件に増やしてチャネル一覧を取得する。
+    # 期待値: query数は固定で、credential tableをjoinせず安全なprojectionだけを返す。
+    def test_channel_listing_has_a_fixed_query_budget_without_credential_join(self):
+        inactive_channels = [self.channel(f"停止-{index}", active=False) for index in range(12)]
+        for channel in inactive_channels:
+            self.link(channel)
+
+        with CaptureQueriesContext(connection) as queries:
+            items = self.service.list_channels(self.identity.public_id)
+
+        self.assertEqual(len(items), 12)
+        self.assertEqual(len(queries), 3)
+        sql = "\n".join(query["sql"].lower() for query in queries)
+        self.assertNotIn("linechannels_linechannelcredential", sql)
 
 
 class _RecipientGatewayStub:

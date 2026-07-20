@@ -424,11 +424,11 @@
   - _Depends: 1.2, 1.3, 1.4, 1.8, 10.1_
   - _Requirements: 1.1, 1.3, 3.2, 3.8, 7.11, 8.1, 8.2, 8.4, 8.5_
 
-- [ ] 11. 自動検証と通常経路のLIFF受入を完了する
+- [x] 11. 自動検証と通常経路のLIFF受入を完了する
 
 > 以降の全追加test定義直前には、日本語の`テストケース:`と`期待値:`コメントを記載する。
 
-- [ ] 11.1 (P) LINE Login runtime loaderを自動検証する
+- [x] 11.1 (P) LINE Login runtime loaderを自動検証する
   - 必須設定・canonical provider・UUID・owner未設定sentinelの正常異常系を検証する
   - raw secretとowner digestがsettings・例外・reprへ載らないことを確認する
   - 完了時には、runtime loaderのfail-closed testが単独で成功する
@@ -436,7 +436,7 @@
   - _Depends: 1.2, 1.5_
   - _Requirements: 2.1, 3.1, 3.2, 3.3, 3.8, 8.4, 8.5, 8.6_
 
-- [ ] 11.2 (P) provider validationとmodel規則を自動検証する
+- [x] 11.2 (P) provider validationとmodel規則を自動検証する
   - opaque providerの完全一致validationと新規必須規則を検証する
   - nullable legacy値とprovider索引のmodel metadataを確認する
   - 完了時には、provider validation・model境界のtestが成功する
@@ -444,7 +444,7 @@
   - _Depends: 2.1, 2.2_
   - _Requirements: 5.1, 5.3, 5.4, 6.4, 6.6_
 
-- [ ] 11.3 (P) ID token verify境界を自動検証する
+- [x] 11.3 (P) ID token verify境界を自動検証する
   - issuer・audience・expiry・subject・name・scopeの成功失敗をfakeで検証する
   - decoded profileだけでは認証できずraw errorも公開されないことを確認する
   - timeoutと限定retryを含むID token verifyの実行上限を確認する
@@ -453,7 +453,7 @@
   - _Depends: 4.1, 4.2_
   - _Requirements: 2.1, 2.2, 2.3, 4.1, 4.3, 8.6_
 
-- [ ] 11.4 (P) account modelとDB制約を自動検証する
+- [x] 11.4 (P) account modelとDB制約を自動検証する
   - owner singleton・identity・session・recipient・unlink stateのvalid/invalid組合せを検証する
   - unique・check・FK規則と配信監査の独立性を確認する
   - 完了時には、account model不変条件のtestが成功する
@@ -461,7 +461,7 @@
   - _Depends: 3.1, 3.2_
   - _Requirements: 2.4, 2.6, 3.4, 4.2, 5.2, 5.6, 7.2, 7.4, 7.8_
 
-- [ ] 11.5 (P) owner適格性と初回bindingを自動検証する
+- [x] 11.5 (P) owner適格性と初回bindingを自動検証する
   - owner digest未設定・不一致・一致とvacant・active identity判定を検証する
   - 異provider identityを統合せず単一ownerを保つことを確認する
   - 完了時には、owner確立serviceのtestが成功する
@@ -469,7 +469,7 @@
   - _Depends: 6.1_
   - _Requirements: 2.4, 3.1, 3.2, 3.3, 3.4, 4.1, 4.2, 4.8_
 
-- [ ] 11.6 (P) recipient一覧と登録を自動検証する
+- [x] 11.6 (P) recipient一覧と登録を自動検証する
   - active・inactive・unbound・provider不一致・duplicateの分岐を検証する
   - direct friendshipと非direct unknownを確認する
   - 完了時には、recipient一覧・登録serviceのtestが成功する
@@ -477,7 +477,7 @@
   - _Depends: 6.6, 6.7_
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9_
 
-- [ ] 11.7 unlink confirmationとfenceを自動検証する
+- [x] 11.7 unlink confirmationとfenceを自動検証する
   - confirmation改変・期限切れ・snapshot変更・replay・fresh token不備をmutationなしで拒否する
   - 表示名と件数が同じでもrecipient UUIDまたはchannel UUIDが差し替わればstaleとして拒否する
   - begin_unlinkがsnapshot検証と同一transactionでgenerationを設定することを確認する
@@ -485,14 +485,14 @@
   - _Depends: 7.1, 7.3_
   - _Requirements: 7.1, 7.5, 7.9, 7.10, 7.12, 7.13_
 
-- [ ] 11.8 unlink認可取消とmarker障害をfault injectionで自動検証する
+- [x] 11.8 unlink認可取消とmarker障害をfault injectionで自動検証する
   - LINE 400・429・5xx・timeout・204後marker失敗を決定的に再現する
   - deauthorizeがrequestごとに1回だけで、結果不確定がdeauthorization pendingへ留まることを確認する
   - 完了時には、外部結果とmarker遷移のsaga testが成功する
   - _Depends: 7.2, 7.4_
   - _Requirements: 7.5, 7.11, 7.12, 7.13, 7.14, 7.15_
 
-- [ ] 11.9 session API・Origin・cookie保護を自動検証する
+- [x] 11.9 session API・Origin・cookie保護を自動検証する
   - 全unsafe endpointで不正OriginとCSRF欠落を403かつmutationなしにする
   - session cookieのSecure・HttpOnly・SameSite Lax、CSRF cookieのSecure・SameSite Lax・JS-readable、HTTPへの認証cookie非送信を確認する
   - 偽`X-Forwarded-Proto`がBackendのHTTPS判定を変更せず、proxy trust設定が追加されていないことを確認する
@@ -500,28 +500,28 @@
   - _Depends: 10.1_
   - _Requirements: 2.4, 2.10, 3.5, 3.6, 7.6, 7.12, 8.1, 8.2, 8.3, 8.7_
 
-- [ ] 11.10 既存配信APIのowner保護と監査を回帰検証する
+- [x] 11.10 既存配信APIのowner保護と監査を回帰検証する
   - 未認証・非owner・pendingの不正payloadがvalidationとgatewayより先に拒否されることを確認する
   - active ownerの確認・冪等性・結果状態と全解除前後の監査不変を確認する
   - 完了時には、既存配信契約を保つBackend回帰testが成功する
   - _Depends: 10.2_
   - _Requirements: 3.7, 3.8, 7.8, 7.12, 8.4, 8.5, 8.6, 8.7, 8.8_
 
-- [ ] 11.11 MySQL実接続でownerとrecipient競合を検証する
+- [x] 11.11 MySQL実接続でownerとrecipient競合を検証する
   - 同時初回ownerとduplicate recipientを同期させる
   - owner lockとunique制約が単一結果へ収束させることを確認する
   - 完了時には、単一ownerとrecipient一意性の並行testが成功する
   - _Depends: 6.1, 6.7_
   - _Requirements: 2.4, 2.6, 2.11, 3.4, 5.6, 6.10_
 
-- [ ] 11.12 session状態とチャネル一覧のquery効率を検証する
+- [x] 11.12 session状態とチャネル一覧のquery効率を検証する
   - session statusとchannel・recipient一覧へ固定query上限を設ける
   - recipient件数に比例するN+1とcredential table joinがないことを確認する
   - 完了時には、代表データ量でquery上限testが成功する
   - _Depends: 6.5, 6.6, 10.1_
   - _Requirements: 2.5, 5.1, 5.9, 8.4, 8.5_
 
-- [ ] 11.13 (P) LIFF URL設定を自動検証する
+- [x] 11.13 (P) LIFF URL設定を自動検証する
   - LIFF URL・endpoint・redirect URI導出とorigin/path不一致を検証する
   - query・fragmentを保持しつつ安全性判定から除外することを確認する
   - 完了時には、LIFF設定のFrontend unit testが成功する
@@ -529,7 +529,7 @@
   - _Depends: 8.1_
   - _Requirements: 1.1, 1.3, 1.5, 8.1_
 
-- [ ] 11.14 (P) 認証状態とgateを自動検証する
+- [x] 11.14 (P) 認証状態とgateを自動検証する
   - login required・redirect復帰・取消・verifying・authenticated・error・401 expiryを検証する
   - 非authenticatedで保護UIがmountされず、logoutで匿名へ戻ることを確認する
   - 完了時には、LIFF認証stateとgateのFrontend testが成功する
@@ -537,21 +537,21 @@
   - _Depends: 8.4, 8.5, 8.6_
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.10, 4.4, 4.5, 8.7_
 
-- [ ] 11.15 recipient管理Frontendを自動検証する
+- [x] 11.15 recipient管理Frontendを自動検証する
   - 一覧・登録・disable・enable・対象解除の表示更新を確認する
   - malformed DTO・safe error・unknown friendship・inactive channel表示を確認する
   - 完了時には、recipient管理UIのFrontend testが成功する
   - _Depends: 9.1, 9.2, 10.4_
   - _Requirements: 4.4, 4.5, 5.1, 5.2, 5.9, 6.1, 6.2, 6.3, 6.7, 6.8, 6.9, 8.5, 8.7_
 
-- [ ] 11.16 unlink recovery panelを自動検証する
+- [x] 11.16 unlink recovery panelを自動検証する
   - 両pending stageの異なるretry actionと競合後の状態再取得を確認する
   - recovery中に通常操作が表示されないことを確認する
   - 完了時には、recovery panelのfake応答testが成功する
   - _Depends: 9.4, 10.4_
   - _Requirements: 7.5, 7.12, 7.15, 8.5, 8.7_
 
-- [ ] 11.17 (P) 既存配信Frontendの認証統合を回帰検証する
+- [x] 11.17 (P) 既存配信Frontendの認証統合を回帰検証する
   - 配信要求のCSRF、401・pending時のunmount、active owner時の既存表示を確認する
   - session失効時にtoken再送せず認証gateへ戻ることを確認する
   - 完了時には、配信Frontendの認証統合回帰testが成功する
@@ -559,182 +559,182 @@
   - _Depends: 10.3, 10.4_
   - _Requirements: 2.10, 3.7, 7.12, 8.2, 8.3, 8.7, 8.8_
 
-- [ ] 11.18 Django署名secret検証を自動検証する
+- [x] 11.18 Django署名secret検証を自動検証する
   - secret未設定・短い値・既知defaultと安全な値を検証する
   - errorへsecret値・長さ・断片が出ないことを確認する
   - 完了時には、Django署名secretの起動時回帰testが成功する
   - _Depends: 1.3_
   - _Requirements: 7.1, 8.4, 8.5, 8.6_
 
-- [ ] 11.19 owner digest生成を自動検証する
+- [x] 11.19 owner digest生成を自動検証する
   - digest未設定runtime、非echo入力、既存Backend専用入力の各経路を検証する
   - subject・入力長・断片がstdout・stderr・logへ現れないことを確認する
   - 完了時には、canonical digestだけを返すcommand testが成功する
   - _Depends: 1.6_
   - _Requirements: 3.1, 3.2, 3.3, 3.8, 8.4, 8.5, 8.6_
 
-- [ ] 11.20 provider backfill管理操作を自動検証する
+- [x] 11.20 provider backfill管理操作を自動検証する
   - 対話・非対話入力、legacy更新、新規必須、invalid providerを検証する
   - 管理出力へcredentialが混在しないことを確認する
   - 完了時には、provider管理service・prompt・command testが成功する
   - _Depends: 2.3_
   - _Requirements: 5.1, 5.3, 5.4, 6.4, 6.6, 8.4, 8.5_
 
-- [ ] 11.21 safe channel directoryを自動検証する
+- [x] 11.21 safe channel directoryを自動検証する
   - active bound一覧、inactive既存取得、unbound拒否を検証する
   - public projectionへ内部ID・bot user ID・credential状態が入らないことを確認する
   - 完了時には、channel directory query testが成功する
   - _Depends: 2.4_
   - _Requirements: 5.1, 5.3, 5.4, 5.9, 6.4, 6.6, 8.5_
 
-- [ ] 11.22 LIFF直結チャネルpolicyを自動検証する
+- [x] 11.22 LIFF直結チャネルpolicyを自動検証する
   - 対象チャネルの存在・provider binding・LINE Login provider一致を検証する
   - 未設定・unbound・不一致でsession状態確認を含む全account操作がfail closedになることを確認する
   - 完了時には、LIFF直結policyのconfiguration testが成功する
   - _Depends: 2.5_
   - _Requirements: 5.4, 5.7, 5.8, 6.4, 7.9, 7.10_
 
-- [ ] 11.23 user token・profile・friendship gatewayを自動検証する
+- [x] 11.23 user token・profile・friendship gatewayを自動検証する
   - token client ID・expiry・scope、profile subject binding、friendship booleanをfakeで検証する
   - read-only retryとbounded timeout、non-direct時の未呼出しを確認する
   - 完了時には、本人bindingとfriendshipのgateway testが成功する
   - _Depends: 4.1, 4.3, 4.4_
   - _Requirements: 5.4, 5.7, 5.8, 5.9, 7.9, 7.10, 8.6_
 
-- [ ] 11.24 stateless token・deauthorize gatewayを自動検証する
+- [x] 11.24 stateless token・deauthorize gatewayを自動検証する
   - token発行と204・400・429・5xx・timeout・connection切断の分類をfakeで検証する
   - deauthorize自動再送禁止とchannel secret非露出を確認する
   - 完了時には、認可取消gatewayのbounded execution testが成功する
   - _Depends: 4.5_
   - _Requirements: 7.11, 7.13, 7.14, 7.15, 8.4, 8.5, 8.6_
 
-- [ ] 11.25 owner・identity repositoryを自動検証する
+- [x] 11.25 owner・identity repositoryを自動検証する
   - owner lock・identity一意性・表示名更新・異provider分離を検証する
   - deadlockとlock timeoutが安全なretryable resultへ変換されることを確認する
   - 完了時には、owner・identity repository testが成功する
   - _Depends: 5.1_
   - _Requirements: 2.4, 3.4, 4.1, 4.2, 4.3, 4.8_
 
-- [ ] 11.26 recipient repositoryを自動検証する
+- [x] 11.26 recipient repositoryを自動検証する
   - create・duplicate収束・enabled変更・対象削除・owner fenceを検証する
   - 対象不在とrollbackが他recipientへ影響しないことを確認する
   - 完了時には、recipient repository testが成功する
   - _Depends: 5.3_
   - _Requirements: 5.2, 5.6, 6.1, 6.3, 6.7, 6.8, 6.9, 6.10, 7.12_
 
-- [ ] 11.27 unlink snapshot・fence repositoryを自動検証する
+- [x] 11.27 unlink snapshot・fence repositoryを自動検証する
   - snapshot一貫性・active precondition・generation作成を検証する
   - stale snapshotとstale generationがmutationなしで拒否されることを確認する
   - 完了時には、unlink snapshot・fence repository testが成功する
   - _Depends: 5.4_
   - _Requirements: 7.1, 7.5, 7.12, 7.13_
 
-- [ ] 11.28 device session lifecycleを自動検証する
+- [x] 11.28 device session lifecycleを自動検証する
   - 初回・追加端末・通常再認証・pending再認証・logout・expiry・表示名更新を検証する
   - session rotation保存失敗と他端末維持を確認する
   - 完了時には、端末別session service testが成功する
   - _Depends: 6.2, 6.5_
   - _Requirements: 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 4.3, 7.12_
 
-- [ ] 11.29 recipient状態遷移を自動検証する
+- [x] 11.29 recipient状態遷移を自動検証する
   - disable・enable・inactive channel・unknown friendship・対象解除の分岐を検証する
   - 他recipient・identity・sessionが維持されることを確認する
   - 完了時には、recipient状態変更service testが成功する
   - _Depends: 6.8, 6.9_
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 6.10_
 
-- [ ] 11.30 unlink local retry・再認証resume・ABA防止を自動検証する
+- [x] 11.30 unlink local retry・再認証resume・ABA防止を自動検証する
   - local deletion失敗後のlocal-only retryとdeauthorization pendingのfresh再認証resumeを検証する
   - 旧generation要求が再link後の新identity・session・recipientへ触れないことを確認する
   - 完了時には、pending再開・完了・ABA防止のsaga testが成功する
   - _Depends: 7.5, 7.6_
   - _Requirements: 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.12, 7.13, 7.14, 7.15_
 
-- [ ] 11.31 recipient APIのstrict inputとsafe responseを自動検証する
+- [x] 11.31 recipient APIのstrict inputとsafe responseを自動検証する
   - unknown field・user ID・resource不在・provider不一致を検証する
   - active owner以外の拒否とsafe channel・recipient projectionを確認する
   - 完了時には、recipient APIのHTTP契約testが成功する
   - _Depends: 6.10, 10.1_
   - _Requirements: 3.5, 3.6, 4.5, 5.5, 6.10, 8.5, 8.7_
 
-- [ ] 11.32 公開境界のsecret canary非露出を自動検証する
+- [x] 11.32 公開境界のsecret canary非露出を自動検証する
   - ID token・access token・subject・channel secret・session ID・LINE errorへcanaryを埋める
   - response・log・repr・DB非許可列へcanaryが現れないことを確認する
   - 完了時には、公開境界と永続化のsecret non-exposure testが成功する
   - _Depends: 3.3, 3.5, 10.1_
   - _Requirements: 3.8, 4.5, 4.6, 4.7, 8.4, 8.5, 8.6_
 
-- [ ] 11.33 MySQL実接続でunlink single-flightとfence競合を検証する
+- [x] 11.33 MySQL実接続でunlink single-flightとfence競合を検証する
   - unlink対recipient mutation・二重unlink・advisory lock競合を同期させる
   - 競合要求がLINEを呼ばず、fence後のrecipient mutationが拒否されることを確認する
   - 完了時には、single-flightとdeletion fenceの並行testが成功する
   - _Depends: 7.2, 7.6, 11.27_
   - _Requirements: 2.6, 6.10, 7.5, 7.12, 7.13, 7.14, 7.15_
 
-- [ ] 11.34 LIFF SDK adapterを自動検証する
+- [x] 11.34 LIFF SDK adapterを自動検証する
   - browser種別・init・login・raw token取得・取消・token欠落を検証する
   - decoded profileを認証根拠に使用しないことを確認する
   - 完了時には、LIFF adapterのFrontend unit testが成功する
   - _Depends: 8.2_
   - _Requirements: 1.1, 1.2, 1.3, 1.5, 1.6, 2.3, 8.4_
 
-- [ ] 11.35 Protected HTTP clientを自動検証する
+- [x] 11.35 Protected HTTP clientを自動検証する
   - same-origin credential・CSRF cookie/header・safe error parser・401通知を検証する
   - CSRF欠落時にunsafe requestを送信しないことを確認する
   - 完了時には、保護HTTP clientのFrontend unit testが成功する
   - _Depends: 8.3_
   - _Requirements: 2.10, 8.1, 8.2, 8.3, 8.5, 8.7_
 
-- [ ] 11.36 unlink preview・completedのaccount consoleを自動検証する
+- [x] 11.36 unlink preview・completedのaccount consoleを自動検証する
   - previewの削除範囲・監査保持説明・fresh token不足を検証する
   - completed後のanonymous化と通常操作unmountを確認する
   - 完了時には、unlink初回確認・完了UIのFrontend testが成功する
   - _Depends: 9.3, 9.5, 10.4_
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.8, 7.9, 7.10, 8.5, 8.7_
 
-- [ ] 11.37 unlink marker・local finalize repositoryを自動検証する
+- [x] 11.37 unlink marker・local finalize repositoryを自動検証する
   - expected generation markerとlocal finalizeのpreconditionを検証する
   - marker保存失敗とfinalize statement失敗が全transactionをrollbackすることを確認する
   - 完了時には、unlink marker・atomic deletion repository testが成功する
   - _Depends: 5.5, 5.6_
   - _Requirements: 7.2, 7.3, 7.4, 7.5, 7.14, 7.15_
 
-- [ ] 11.38 unlink APIのstrict inputとpending responseを自動検証する
+- [x] 11.38 unlink APIのstrict inputとpending responseを自動検証する
   - unknown field・profile・token alias・stale confirmation・stale attemptを検証する
   - pending permissionとstage別retry action unionを確認する
   - 完了時には、unlink APIのHTTP契約testが成功する
   - _Depends: 7.7, 10.1_
   - _Requirements: 3.5, 3.6, 7.1, 7.5, 7.10, 7.12, 8.5, 8.6, 8.7_
 
-- [ ] 11.39 公開hostのBackend・Vite共通fixtureを自動検証する
+- [x] 11.39 公開hostのBackend・Vite共通fixtureを自動検証する
   - canonical hostnameとscheme・port・path・wildcard・whitespaceを同じfixtureで検証する
   - Backend trusted originとVite allowed hostがexact値だけになることを確認する
   - 完了時には、公開hostの両runtime回帰testが成功する
   - _Depends: 1.4, 1.8_
   - _Requirements: 1.1, 1.3, 8.1, 8.2, 8.3_
 
-- [ ] 11.40 test runtime bootstrapを自動検証する
+- [x] 11.40 test runtime bootstrapを自動検証する
   - process固有secretとsynthetic host・channel・provider・UUIDがbase settings前に供給されることを確認する
   - owner digestをtestごとに明示でき、固定secret canaryをsourceへ保存しないことを確認する
   - 完了時には、test runtime bootstrapの回帰testが成功する
   - _Depends: 1.5_
   - _Requirements: 2.1, 3.2, 3.8, 8.4, 8.5, 8.6_
 
-- [ ] 11.41 nullable provider migrationを自動検証する
+- [x] 11.41 nullable provider migrationを自動検証する
   - migration前後で既存チャネルの表示情報とcredential参照が維持されることを確認する
   - legacy provider未設定行がlink候補へ出ないことを確認する
   - 完了時には、provider migrationの前方・後方互換testが成功する
   - _Depends: 2.2_
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 6.4, 6.6_
 
-- [ ] 11.42 owner session repositoryを自動検証する
+- [x] 11.42 owner session repositoryを自動検証する
   - 端末session CRUD・expiry lookup・lazy cleanupを検証する
   - 1端末の削除が他端末sessionとidentityへ影響しないことを確認する
   - 完了時には、owner session repository testが成功する
   - _Depends: 5.2_
   - _Requirements: 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11_
 
-- [ ] 11.43 advisory lock connection喪失とstale generationを検証する
+- [x] 11.43 advisory lock connection喪失とstale generationを検証する
   - lock保持connection喪失後に別connectionから再取得できることを確認する
   - 旧generationのmarker更新・finalizeが再link後のidentityへ触れないことを確認する
   - 完了時には、connection recoveryとABA防止のMySQL並行testが成功する

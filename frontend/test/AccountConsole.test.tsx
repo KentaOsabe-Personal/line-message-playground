@@ -39,6 +39,13 @@ const click = async (label: string) => {
   await act(async () => button?.click())
 }
 
+const clickInChannel = async (channelLabel: string, buttonLabel: string) => {
+  const card = [...container.querySelectorAll('li.channel-card')].find((item) => item.textContent?.includes(channelLabel))
+  const button = [...(card?.querySelectorAll('button') ?? [])].find((item) => item.textContent === buttonLabel)
+  expect(button).toBeDefined()
+  await act(async () => button?.click())
+}
+
 describe('AccountConsole', () => {
   beforeEach(() => {
     container = document.createElement('div')
@@ -75,6 +82,73 @@ describe('AccountConsole', () => {
     await click('無効化')
     expect(client.setRecipientEnabled).toHaveBeenCalledWith(recipientId, false)
     expect(container.textContent).toContain('無効')
+  })
+
+  // テストケース: 未連携・無効・停止中チャネルを表示して登録、再有効化、対象解除を順に行う。
+  // 期待値: 各応答だけを対象行へ反映し、停止中チャネルの登録操作は利用できない。
+  test('updates registration enable and target unlink states without leaking identifiers', async () => {
+    const unlinked = { ...linked, channelId: `${channelId.slice(0, -1)}1`, channelLabel: '未連携', linkState: 'unlinked' as const, recipientId: null }
+    const disabled = { ...linked, channelId: `${channelId.slice(0, -1)}2`, channelLabel: '無効対象', linkState: 'linked_disabled' as const }
+    const inactive = { ...linked, channelId: `${channelId.slice(0, -1)}3`, channelLabel: '停止中', channelState: 'inactive' as const, linkState: 'unlinked' as const, recipientId: null }
+    const registered = { ...unlinked, linkState: 'linked_enabled' as const, recipientId: 'registered-recipient' }
+    const enabled = { ...disabled, linkState: 'linked_enabled' as const }
+    const client = api({
+      listChannels: vi.fn().mockResolvedValue([unlinked, disabled, inactive]),
+      registerRecipient: vi.fn().mockResolvedValue(registered),
+      setRecipientEnabled: vi.fn().mockResolvedValue(enabled),
+      unlinkRecipient: vi.fn().mockResolvedValue(undefined),
+    })
+    await act(async () => root.render(<AccountConsole
+      session={{ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }}
+      api={client}
+      getAccessToken={() => 'fresh-token'}
+      reauthenticate={vi.fn()}
+      reauthenticateForUnlink={vi.fn()}
+      unlinkReauthenticationReady={false}
+      onSessionReceived={vi.fn()}
+      refreshSession={vi.fn()}
+    />))
+
+    const inactiveButton = [...container.querySelectorAll('li.channel-card')]
+      .find((item) => item.textContent?.includes('停止中'))?.querySelector('button')
+    expect(inactiveButton?.hasAttribute('disabled')).toBe(true)
+
+    await clickInChannel('未連携', '登録')
+    expect(client.registerRecipient).toHaveBeenCalledWith(unlinked.channelId, 'fresh-token')
+    expect(container.textContent).not.toContain('registered-recipient')
+
+    await clickInChannel('無効対象', '再有効化')
+    expect(client.setRecipientEnabled).toHaveBeenCalledWith(recipientId, true)
+
+    await clickInChannel('無効対象', 'このチャネルとの連携を解除')
+    expect(client.unlinkRecipient).toHaveBeenCalledWith(recipientId)
+    const updatedCard = [...container.querySelectorAll('li.channel-card')].find((item) => item.textContent?.includes('無効対象'))
+    expect(updatedCard?.textContent).toContain('未連携')
+  })
+
+  // テストケース: recipient対象操作がsafe API errorとして拒否される。
+  // 期待値: 対象行だけに安全な概要を表示し、内部IDやraw errorを画面へ出さない。
+  test('renders a target-scoped safe error for recipient mutations', async () => {
+    const client = api({
+      setRecipientEnabled: vi.fn().mockRejectedValue(new AccountApiError({
+        code: 'channel_unavailable', summary: 'このチャネルは現在利用できません。',
+      }, 422)),
+    })
+    await act(async () => root.render(<AccountConsole
+      session={{ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }}
+      api={client}
+      getAccessToken={() => null}
+      reauthenticate={vi.fn()}
+      reauthenticateForUnlink={vi.fn()}
+      unlinkReauthenticationReady={false}
+      onSessionReceived={vi.fn()}
+      refreshSession={vi.fn()}
+    />))
+
+    await click('無効化')
+
+    expect(container.textContent).toContain('このチャネルは現在利用できません。')
+    expect(container.textContent).not.toContain(recipientId)
   })
 
   // テストケース: ownerが全連携解除previewを確認して実行する。

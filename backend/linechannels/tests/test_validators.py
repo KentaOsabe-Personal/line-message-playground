@@ -15,6 +15,8 @@ from linechannels.validators import (
 
 
 class BoundaryValidatorTests(SimpleTestCase):
+    # テストケース: provider IDへ先頭ゼロを含むASCII数字と非canonical値を渡す。
+    # 期待値: opaque値を正規化せず完全一致で保持し、不正値を拒否する。
     def test_provider_id_is_opaque_ascii_digits_without_normalization(self):
         self.assertEqual(validate_provider_id("000123"), "000123")
         self.assertEqual(validate_provider_id("9" * 64), "9" * 64)

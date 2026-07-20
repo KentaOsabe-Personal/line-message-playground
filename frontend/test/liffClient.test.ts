@@ -65,4 +65,25 @@ describe('LinePlatformLiffAdapter', () => {
     expect(reload).toHaveBeenCalledTimes(1)
     expect(liffSdk.login).not.toHaveBeenCalled()
   })
+
+  // テストケース: LIFF SDK初期化が失敗し、ID/access tokenが欠落する。
+  // 期待値: 初期化失敗を成功扱いせず、欠落tokenはnullのまま返してprofile等へfallbackしない。
+  test('propagates initialization failure and keeps missing raw tokens anonymous', async () => {
+    const failure = new Error('sdk-init-failed')
+    const sdk = {
+      init: vi.fn().mockRejectedValue(failure),
+      isInClient: vi.fn().mockReturnValue(false),
+      isLoggedIn: vi.fn().mockReturnValue(false),
+      login: vi.fn(),
+      logout: vi.fn(),
+      getIDToken: vi.fn().mockReturnValue(null),
+      getAccessToken: vi.fn().mockReturnValue(null),
+    }
+    const adapter = createLinePlatformLiffAdapter(sdk)
+
+    await expect(adapter.initialize('123-a')).rejects.toBe(failure)
+    expect(adapter.getIdToken()).toBeNull()
+    expect(adapter.getAccessToken()).toBeNull()
+    expect(adapter).not.toHaveProperty('getProfile')
+  })
 })

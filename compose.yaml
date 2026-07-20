@@ -33,6 +33,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ./frontend/test/fixtures:/test-fixtures:ro
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-false}

@@ -229,6 +229,7 @@ class RecipientAPITests(TestCase):
     # 期待値: domain結果をそれぞれ422 channel_unavailableと404へ安全に変換する
     def test_maps_domain_failures_to_safe_http_statuses(self):
         inactive = self.channel("inactive", active=False)
+        mismatch = self.channel("mismatch", provider_id="0099999999")
         client, token = self.owner_client()
 
         unavailable = self.unsafe(
@@ -245,6 +246,13 @@ class RecipientAPITests(TestCase):
             {"enabled": False},
             token,
         )
+        provider_mismatch = self.unsafe(
+            client,
+            "post",
+            "/api/account/recipients/",
+            {"channelId": str(mismatch.public_id)},
+            token,
+        )
 
         self.assertEqual(unavailable.status_code, 422)
         self.assertEqual(
@@ -253,6 +261,10 @@ class RecipientAPITests(TestCase):
         self.assertEqual(missing.status_code, 404)
         self.assertEqual(
             missing.json()["error"]["code"], "recipient_not_found"
+        )
+        self.assertEqual(provider_mismatch.status_code, 422)
+        self.assertEqual(
+            provider_mismatch.json()["error"]["code"], "provider_mismatch"
         )
 
     # テストケース: recipient DELETEへ未知fieldを含むbodyを送る

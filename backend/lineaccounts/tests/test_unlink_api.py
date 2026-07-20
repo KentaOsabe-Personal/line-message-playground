@@ -16,6 +16,7 @@ from lineaccounts.unlink_services import (
     UnlinkCompleted,
     UnlinkPendingReauthentication,
     UnlinkPreview,
+    UnlinkRejected,
 )
 
 
@@ -143,6 +144,39 @@ class UnlinkAPITests(TestCase):
         self.assertEqual(denied.status_code, 401)
         self.assertEqual(invalid.status_code, 400)
         self.assertNotIn("U-secret", str(invalid.json()))
+
+        for alias in (
+            {"profile": {"displayName": "forged"}},
+            {"accessToken": "token-alias"},
+            {"idToken": "token-alias"},
+        ):
+            with self.subTest(alias=tuple(alias)):
+                response = self.post(client, "/api/account/unlink/", alias, csrf)
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(
+                    response.json()["error"]["code"], "validation_error"
+                )
+
+    # テストケース: serviceがstale confirmationまたは旧generationを検出する。
+    # 期待値: raw状態を返さずHTTP 409の安全なcodeへ写像する。
+    def test_maps_stale_confirmation_and_attempt_to_safe_conflicts(self):
+        client, csrf = self.owner_client()
+        cases = ("stale_confirmation", "unlink_attempt_stale")
+
+        for code in cases:
+            with self.subTest(code=code):
+                self.service.execute_result = UnlinkRejected(code)
+                response = self.post(
+                    client,
+                    "/api/account/unlink/",
+                    {
+                        "confirmationToken": "opaque-confirmation",
+                        "userAccessToken": "fresh",
+                    },
+                    csrf,
+                )
+                self.assertEqual(response.status_code, 409)
+                self.assertEqual(response.json()["error"]["code"], code)
 
     # テストケース: pending stageでpreviewまたは許可外fieldを要求する
     # 期待値: previewはpermission、解除bodyはstage別strict validationでservice前に拒否する

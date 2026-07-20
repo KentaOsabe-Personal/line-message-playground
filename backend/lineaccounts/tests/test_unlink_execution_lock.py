@@ -81,6 +81,20 @@ class MySQLUnlinkExecutionLockIntegrationTests(TransactionTestCase):
         with MySQLUnlinkExecutionLock().acquire(1) as acquired:
             self.assertTrue(acquired)
 
+    # テストケース: 別connectionがunlink lockを保持中に競合requestがdeauthorizeへ進もうとする。
+    # 期待値: 競合requestはlock取得に失敗し、LINE呼出しcallbackを一度も実行しない。
+    def test_competing_unlink_never_reaches_line_while_mysql_lock_is_held(self):
+        line_calls = 0
+        self.assertEqual(self.probe_lock("GET_LOCK"), 1)
+        try:
+            with MySQLUnlinkExecutionLock().acquire(1) as acquired:
+                if acquired:
+                    line_calls += 1
+        finally:
+            self.assertEqual(self.probe_lock("RELEASE_LOCK"), 1)
+
+        self.assertEqual(line_calls, 0)
+
     # テストケース: lock所有connectionが明示releaseなしで喪失する
     # 期待値: MySQLが自動解放し別connectionからwaitなしで再取得できる
     def test_connection_loss_automatically_releases_owned_lock(self):
