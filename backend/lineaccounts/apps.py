@@ -10,4 +10,3 @@ class LineAccountsConfig(AppConfig):
         from .runtime import initialize_line_account_runtime
 
         initialize_line_account_runtime(settings.SECRET_KEY)
-

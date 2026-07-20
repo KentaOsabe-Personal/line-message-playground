@@ -27,4 +27,3 @@ class Command(BaseCommand):
 
         runtime = get_line_account_runtime()
         self.stdout.write(derive_owner_digest(runtime.provider_id, subject))
-

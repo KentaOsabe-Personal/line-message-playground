@@ -20,4 +20,3 @@ def validate_public_host(value: str) -> str:
 
 def build_trusted_https_origin(host: str) -> str:
     return f"https://{validate_public_host(host)}"
-
