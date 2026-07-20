@@ -155,8 +155,8 @@
   - _Boundary: Composition Integration_
   - _Depends: 1.4, 4.3_
 
-- [ ] 5. 公開境界の受付、競合、安全性、応答時間を検証する
-- [ ] 5.1 (P) service の受付・dispatch 分類を統合検証する
+- [x] 5. 公開境界の受付、競合、安全性、応答時間を検証する
+- [x] 5.1 (P) service の受付・dispatch 分類を統合検証する
   - 空、既知、未知、複数、重複 event と handler 成功・安全な失敗・生例外・確定保存失敗を通して台帳、監査、呼出回数、request 結果を確認する
   - channel、credential、signature、destination、受付上限、payload、受付保存の失敗で全件拒否と handler 未呼出しを確認する
   - 一つの handler 失敗または確定失敗後も後続 event の分類を継続することを確認する
@@ -165,7 +165,7 @@
   - _Boundary: WebhookIngressService_
   - _Depends: 4.2_
 
-- [ ] 5.2 (P) 公開 HTTP 契約を統合検証する
+- [x] 5.2 (P) 公開 HTTP 契約を統合検証する
   - exact route の POST だけが service を呼び、GET・PUT・DELETE・OPTIONS は固定405となることを確認する
   - owner session と CSRF に依存せず、body parser が署名前に動かないことを確認する
   - malformed/unknown/inactive/credential unavailable が同じ404、signature が401、destination/payload/上限超過が400、storage が503になることを確認する
@@ -175,7 +175,7 @@
   - _Boundary: WebhookAPIView_
   - _Depends: 4.4_
 
-- [ ] 5.3 MySQL 上の同一イベント並行受付を検証する
+- [x] 5.3 MySQL 上の同一イベント並行受付を検証する
   - 独立 connection と同時開始 barrier で同じ webhookEventId を service から受付する
   - receipt 一件、新規判定一件、handler 一回へ収束することを確認する
   - 初回 metadata と状態が競合側の入力で上書きされないことを確認する
@@ -184,7 +184,7 @@
   - _Boundary: WebhookIngressService, EventReceiptRepository Integration_
   - _Depends: 3.3, 4.2_
 
-- [ ] 5.4 部分共通 batch と確定競合を MySQL 上で検証する
+- [x] 5.4 部分共通 batch と確定競合を MySQL 上で検証する
   - 一部だけ共通 ID を持つ複数 batch で各固有 ID を一度ずつ受け付け、共通 ID を一行へ収束させる
   - candidate 順序と新規・重複判定の対応、初回 metadata の不変性を確認する
   - CAS finalize と duplicate read の競合で terminal 状態が processing へ戻らないことを確認する
@@ -193,7 +193,7 @@
   - _Requirements: 3.6, 4.2, 4.3, 4.4, 4.5, 6.1, 6.2, 6.3, 8.5_
   - _Boundary: EventReceiptRepository_
 
-- [ ] 5.5 禁止データの非露出を境界横断で検証する
+- [x] 5.5 禁止データの非露出を境界横断で検証する
   - raw body、署名、シークレット、user/source ID、reply token、message/postback 内容、生例外の canary を用意する
   - envelope、safe 表現、model、通常ログ、監査、公開 response を走査し、canary が残らないことを確認する
   - rejection、handler exception、storage exception でも内部状態と traceback が公開・通常監査へ出ないことを確認する
@@ -203,7 +203,7 @@
   - _Boundary: Security Integration_
   - _Depends: 4.4, 5.4_
 
-- [ ] 5.6 受付上限内の2秒応答と query 予算を検証する
+- [x] 5.6 受付上限内の2秒応答と query 予算を検証する
   - signed 1件、5件、10件 request と empty、duplicate、unsupported path を標準 Backend/MySQL runtime で測定する
   - 1 event 100 ms以下の stub handler で内部目標1,500 ms未満、外部契約2,000 ms未満を確認する
   - query 数が event 数に対して線形で、receipt transaction へ handler 時間が含まれないことを確認する
