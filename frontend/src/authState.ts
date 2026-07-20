@@ -13,7 +13,11 @@ export type AuthState =
   | { kind: 'verifying' }
   | { kind: 'anonymous' }
   | { kind: 'authenticated'; profile: OwnerProfile }
-  | { kind: 'unlinking'; stage: 'deauthorization_pending' | 'local_deletion_pending' }
+  | {
+      kind: 'unlinking'
+      stage: 'deauthorization_pending' | 'local_deletion_pending'
+      retryAction: 'reauthenticate' | 'retry_local_delete'
+    }
   | { kind: 'error'; code: SafeAuthErrorCode; retryable: boolean }
 
 export type AuthEvent =
@@ -38,6 +42,6 @@ export function transitionAuth(_state: AuthState, event: AuthEvent): AuthState {
     case 'session_received':
       if (event.session.state === 'anonymous') return { kind: 'anonymous' }
       if (event.session.state === 'authenticated') return { kind: 'authenticated', profile: event.session.profile }
-      return { kind: 'unlinking', stage: event.session.stage }
+      return { kind: 'unlinking', stage: event.session.stage, retryAction: event.session.retryAction }
   }
 }

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
 
 import { AuthApiError, createAuthApiClient } from './authApi'
 import type { AuthApiClient } from './authApi'
+import type { SessionStatus } from './authDto'
 import { initialAuthState, transitionAuth } from './authState'
 import type { SafeAuthErrorCode } from './authState'
 import { createProtectedHttpClient } from './httpApi'
@@ -11,10 +12,39 @@ import { createLiffRuntimeConfig } from './liffConfig'
 import type { LiffRuntimeConfig } from './liffConfig'
 
 type Props = {
-  children: ReactNode
+  children: ReactNode | ((context: AuthGateContext) => ReactNode)
   config?: LiffRuntimeConfig
   liffAdapter?: LinePlatformLiffAdapter
   authApi?: AuthApiClient
+}
+
+export type AuthGateContext = {
+  session: Extract<SessionStatus, { state: 'authenticated' | 'unlinking' }>
+  getAccessToken: () => string | null
+  reauthenticate: () => void
+  reauthenticateForUnlink: () => void
+  unlinkReauthenticationReady: boolean
+  onSessionReceived: (session: SessionStatus) => void
+  refreshSession: () => Promise<void>
+}
+
+const unlinkReauthenticationMarker = 'line-account-unlink-reauthentication'
+
+const readUnlinkReauthenticationMarker = () => {
+  try {
+    return window.sessionStorage.getItem(unlinkReauthenticationMarker) === 'pending'
+  } catch {
+    return false
+  }
+}
+
+const writeUnlinkReauthenticationMarker = (value: boolean) => {
+  try {
+    if (value) window.sessionStorage.setItem(unlinkReauthenticationMarker, 'pending')
+    else window.sessionStorage.removeItem(unlinkReauthenticationMarker)
+  } catch {
+    // Storage unavailable: remain fail closed and require another explicit reauthentication.
+  }
 }
 
 const errorMessage: Record<SafeAuthErrorCode, string> = {
@@ -27,6 +57,7 @@ const errorMessage: Record<SafeAuthErrorCode, string> = {
 
 export default function AuthGate({ children, config, liffAdapter, authApi }: Props) {
   const [state, dispatch] = useReducer(transitionAuth, initialAuthState)
+  const [unlinkReauthenticationReady, setUnlinkReauthenticationReady] = useState(false)
   const generation = useRef(0)
   const adapter = useMemo(() => liffAdapter ?? createLinePlatformLiffAdapter(), [liffAdapter])
   const api = useMemo(() => authApi ?? createAuthApiClient(createProtectedHttpClient({
@@ -46,6 +77,7 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
     const currentGeneration = ++generation.current
     const isCurrent = () => generation.current === currentGeneration
     dispatch({ type: 'restart' })
+    setUnlinkReauthenticationReady(false)
     let runtime: LiffRuntimeConfig
     try {
       runtime = runtimeConfig()
@@ -60,6 +92,17 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
       const session = await api.bootstrap()
       if (!isCurrent()) return
       if (session.state !== 'anonymous') {
+        if (
+          session.state === 'unlinking' &&
+          session.stage === 'deauthorization_pending' &&
+          readUnlinkReauthenticationMarker() &&
+          adapter.getAccessToken() !== null
+        ) {
+          writeUnlinkReauthenticationMarker(false)
+          setUnlinkReauthenticationReady(true)
+        } else {
+          writeUnlinkReauthenticationMarker(false)
+        }
         dispatch({ type: 'session_received', session })
         return
       }
@@ -129,14 +172,78 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
     }
   }
 
+  const onSessionReceived = useCallback((session: SessionStatus) => {
+    generation.current += 1
+    setUnlinkReauthenticationReady(false)
+    dispatch({ type: 'session_received', session })
+  }, [])
+
+  const refreshSession = useCallback(async () => {
+    const currentGeneration = ++generation.current
+    try {
+      const session = await api.bootstrap()
+      if (generation.current === currentGeneration) dispatch({ type: 'session_received', session })
+    } catch (error) {
+      if (generation.current !== currentGeneration) return
+      if (error instanceof AuthApiError && error.httpStatus === 401) {
+        dispatch({ type: 'session_invalidated' })
+      } else {
+        dispatch({ type: 'failed', code: 'verification_failed', retryable: true })
+      }
+    }
+  }, [api])
+
+  const getAccessToken = useCallback(() => adapter.getAccessToken(), [adapter])
+
+  const reauthenticate = useCallback(() => {
+    generation.current += 1
+    dispatch({ type: 'verification_started' })
+    try {
+      adapter.reauthenticate(runtimeConfig().redirectUri)
+    } catch {
+      dispatch({ type: 'failed', code: 'initialization_failed', retryable: true })
+    }
+  }, [adapter, runtimeConfig])
+
+  const reauthenticateForUnlink = useCallback(() => {
+    generation.current += 1
+    setUnlinkReauthenticationReady(false)
+    writeUnlinkReauthenticationMarker(true)
+    dispatch({ type: 'verification_started' })
+    try {
+      adapter.reauthenticate(runtimeConfig().redirectUri)
+    } catch {
+      writeUnlinkReauthenticationMarker(false)
+      dispatch({ type: 'failed', code: 'initialization_failed', retryable: true })
+    }
+  }, [adapter, runtimeConfig])
+
+  const renderProtectedContent = (
+    session: Extract<SessionStatus, { state: 'authenticated' | 'unlinking' }>,
+  ) => typeof children === 'function'
+    ? children({
+        session,
+        getAccessToken,
+        reauthenticate,
+        reauthenticateForUnlink,
+        unlinkReauthenticationReady,
+        onSessionReceived,
+        refreshSession,
+      })
+    : session.state === 'authenticated' ? children : null
+
   if (state.kind === 'authenticated') {
+    const session: Extract<SessionStatus, { state: 'authenticated' }> = {
+      state: 'authenticated',
+      profile: state.profile,
+    }
     return (
       <section className="auth-console" aria-label="認証済みコンソール">
         <header className="auth-profile">
           <p><span className="eyebrow">認証済みowner</span><strong>{state.profile.displayName}</strong></p>
           <button type="button" className="secondary" onClick={() => void logout()}>この端末からログアウト</button>
         </header>
-        {children}
+        {renderProtectedContent(session)}
       </section>
     )
   }
@@ -150,12 +257,16 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
     )
   }
   if (state.kind === 'unlinking') {
-    return (
+    return <>{renderProtectedContent({
+      state: 'unlinking',
+      stage: state.stage,
+      retryAction: state.retryAction,
+    }) ?? (
       <section className="auth-gate" aria-live="polite">
         <h2>全連携解除を処理中です</h2>
         <p>{state.stage === 'deauthorization_pending' ? 'LINEでの再認証が必要です。' : 'ローカルデータの削除を再開できます。'}</p>
       </section>
-    )
+    )}</>
   }
   if (state.kind === 'error') {
     return (

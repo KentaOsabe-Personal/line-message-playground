@@ -351,29 +351,29 @@
   - _Depends: 8.5_
   - _Requirements: 1.1, 1.2, 1.4, 1.5, 1.6, 2.7, 2.10, 3.5, 4.4, 4.5_
 
-- [ ] 9. account管理Frontendを構築する
-- [ ] 9.1 account APIのstrict DTOとclientを実装する
+- [x] 9. account管理Frontendを構築する
+- [x] 9.1 account APIのstrict DTOとclientを実装する
   - channel・recipient・unlink preview・unlink結果を未知field拒否のsafe unionへ変換する
   - 不透明ID・confirmation・write-only tokenだけを共通HTTP client経由で送信する
   - 完了時には、不正応答を描画せず、安全な成功・pending・errorだけをUIへ渡せる
   - _Depends: 6.10, 7.7, 8.3_
   - _Requirements: 4.4, 4.5, 5.1, 5.2, 5.5, 5.9, 6.1, 6.3, 6.7, 7.1, 7.9, 7.10, 8.5_
 
-- [ ] 9.2 recipient一覧と状態変更UIを実装する
+- [x] 9.2 recipient一覧と状態変更UIを実装する
   - チャネル名称・リンク状態・friendship・配信可否をLINE user IDなしで表示する
   - 登録・disable・enable・チャネル別解除の進行中・成功・安全な失敗を対象単位で表示する
   - 完了時には、ownerがrecipient全操作を行い、unknown friendshipとinactiveチャネルを配信不可として確認できる
   - _Depends: 9.1_
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 6.10_
 
-- [ ] 9.3 unlink previewと初回確認UIを実装する
+- [x] 9.3 unlink previewと初回確認UIを実装する
   - 表示名・対象チャネル名称・recipient数・配信監査保持説明を確認画面へ表示する
   - confirmationとfresh access tokenが揃った場合だけ初回実行を送信する
   - 完了時には、ownerが秘密値なしで削除範囲を確認し、token不足・期限切れを再認証へ戻せる
   - _Depends: 9.1_
   - _Requirements: 7.1, 7.8, 7.9, 7.10_
 
-- [ ] 9.4 (P) unlink pending専用のrecovery UIを実装する
+- [x] 9.4 (P) unlink pending専用のrecovery UIを実装する
   - deauthorization pendingではfresh再認証、local deletion pendingではtokenなしlocal retryだけを提示する
   - 競合時はsession状態を再取得し、blindなLINE再送を行わない
   - 完了時には、各pending stageに許可された唯一の再開操作が表示され、通常管理UIは表示されない
@@ -381,7 +381,7 @@
   - _Depends: 8.5, 9.1_
   - _Requirements: 7.5, 7.10, 7.12, 7.13, 7.15_
 
-- [ ] 9.5 recipient管理・unlink・認証状態をaccount consoleへ統合する
+- [x] 9.5 recipient管理・unlink・認証状態をaccount consoleへ統合する
   - activeではrecipient管理とunlink preview、pendingではrecoveryだけを表示する
   - unlink completed時は認証状態をanonymousへ更新し、全通常操作をunmountする
   - 完了時には、account stateごとに許可された画面だけが表示され、完了と未完了を誤認しない

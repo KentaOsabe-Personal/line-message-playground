@@ -28,6 +28,6 @@ describe('LiffAuthController state', () => {
     expect(transitionAuth(initialAuthState, {
       type: 'session_received',
       session: { state: 'unlinking', stage: 'deauthorization_pending', retryAction: 'reauthenticate' },
-    })).toEqual({ kind: 'unlinking', stage: 'deauthorization_pending' })
+    })).toEqual({ kind: 'unlinking', stage: 'deauthorization_pending', retryAction: 'reauthenticate' })
   })
 })

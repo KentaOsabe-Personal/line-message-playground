@@ -6,6 +6,7 @@ export interface LinePlatformLiffAdapter {
   initialize(liffId: string): Promise<LiffContextKind>
   isLoggedIn(): boolean
   login(redirectUri: string): void
+  reauthenticate(redirectUri: string): void
   getIdToken(): string | null
   getAccessToken(): string | null
 }
@@ -15,6 +16,7 @@ export interface LiffSdkBoundary {
   isInClient(): boolean
   isLoggedIn(): boolean
   login(input: { redirectUri: string }): void
+  logout(): void
   getIDToken(): string | null
   getAccessToken(): string | null
 }
@@ -24,6 +26,7 @@ const rawToken = (value: string | null): string | null =>
 
 export function createLinePlatformLiffAdapter(
   sdk: LiffSdkBoundary = liff as unknown as LiffSdkBoundary,
+  reload: () => void = () => window.location.reload(),
 ): LinePlatformLiffAdapter {
   return Object.freeze({
     async initialize(liffId: string) {
@@ -32,6 +35,14 @@ export function createLinePlatformLiffAdapter(
     },
     isLoggedIn: () => sdk.isLoggedIn(),
     login: (redirectUri: string) => sdk.login({ redirectUri }),
+    reauthenticate: (redirectUri: string) => {
+      if (sdk.isInClient()) {
+        reload()
+        return
+      }
+      if (sdk.isLoggedIn()) sdk.logout()
+      sdk.login({ redirectUri })
+    },
     getIdToken: () => rawToken(sdk.getIDToken()),
     getAccessToken: () => rawToken(sdk.getAccessToken()),
   })

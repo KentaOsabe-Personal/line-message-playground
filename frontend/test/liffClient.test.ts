@@ -11,6 +11,7 @@ describe('LinePlatformLiffAdapter', () => {
       isInClient: vi.fn().mockReturnValue(true),
       isLoggedIn: vi.fn().mockReturnValue(true),
       login: vi.fn(),
+      logout: vi.fn(),
       getIDToken: vi.fn().mockReturnValue('raw-id-token'),
       getAccessToken: vi.fn().mockReturnValue('raw-access-token'),
     }
@@ -32,6 +33,7 @@ describe('LinePlatformLiffAdapter', () => {
       isInClient: vi.fn().mockReturnValue(false),
       isLoggedIn: vi.fn().mockReturnValue(false),
       login: vi.fn(),
+      logout: vi.fn(),
       getIDToken: vi.fn().mockReturnValue(null),
       getAccessToken: vi.fn().mockReturnValue(null),
     }
@@ -42,5 +44,25 @@ describe('LinePlatformLiffAdapter', () => {
 
     expect(sdk.init).toHaveBeenCalledWith({ liffId: '123-a' })
     expect(sdk.login).toHaveBeenCalledWith({ redirectUri: 'https://example.com/liff' })
+  })
+
+  // テストケース: access token失効後に外部browserとLIFF browserで再認証する。
+  // 期待値: 外部browserはlogout後にloginし、LIFF browserは再初期化のためreloadする。
+  test('restarts authentication using the supported flow for each browser context', () => {
+    const externalSdk = {
+      init: vi.fn(), isInClient: vi.fn().mockReturnValue(false), isLoggedIn: vi.fn().mockReturnValue(true),
+      login: vi.fn(), logout: vi.fn(), getIDToken: vi.fn(), getAccessToken: vi.fn(),
+    }
+    const external = createLinePlatformLiffAdapter(externalSdk, vi.fn())
+    external.reauthenticate('https://example.com/liff')
+    expect(externalSdk.logout).toHaveBeenCalledTimes(1)
+    expect(externalSdk.login).toHaveBeenCalledWith({ redirectUri: 'https://example.com/liff' })
+
+    const reload = vi.fn()
+    const liffSdk = { ...externalSdk, isInClient: vi.fn().mockReturnValue(true), login: vi.fn(), logout: vi.fn() }
+    const inClient = createLinePlatformLiffAdapter(liffSdk, reload)
+    inClient.reauthenticate('https://example.com/liff')
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(liffSdk.login).not.toHaveBeenCalled()
   })
 })

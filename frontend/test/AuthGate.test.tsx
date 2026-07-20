@@ -16,6 +16,7 @@ const adapter = (overrides: Partial<LinePlatformLiffAdapter> = {}): LinePlatform
   initialize: vi.fn().mockResolvedValue('external_browser'),
   isLoggedIn: vi.fn().mockReturnValue(false),
   login: vi.fn(),
+  reauthenticate: vi.fn(),
   getIdToken: vi.fn().mockReturnValue(null),
   getAccessToken: vi.fn().mockReturnValue(null),
   ...overrides,
@@ -30,6 +31,7 @@ const api = (overrides: Partial<AuthApiClient> = {}): AuthApiClient => ({
 
 describe('AuthGate', () => {
   beforeEach(() => {
+    window.sessionStorage.clear()
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
@@ -186,4 +188,90 @@ describe('AuthGate', () => {
     expect(container.textContent).not.toContain('保護画面')
     expect(container.textContent).not.toContain('ログアウトできません')
   })
+
+  // テストケース: unlink pending sessionでaccount recoveryを描画する。
+  // 期待値: render contextへpending stageだけを渡し、通常の保護画面を表示しない。
+  test('mounts only render-prop recovery content for an unlinking owner', async () => {
+    const authApi = api({
+      bootstrap: vi.fn().mockResolvedValue({
+        state: 'unlinking', stage: 'local_deletion_pending', retryAction: 'retry_local_delete',
+      }),
+    })
+    await act(async () => root.render(
+      <AuthGate
+        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
+        liffAdapter={adapter()}
+        authApi={authApi}
+      >{({ session }) => <p>{session.state === 'unlinking' ? session.retryAction : '通常画面'}</p>}</AuthGate>,
+    ))
+
+    expect(container.textContent).toContain('retry_local_delete')
+    expect(container.textContent).not.toContain('通常画面')
+  })
+
+  // テストケース: account consoleが全連携解除完了を通知する。
+  // 期待値: 認証状態をanonymousへ更新し、通常の保護画面を即座にunmountする。
+  test('closes protected content when its render context reports unlink completion', async () => {
+    const authApi = api({
+      bootstrap: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }),
+    })
+    await act(async () => root.render(
+      <AuthGate
+        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
+        liffAdapter={adapter()}
+        authApi={authApi}
+      >{({ onSessionReceived }) => <button type="button" onClick={() => onSessionReceived({ state: 'anonymous' })}>解除完了</button>}</AuthGate>,
+    ))
+
+    await clickButton(container, '解除完了')
+    expect(container.textContent).toContain('LINEでログイン')
+    expect(container.textContent).not.toContain('解除完了')
+  })
+
+  // テストケース: account consoleがtoken失効時の再認証を要求する。
+  // 期待値: AuthGateが検証済みredirect URIでLIFF再認証を開始する。
+  test('exposes an explicit LIFF reauthentication action to protected content', async () => {
+    const liffAdapter = adapter({ reauthenticate: vi.fn() })
+    const authApi = api({
+      bootstrap: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }),
+    })
+    await act(async () => root.render(
+      <AuthGate
+        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
+        liffAdapter={liffAdapter}
+        authApi={authApi}
+      >{({ reauthenticate }) => <button type="button" onClick={reauthenticate}>再認証</button>}</AuthGate>,
+    ))
+
+    await clickButton(container, '再認証')
+    expect(liffAdapter.reauthenticate).toHaveBeenCalledWith('https://example.com/liff')
+    expect(container.textContent).not.toContain('再認証')
+    expect(container.textContent).toContain('本人確認中')
+  })
+
+  // テストケース: pending解除の再認証redirect/reloadから復帰する。
+  // 期待値: tab-local markerと新しいaccess tokenが揃った場合だけresume可能として子へ渡す。
+  test('marks deauthorization resume ready only after returning from reauthentication', async () => {
+    window.sessionStorage.setItem('line-account-unlink-reauthentication', 'pending')
+    const authApi = api({
+      bootstrap: vi.fn().mockResolvedValue({
+        state: 'unlinking', stage: 'deauthorization_pending', retryAction: 'reauthenticate',
+      }),
+    })
+    await act(async () => root.render(
+      <AuthGate
+        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
+        liffAdapter={adapter({ getAccessToken: vi.fn().mockReturnValue('new-access-token') })}
+        authApi={authApi}
+      >{({ unlinkReauthenticationReady }) => <p>{unlinkReauthenticationReady ? 'resume-ready' : 'reauth-required'}</p>}</AuthGate>,
+    ))
+
+    expect(container.textContent).toContain('resume-ready')
+    expect(window.sessionStorage.getItem('line-account-unlink-reauthentication')).toBeNull()
+  })
 })
+
+async function clickButton(target: HTMLElement, label: string) {
+  const button = [...target.querySelectorAll('button')].find((item) => item.textContent === label)
+  await act(async () => button?.click())
+}
