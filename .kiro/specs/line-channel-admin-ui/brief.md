@@ -38,7 +38,7 @@
 
 ## Upstream / Downstream
 
-- **Upstream**: `line-channel-foundation`、`line-account-linking`、`line-webhook-interaction`、`linked-recipient-delivery`
+- **Upstream**: `line-channel-foundation`、`line-account-linking`、`line-webhook-ingress`、`line-friendship-sync`、`line-webhook-command-dispatch`、`linked-recipient-delivery`
 - **Downstream**: 月間利用量ダッシュボード、チャネル疎通診断、運用監査画面
 
 ## Existing Spec Touchpoints

@@ -1,5 +1,7 @@
 # Brief: line-webhook-interaction
 
+> **Status: Superseded** — Requirements前のSpecサイズゲートで`SPLIT_REQUIRED`となったため、`line-webhook-ingress`、`line-friendship-sync`、`line-webhook-command-dispatch`へ分割した。本briefは分割判断の履歴として保持する。
+
 ## Problem
 
 複数のLINE公式アカウントを配信元として使うと、利用者が各アカウントを友だち追加、ブロック解除、ブロックした状態をLIFFだけでは一貫して確認できない。また、トーク上のメッセージやボタン操作をアプリへ取り込み、再送や重複に耐えて処理する受信境界がない。
@@ -45,6 +47,13 @@ BackendにはWebhook URL、署名検証、イベントモデル、イベントdi
 
 - **Extends**: なし
 - **Adjacent**: `DeliveryRecipient`のチャネル別状態を更新する。既存`line-message-delivery`のpush結果状態はWebhookで上書きしない
+
+## Spec Size Assessment
+
+- **Verdict**: SPLIT_REQUIRED
+- **Projected executable tasks**: 25〜31件（テスト、migration、外部reply、統合、運用文書を含む）
+- **Independent responsibility seams**: 4（検証済み受付、イベント台帳、友だち状態同期、許可リスト型interactionとreply）
+- **Rationale**: 20件以上の停止基準を超え、独立して提供・レビューできる状態機械と外部作用を複数含むため
 
 ## Constraints
 
