@@ -250,56 +250,56 @@
   - _Depends: 3.4, 3.5, 6.3, 6.4, 6.6, 6.7, 6.8, 6.9_
   - _Requirements: 3.5, 3.6, 4.5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.9, 6.1, 6.3, 6.4, 6.7, 6.10, 8.5, 8.7_
 
-- [ ] 7. 全連携解除sagaを実装する
-- [ ] 7.1 unlink対象snapshotと短期confirmationを作る
+- [x] 7. 全連携解除sagaを実装する
+- [x] 7.1 unlink対象snapshotと短期confirmationを作る
   - owner slot・identity UUID・表示名・sorted recipient UUID・各channel UUID・recipient数・監査保持flagから秘密値なしのcanonical fingerprintを作る
   - 専用purpose・version・5分期限で署名し、改変・期限切れ・snapshot変更・再link後tokenを拒否する
   - 完了時には、ownerが削除範囲を確認でき、stale confirmationではfenceが設定されない
   - _Depends: 1.3, 5.4_
   - _Requirements: 7.1, 7.5, 7.8, 7.9, 7.10_
 
-- [ ] 7.2 deauthorize実行をMySQL advisory lockでsingle-flightにする
+- [x] 7.2 deauthorize実行をMySQL advisory lockでsingle-flightにする
   - owner slot由来の非秘密lock名をwaitなしで取得し、競合要求をLINE呼出し前に拒否する
   - 通常の成功・失敗・例外では取得した同一connectionからreleaseし、connection喪失時はMySQLの自動解放後に別connectionから再取得できるようにする
   - 完了時には、複数端末の同時要求のうち1つだけが認可取消へ進める
   - _Requirements: 2.6, 7.12, 7.13, 7.14, 7.15_
 
-- [ ] 7.3 fresh本人証明からunlink fenceを開始する
+- [x] 7.3 fresh本人証明からunlink fenceを開始する
   - confirmation事前検証とfresh user token remote検証をDB transaction外で行う
   - owner lock下でsnapshotを再検証し、同一transactionで新generation付きdeauthorization pendingへ遷移する
   - 完了時には、有効なconfirmationと現在owner本人のtokenが揃った場合だけ通常操作がfenceされる
   - _Depends: 4.3, 5.4, 7.1_
   - _Requirements: 7.5, 7.9, 7.10, 7.12, 7.13_
 
-- [ ] 7.4 LINE認可取消を成功markerへ収束させる
+- [x] 7.4 LINE認可取消を成功markerへ収束させる
   - advisory lock取得後にstateとexpected generationを再確認し、stale attemptを隔離する
   - LINE 204後にmarker commitできた場合だけlocal deletion pendingへ進め、失敗・不確定・marker保存失敗はidentityを保持する
   - 完了時には、外部成功と耐久markerの両方が成立した場合だけ認可取消確認済みになる
   - _Depends: 4.5, 5.5, 7.2, 7.3_
   - _Requirements: 7.5, 7.11, 7.12, 7.13, 7.14, 7.15_
 
-- [ ] 7.5 local-only finalizeを実装する
+- [x] 7.5 local-only finalizeを実装する
   - local deletion pendingではLINEを再呼出しせず原子的finalizeだけを再試行する
   - 削除失敗をmarker保持済みのlocal deletion pendingへ戻す
   - 完了時には、成功時だけ全端末sessionと個人データが消え、失敗時は部分削除が残らない
   - _Depends: 5.6, 7.4_
   - _Requirements: 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.14, 7.15_
 
-- [ ] 7.6 pending unlinkの再認証・再開を実装する
+- [x] 7.6 pending unlinkの再認証・再開を実装する
   - deauthorization pendingではfresh再認証を要求し、検証後に同generationの認可取消へ再合流する
   - local deletion pendingではtokenなしでlocal finalizeへ再合流し、旧session・旧generationを新attemptへ適用しない
   - 完了時には、各pending stageが許可された再開経路だけを返す
   - _Depends: 6.2, 7.4, 7.5_
   - _Requirements: 7.5, 7.6, 7.7, 7.12, 7.13, 7.14, 7.15_
 
-- [ ] 7.7 unlink preview・実行・再開APIを統合する
+- [x] 7.7 unlink preview・実行・再開APIを統合する
   - active owner向けpreview、初回実行、fresh再認証resume、local-only retryをstrictに区別する
   - completed・deauthorization pending・local deletion pendingを安全なretry action付きunionへ変換する
   - 完了時には、Frontendがblind retryせず現在stageに許可された解除操作だけを呼び出せる
   - _Depends: 3.4, 3.5, 6.3, 6.4, 7.1, 7.3, 7.4, 7.5, 7.6_
   - _Requirements: 7.1, 7.2, 7.5, 7.9, 7.10, 7.12, 7.13, 7.14, 7.15, 8.5, 8.6, 8.7_
 
-- [ ] 7.8 unlink pendingを個人識別子なしで観測できるようにする
+- [x] 7.8 unlink pendingを個人識別子なしで観測できるようにする
   - deauthorization pendingとlocal deletion pendingの件数・経過時間を安全な内部指標として取得する
   - token・subject・表示名・session IDをmetricや通常ログへ含めない
   - 完了時には、解除停滞をsafe stateと経過時間だけで運用確認できる

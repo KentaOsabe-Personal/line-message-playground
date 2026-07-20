@@ -33,6 +33,7 @@ from .serializers import (
     LineLoginRequestSerializer,
     RecipientRegistrationRequestSerializer,
     RecipientStateRequestSerializer,
+    UnlinkRequestSerializer,
 )
 from .session_services import (
     AnonymousSessionStatus,
@@ -42,6 +43,14 @@ from .session_services import (
     UnlinkingSessionStatus,
 )
 from linechannels.repositories import DjangoLineChannelDirectory, PersistenceError
+from .unlink_execution_lock import MySQLUnlinkExecutionLock
+from .unlink_services import (
+    DefaultAccountUnlinkService,
+    UnlinkCompleted,
+    UnlinkPendingLocalRetry,
+    UnlinkPendingReauthentication,
+    UnlinkRejected,
+)
 
 
 def build_session_service() -> DefaultAccountSessionService:
@@ -62,6 +71,18 @@ def build_recipient_service() -> DefaultRecipientService:
         DjangoAccountRepository(),
         HttpxLinePlatformGateway(runtime),
         policy,
+    )
+
+
+def build_unlink_service() -> DefaultAccountUnlinkService:
+    runtime = get_line_account_runtime()
+    directory = DjangoLineChannelDirectory()
+    resolve_liff_linked_channel_policy(runtime, directory)
+    return DefaultAccountUnlinkService(
+        HttpxLinePlatformGateway(runtime),
+        DjangoAccountRepository(),
+        MySQLUnlinkExecutionLock(),
+        directory,
     )
 
 
@@ -116,6 +137,13 @@ def _recipient_safe(operation):
             "identity_not_found": "owner_not_allowed",
         }
         raise SafeAPIError(mapping.get(error.code, "owner_operation_blocked")) from None
+
+
+def _unlink_safe(operation):
+    try:
+        return operation()
+    except (AccountPersistenceError, PersistenceError, ImproperlyConfigured):
+        raise SafeAPIError("storage_unavailable") from None
 
 
 def _channel_link_data(item):
@@ -282,3 +310,65 @@ class RecipientDetailAPIView(OwnerProtectedAPIView):
             )
         )
         return Response(status=204)
+
+
+class UnlinkPreviewAPIView(OwnerProtectedAPIView):
+    def post(self, request):
+        serializer = EmptyRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        principal = request.user
+        assert isinstance(principal, OwnerPrincipal)
+        try:
+            preview = _unlink_safe(
+                lambda: build_unlink_service().preview(principal, timezone.now())
+            )
+        except AccountStateError:
+            raise SafeAPIError("unlink_attempt_stale") from None
+        return Response(
+            {
+                "displayName": preview.display_name,
+                "recipientCount": preview.recipient_count,
+                "channelLabels": list(preview.channel_labels),
+                "deliveryAuditRetained": preview.delivery_audit_retained,
+                "confirmationToken": preview.confirmation_token,
+                "expiresAt": preview.expires_at.isoformat(),
+            }
+        )
+
+
+class UnlinkAPIView(ExactOriginCsrfMixin, APIView):
+    authentication_classes = [OwnerSessionAuthentication]
+    permission_classes = [HasOwnerSession]
+
+    def post(self, request):
+        principal = request.user
+        assert isinstance(principal, OwnerPrincipal)
+        serializer = UnlinkRequestSerializer(
+            data=request.data,
+            context={"account_state": principal.account_state},
+        )
+        serializer.is_valid(raise_exception=True)
+        result = _unlink_safe(
+            lambda: build_unlink_service().execute(
+                principal,
+                serializer.validated_data.get("confirmationToken"),
+                serializer.validated_data.get("userAccessToken"),
+                timezone.now(),
+            )
+        )
+        if isinstance(result, UnlinkRejected):
+            raise SafeAPIError(result.code)
+        if isinstance(result, UnlinkCompleted):
+            request.session.flush()
+            return Response({"state": "completed"})
+        assert isinstance(
+            result, (UnlinkPendingReauthentication, UnlinkPendingLocalRetry)
+        )
+        return Response(
+            {
+                "state": "pending",
+                "stage": result.stage,
+                "retryAction": result.retry_action,
+            },
+            status=202,
+        )

@@ -93,3 +93,16 @@ class UnlinkRequestSerializer(StrictRequestSerializer):
         trim_whitespace=False,
         write_only=True,
     )
+
+    def validate(self, attrs):
+        account_state = self.context.get("account_state")
+        expected_fields = {
+            "active": {"confirmationToken", "userAccessToken"},
+            "deauthorization_pending": {"userAccessToken"},
+            "local_deletion_pending": set(),
+        }.get(account_state)
+        if expected_fields is not None and set(attrs) != expected_fields:
+            raise serializers.ValidationError(
+                {"non_field_errors": [_SAFE_FIELD_ERROR]}
+            )
+        return attrs
