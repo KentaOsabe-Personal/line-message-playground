@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "delivery",
     "linechannels.apps.LineChannelsConfig",
     "lineaccounts.apps.LineAccountsConfig",
+    "linewebhooks.apps.LineWebhooksConfig",
 ]
 
 MIDDLEWARE = [

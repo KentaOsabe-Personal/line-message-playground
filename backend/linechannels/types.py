@@ -274,4 +274,22 @@ class CredentialUnavailable:
     status: Literal["unavailable"] = "unavailable"
 
 
+@dataclass(frozen=True, repr=False)
+class WebhookChannelAvailable:
+    channel_public_id: UUID
+    bot_user_id: str
+    channel_secret: ChannelSecret
+    status: Literal["available"] = "available"
+
+    def __repr__(self) -> str:
+        return (
+            "<WebhookChannelAvailable "
+            f"channel_public_id={self.channel_public_id} "
+            f"bot_user_id={self.bot_user_id} channel_secret=redacted>"
+        )
+
+
+WebhookChannelResult = WebhookChannelAvailable | CredentialUnavailable
+
+
 RotationReadiness = Literal["ready", "old_key_missing"]
