@@ -46,8 +46,8 @@
   - _Requirements: 4.1, 4.4, 4.5, 5.5, 6.1, 6.2, 7.1, 7.3_
   - _Boundary: WebhookEventReceipt_
 
-- [ ] 2. 未加工要求から検証済みイベントへ信頼を昇格する
-- [ ] 2.1 未加工本文の署名を JSON 解析前に検証する
+- [x] 2. 未加工要求から検証済みイベントへ信頼を昇格する
+- [x] 2.1 未加工本文の署名を JSON 解析前に検証する
   - 欠落または厳密 Base64 として不正な署名を一律に拒否する
   - 対象チャネルのシークレットで raw bytes の HMAC-SHA256 を計算し、constant-time 比較で一致を判定する
   - 本文の decode、正規化、JSON 解析を行わず、本文・署名・シークレットを例外や安全表現へ含めない
@@ -56,7 +56,7 @@
   - _Requirements: 2.1, 2.2, 2.3, 7.3, 7.4, 8.4_
   - _Boundary: RawSignatureVerifier_
 
-- [ ] 2.2 署名済み payload の受付上限と基本構造を検証する
+- [x] 2.2 署名済み payload の受付上限と基本構造を検証する
   - 署名成功後、JSON parse 前に raw body が 256 KiB 以下であることを検証する
   - JSON root、destination、0〜10件の events と各 event の webhookEventId、種別、発生時刻、再送表示を全件検証する
   - 一件でも基本契約を満たさない、または上限を超える場合は request 全体を拒否し、一件も通過させない
@@ -65,7 +65,7 @@
   - _Requirements: 2.4, 2.5, 3.1, 3.2, 3.3, 3.4, 3.7, 8.1, 8.4_
   - _Boundary: WebhookPayloadValidator_
 
-- [ ] 2.3 検証済み event を将来互換かつ immutable に変換する
+- [x] 2.3 検証済み event を将来互換かつ immutable に変換する
   - 受付上限内の未知 field、field 順序、列挙値、event type を拒否せず保持する
   - event object を再帰的に immutable 化し、検証後の値と検証前 object の共有を断つ
   - raw request、署名、シークレット、destination、検証前 object を検証済み event から排除する
