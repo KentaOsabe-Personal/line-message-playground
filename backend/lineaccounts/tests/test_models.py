@@ -138,6 +138,37 @@ class AccountModelTests(TestCase):
         with self.assertRaises(ValidationError):
             recipient.full_clean()
 
+    # テストケース: 友だちイベント順序metadataを両方指定または両方未指定で保存する
+    # 期待値: nullable pairと非負timestampだけを受理する
+    def test_recipient_accepts_only_consistent_friendship_order_metadata(self):
+        identity = self.create_identity()
+        channel = self.create_channel()
+        without_order = DeliveryRecipient.objects.create(
+            identity=identity,
+            line_channel=channel,
+        )
+        with_order = DeliveryRecipient.objects.create(
+            identity=identity,
+            line_channel=self.create_channel(),
+            last_friendship_event_occurred_at_ms=1,
+            last_friendship_webhook_event_id="01J00000000000000000000000",
+        )
+
+        self.assertIsNone(without_order.last_friendship_event_occurred_at_ms)
+        self.assertIsNone(without_order.last_friendship_webhook_event_id)
+        self.assertEqual(with_order.last_friendship_event_occurred_at_ms, 1)
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DeliveryRecipient.objects.filter(pk=without_order.pk).update(
+                last_friendship_event_occurred_at_ms=1,
+                last_friendship_webhook_event_id=None,
+            )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DeliveryRecipient.objects.filter(pk=without_order.pk).update(
+                last_friendship_event_occurred_at_ms=-1,
+                last_friendship_webhook_event_id="01J00000000000000000000000",
+            )
+
     # テストケース: account migration適用済みDBを確認する
     # 期待値: vacantなowner singletonが1行だけseedされ、配信監査は独立している
     def test_migration_seeds_singleton_without_delivery_audit_relation(self):

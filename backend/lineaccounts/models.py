@@ -127,6 +127,15 @@ class DeliveryRecipient(models.Model):
         choices=FriendshipState,
         default=FriendshipState.UNKNOWN,
     )
+    last_friendship_event_occurred_at_ms = models.BigIntegerField(
+        null=True,
+        blank=True,
+    )
+    last_friendship_webhook_event_id = models.CharField(
+        max_length=26,
+        null=True,
+        blank=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -135,6 +144,26 @@ class DeliveryRecipient(models.Model):
             models.UniqueConstraint(
                 fields=("identity", "line_channel"),
                 name="lineacct_recipient_identity_channel_uniq",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        last_friendship_event_occurred_at_ms__isnull=True,
+                        last_friendship_webhook_event_id__isnull=True,
+                    )
+                    | models.Q(
+                        last_friendship_event_occurred_at_ms__isnull=False,
+                        last_friendship_webhook_event_id__isnull=False,
+                    )
+                ),
+                name="lineacct_recip_friend_order_pair",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(last_friendship_event_occurred_at_ms__isnull=True)
+                    | models.Q(last_friendship_event_occurred_at_ms__gte=0)
+                ),
+                name="lineacct_recip_friend_time_nonneg",
             ),
         ]
         indexes = [
