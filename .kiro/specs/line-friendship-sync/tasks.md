@@ -118,8 +118,8 @@
   - _Requirements: 4.1, 4.2, 5.3, 5.4, 5.5_
   - _Boundary: FriendshipSyncService, AccountProjectionAdapter_
 
-- [ ] 4. 安全性と同期性能を検証する
-- [ ] 4.1 LINE user IDと外部作用が公開surfaceへ漏れないことを固定する
+- [x] 4. 安全性と同期性能を検証する
+- [x] 4.1 LINE user IDと外部作用が公開surfaceへ漏れないことを固定する
   - valid/invalid user ID canaryがmodel、監査、repr、例外、logger、HTTP responseのいずれにも現れないことを検証する
   - 監査schemaがraw payload、subject、identity、recipient、error detailを保持しないことを固定する
   - handlerがLINE gateway、reply client、delivery serviceを構築または呼び出さないことを検証する
@@ -127,14 +127,14 @@
   - _Depends: 3.3_
   - _Requirements: 5.6, 6.1, 6.2, 6.3, 6.6_
   - _Boundary: EventParser, AuditRepository, HandlerComposition_
-- [ ] 4.2 1イベント処理の時間とquery budgetを保証する
+- [x] 4.2 1イベント処理の時間とquery budgetを保証する
   - 事前lock競合がない標準Backend/MySQL条件をfixtureで固定する
   - valid、invalid、unlinked、stale pathを複数回測定し、各回100ミリ秒未満かつ外部I/Oなしのbounded query countを検証する
   - 日本語コメント付きperformance suiteで各pathの時間とquery上限を観測できる状態にする
   - _Depends: 3.3_
   - _Requirements: 6.5, 6.6, 6.7_
   - _Boundary: Performance Validation_
-- [ ] 4.3 最大10イベントの受付期限と全Backend回帰を検証する
+- [x] 4.3 最大10イベントの受付期限と全Backend回帰を検証する
   - 非事前競合条件で最大10イベントのsigned requestを処理し、2秒未満かつ最大order keyの最終状態となることを検証する
   - 意図的lock待ちは性能budget外として競合suiteと分け、syntheticなdeadline超過時は既存auditが残ることを確認する
   - migration、単体、MySQL統合、競合、security、performanceを含むBackend全試験が標準Docker Composeで通る状態にする
