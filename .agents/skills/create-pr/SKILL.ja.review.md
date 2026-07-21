@@ -21,6 +21,12 @@ PR タイトル、branch/base の既定値、PR body の雰囲気を過去の運
 
 - `origin` が GitHub リポジトリを指すローカル git checkout で実行する
 - PR 作成・更新には GitHub CLI `gh` がインストール済みかつ認証済みであること
+- このリポジトリではローカルの GitHub CLI を GitHub 認証の正規経路として扱う。CLI 認証が失敗しても、GitHub connector、アプリ内 browser、その他の browser へ迂回しない
+- GitHub CLI の認証確認は外部ネットワークへ接続できる状態で実行し、必要なら権限昇格を要求する。sandbox 内の `gh auth status` は GitHub へ到達できないだけでも `The token in default is invalid` と報告するため、その結果だけで保存済み credentials が無効だと判断しない
+- network 制限外で `gh auth status --active --hostname github.com` と `gh api user --jq .login` の両方を事前確認する。sandbox 内で失敗済みの場合はその結果を破棄し、認証復旧を始める前に network access ありで再実行する
+- 通常の repository workflow では `gh api user --jq .login` の結果が `KentaOsabe-Personal` であることを確認する。別 account で公開しようとしている場合は処理を止めてユーザーに確認する
+- `gh auth login -h github.com -p ssh --web` は、network access ありの2つの事前確認が両方とも認証固有の理由で失敗した場合だけ実行する。device flow 完了後は両方を再実行する
+- 正しい事前確認が成功しているのに Codex app が GitHub CLI を利用できないと表示する場合は、app 側の表示が stale だと扱い、ユーザーに app の再起動を依頼する。別の GitHub 認証経路は試さない
 - 実行前に対象ファイルが stage 済みである必要はない。stage は diff 確認後にこの workflow 内で行う
 - すでに stage 済みのファイルがある場合も、`git diff --staged` を確認して対象範囲に含めてよいか検証する
 - BigQuery / GCP 作業では、認証情報はリポジトリ外にある前提にする

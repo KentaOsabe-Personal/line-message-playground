@@ -24,6 +24,12 @@ Read `references/publish-history.md` when selecting titles, branch/base defaults
 
 - Require a local git checkout with `origin` pointing at the GitHub repository.
 - Require GitHub CLI `gh` to be installed and authenticated before creating or updating a PR.
+- Treat the local GitHub CLI as the authoritative GitHub authentication path for this repository. Do not fall back to the GitHub connector, an in-app browser, or another browser when CLI authentication fails.
+- Run GitHub CLI authentication checks with external network access, requesting escalation when required. A sandboxed `gh auth status` can report `The token in default is invalid` merely because it cannot reach GitHub; never treat that result as evidence that stored credentials are invalid.
+- Preflight with both `gh auth status --active --hostname github.com` and `gh api user --jq .login` outside the network-restricted sandbox. If a prior sandboxed check failed, discard that result and repeat these checks with network access before taking any recovery action.
+- Expect `KentaOsabe-Personal` from `gh api user --jq .login` for the default repository workflow; stop and ask before publishing as another account.
+- Run `gh auth login -h github.com -p ssh --web` only when both network-enabled preflight checks fail for an authentication-specific reason. After the user completes the device flow, rerun both checks before continuing.
+- If the Codex app still displays GitHub CLI as unavailable while the exact preflight succeeds, treat the app indicator as stale and ask the user to restart the app. Do not attempt alternate GitHub authorization routes.
 - Do not require files to be staged before this skill runs. Treat staging as part of this workflow after diff review.
 - If files are already staged, inspect `git diff --staged` and verify that staged content still belongs to the requested publish scope.
 - For BigQuery or GCP work, assume credentials live outside the repository by default:
