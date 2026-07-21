@@ -68,7 +68,8 @@ Frontend は ES Modules、React JSX transform、ES2022 を前提とします。B
 - Frontend は Vitest と jsdom を使い、テストコードを `/frontend/test/` に置く
 - Backend は Django test runner と DRF `APITestCase` を使い、status code と response body の両方を検証する
 - Frontend・Backendとも、各テスト定義の直前に日本語コメントで `テストケース:` と `期待値:` を1行ずつ記載し、入力・操作と観測可能な期待結果を具体的に示す
-- 現時点で coverage、E2E、共通 lint/formatter は導入されていないため、未確立の必須基準を仮定しない
+- 外部作用、状態 projection、並行更新を扱う境界は、単体・統合に加えて競合、安全性、処理時間と query budget をリスクに応じて検証する
+- 現時点で CI、Python 静的型検査、coverage、E2E、共通 lint/formatter は導入されていないため、未確立の必須基準を仮定しない
 
 ## 共通コマンド
 
@@ -120,7 +121,11 @@ LIFF から得た token は Backend の LINE Login 境界で検証し、provider
 
 チャネル別の不透明な UUID から有効な資格情報を選び、生の request body に対する HMAC-SHA256 署名検証を JSON 解析より先に行います。署名後も `destination` と payload 上限を検証し、検証前後の失敗を安全な公開エラーへ縮約します。
 
-`webhookEventId` はイベント台帳の一意キーとして重複を排除し、検証済みの immutable envelope だけを handler へ渡します。受付は軽量な同期処理とし、未対応イベントも台帳へ明示的に記録します。状態同期や reply の外部作用は handler 側の別責任とし、将来重い処理が必要になった場合はレスポンス返却から分離します。
+`webhookEventId` はイベント台帳の一意キーとして重複を排除し、検証済みの immutable envelope だけを静的 handler registry へ渡します。受付は軽量な同期処理とし、未対応イベントも台帳へ明示的に記録します。将来重い処理が必要になった場合はレスポンス返却から分離します。
+
+follow／unfollow handler は、active owner、provider、LINE subject、チャネルが完全一致する既存配信先だけを状態 projection の対象にします。未連携、不正、group／room source から identity や配信先を作成せず、安全な非更新結果として監査します。
+
+友だち状態、最終イベントの順序 cursor、PII を含まない同期監査は、行ロックを使った同一 transaction で確定します。登録時刻を baseline とし、`(occurred_at_ms, webhookEventId の ASCII 順)` を比較して、遅延、重複、同時刻、同状態のイベントを到着順に依存しない単一状態へ収束させます。message／postback、reply、配信は別 handler の責任です。
 
 ---
-_更新日: 2026-07-20。owner 認証、暗号化チャネル資格情報、検証済み Webhook 受付の実装パターンを反映。技術判断と標準を記録し、依存パッケージ一覧にはしない。_
+_更新日: 2026-07-21。検証済み Webhook の handler dispatch と友だち状態 projection の実装パターンを反映。技術判断と標準を記録し、依存パッケージ一覧にはしない。_

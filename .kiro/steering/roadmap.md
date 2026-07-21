@@ -20,7 +20,7 @@ LINE Message Playground を、固定設定の自分宛て配信から、LIFF／L
 ## Constraints
 
 - 自分だけが利用する個人学習環境を維持し、学習に不要なLINEユーザーデータを保存しない
-- ngrokは開発用途に限定して通常のComposeサービスとして起動する。Compose起動中は現在の未認証APIも公開されるため、公開URLを共有せず、利用後は全サービスを停止する
+- ngrokは開発用途に限定して通常のComposeサービスとして起動する。Compose起動中はFrontendに加えて公開Webhookやhealth endpointも外部から到達可能になるため、公開URLを共有せず、利用後は全サービスを停止する
 - ngrokのauthtokenはLINE資格情報とは別のインフラ秘密情報として環境変数から注入し、DBへ保存しない
 - LINEのアクセストークンとチャネルシークレットは認証付き暗号で暗号化してDBへ保存し、専用の暗号化マスターキーだけを環境変数へ残す
 - 暗号化キーを失うと復号できないため、ローテーション手順とDB外バックアップ方針を持つ
@@ -55,7 +55,10 @@ LINE Message Playground を、固定設定の自分宛て配信から、LIFF／L
 - [x] line-channel-foundation -- 複数Messaging APIチャネルと暗号化資格情報をDBで管理し、安全な取得・初期登録・鍵ローテーション境界を提供する。Dependencies: ngrok-compose-development-tunnel
 - [x] line-account-linking -- LIFF／LINEログインで本人確認し、LINE identityとチャネル別配信先関係を登録・解除する。Dependencies: line-channel-foundation
 - [x] line-webhook-ingress -- チャネル別Webhookをraw bodyから検証し、destination照合、空イベント疎通、イベント重複排除、安全な受付監査を提供する。Dependencies: line-channel-foundation
-- [ ] line-friendship-sync -- 検証済みfollow／unfollowを既存のチャネル別recipientへ時系列どおり反映し、未連携ユーザーを自動登録しない。Dependencies: line-webhook-ingress, line-account-linking
+- [x] line-friendship-sync -- 検証済みfollow／unfollowを既存のチャネル別recipientへ時系列どおり反映し、未連携ユーザーを自動登録しない。Dependencies: line-webhook-ingress, line-account-linking
 - [ ] line-webhook-command-dispatch -- 検証済みmessage／postbackを許可リストから処理し、限定replyと後続actionの安全な拡張契約を提供する。Dependencies: line-webhook-ingress, line-channel-foundation, line-account-linking
 - [ ] linked-recipient-delivery -- 登録済みチャネルと配信先を選び、既存の確認・冪等性・監査を維持してpushし、明示的な受取確認を追跡する。Dependencies: line-channel-foundation, line-account-linking, line-friendship-sync, line-webhook-command-dispatch
 - [ ] line-channel-admin-ui -- 自分専用の認証済み画面からチャネルとwrite-only資格情報を登録・更新・無効化する。Dependencies: line-channel-foundation, line-account-linking, line-webhook-ingress, linked-recipient-delivery
+
+---
+_更新日: 2026-07-21。line-friendship-sync の完了と、ngrok 経由で外部到達する公開 endpoint の現在の境界を反映。_
