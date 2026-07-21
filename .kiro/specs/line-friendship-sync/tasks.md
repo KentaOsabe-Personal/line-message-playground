@@ -1,26 +1,26 @@
 # Implementation Plan
 
-- [ ] 1. 友だち状態同期の永続化と共有契約を整える
-- [ ] 1.1 チャネルのprovider bindingをset-onceとして強制する
+- [x] 1. 友だち状態同期の永続化と共有契約を整える
+- [x] 1.1 チャネルのprovider bindingをset-onceとして強制する
   - legacyチャネルの未設定providerは検証済みproviderへ一度だけ補完できるようにする
   - 設定済みproviderへの同値指定は冪等に成功させ、異なる値への変更はrow lock後に拒否して他のチャネル属性も不変に保つ
   - service試験で未設定からの補完、同値指定、異値拒否を観測できる状態にする
   - _Requirements: 2.1, 2.3, 2.6_
   - _Boundary: ProviderBindingInvariant_
-- [ ] 1.2 友だち同期domainの共有型とportsを確立する
+- [x] 1.2 友だち同期domainの共有型とportsを確立する
   - immutableな検証済みevent、projection結果、safe audit record、およびparser/account/auditのportsを定義する
   - sensitive subjectをreprやerrorへ出さず、serviceからDjango modelへ直接依存しない契約を固定する
   - Django appを標準Backendへ組み込み、後続migrationとruntime compositionが同じapp境界を利用できるようにする
   - 型・契約試験で安全なrepr、frozen値、許可されたresult集合を観測できる状態にする
   - _Requirements: 1.2, 3.1, 3.2, 3.3, 6.1, 6.2, 6.3_
   - _Boundary: linefriendships Domain_
-- [ ] 1.3 recipientへ友だちイベントの順序metadataを追加する
+- [x] 1.3 recipientへ友だちイベントの順序metadataを追加する
   - 最終イベント時刻とイベントIDをnullableな対として追加し、両方nullまたは両方non-nullとなる整合性を保証する
   - 既存recipientの友だち状態、利用者の有効設定、登録時刻を変えず、order metadataをnullのまま移行する
   - 非負時刻と登録時刻を基準にした順序追跡を開始できるschemaおよびmodel試験が通る状態にする
   - _Requirements: 3.6, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 5.1, 5.2, 5.5, 6.4_
   - _Boundary: AccountProjectionAdapter_
-- [ ] 1.4 PIIを保持しない同期監査schemaを追加する
+- [x] 1.4 PIIを保持しない同期監査schemaを追加する
   - チャネルの不透明ID、イベントID、種別、発生時刻、安全な結果分類、follow補助flagだけをappend-onlyで保持する
   - outcome、event type、非負時刻、検索indexの制約を設け、identity・recipient・raw payload・error detailをschemaに含めない
   - migration/model試験で既存データを壊さず安全な監査行を保存できる状態にする

@@ -176,6 +176,8 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
             ciphertexts,
         )
 
+    # テストケース: provider未設定のlegacyチャネルへ検証済みproviderを指定する
+    # 期待値: 登録時のprovider必須契約を維持しつつ、legacy値だけを一度補完できる
     def test_provider_is_required_for_register_and_can_backfill_legacy_channel(self):
         missing_provider = self.service.register(
             RegisterLineChannel(
@@ -202,6 +204,59 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
         )
         self.assertEqual(backfilled.status, "succeeded")
         self.assertEqual(channel.provider_id, "000456")
+
+    # テストケース: 設定済みproviderと同じproviderを再指定する
+    # 期待値: 冪等な更新として成功し、providerと他属性を維持する
+    def test_same_provider_update_is_idempotent(self):
+        result = self.service.update(
+            UpdateLineChannel(self.public_id, provider_id="000123")
+        )
+
+        channel = LineChannel.objects.get(public_id=self.public_id)
+        self.assertEqual(result.status, "succeeded")
+        self.assertEqual(channel.provider_id, "000123")
+        self.assertEqual(channel.label, "登録時名称")
+        self.assertTrue(channel.is_active)
+
+    # テストケース: 設定済みproviderと異なるproviderを他の変更と同時指定する
+    # 期待値: invalid_transitionとして拒否し、provider・metadata・資格情報をすべて不変に保つ
+    def test_different_provider_update_rejects_all_requested_mutations(self):
+        before = LineChannel.objects.get(public_id=self.public_id)
+        credential = LineChannelCredential.objects.get(line_channel=before)
+        ciphertexts = (
+            bytes(credential.access_token_ciphertext),
+            bytes(credential.channel_secret_ciphertext),
+        )
+
+        result = self.service.update(
+            UpdateLineChannel(
+                self.public_id,
+                provider_id="000456",
+                label="保存してはいけない",
+                is_active=False,
+                credentials=build_credential_pair(
+                    "replacement-token", "replacement-secret"
+                ),
+            )
+        )
+
+        after = LineChannel.objects.get(public_id=self.public_id)
+        credential.refresh_from_db()
+        self.assertEqual(
+            (result.status, result.code),
+            ("failed", "invalid_transition"),
+        )
+        self.assertEqual(after.provider_id, "000123")
+        self.assertEqual(after.label, "登録時名称")
+        self.assertTrue(after.is_active)
+        self.assertEqual(
+            (
+                bytes(credential.access_token_ciphertext),
+                bytes(credential.channel_secret_ciphertext),
+            ),
+            ciphertexts,
+        )
+        self.assertEqual(self.cipher.calls, [])
 
     # テストケース: チャネルを無効化した後、保存済み資格情報だけで再有効化する
     # 期待値: 暗号文を保持し、両用途の復号検証に成功した同じチャネルを有効へ戻す

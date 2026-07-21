@@ -117,6 +117,12 @@ class DefaultLineChannelService:
                 )
                 if locked is None:
                     return ChannelMutationFailed("channel_not_found")
+                if (
+                    validated.provider_id is not None
+                    and locked.public.provider_id is not None
+                    and validated.provider_id != locked.public.provider_id
+                ):
+                    return ChannelMutationFailed("invalid_transition")
 
                 encrypted = None
                 if validated.credentials is not None:

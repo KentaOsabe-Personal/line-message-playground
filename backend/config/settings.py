@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "delivery",
     "linechannels.apps.LineChannelsConfig",
     "lineaccounts.apps.LineAccountsConfig",
+    "linefriendships.apps.LineFriendshipsConfig",
     "linewebhooks.apps.LineWebhooksConfig",
 ]
 
