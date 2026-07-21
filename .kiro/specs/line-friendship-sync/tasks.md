@@ -70,8 +70,8 @@
   - _Requirements: 1.2, 2.6, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 5.5, 5.6, 6.4, 6.5, 6.6, 6.7, 6.8_
   - _Boundary: FriendshipSyncService_
 
-- [ ] 3. 実行時境界とMySQLへ統合する
-- [ ] 3.1 follow/unfollowだけを同一同期handlerへ接続する
+- [x] 3. 実行時境界とMySQLへ統合する
+- [x] 3.1 follow/unfollowだけを同一同期handlerへ接続する
   - dependency方向をtypesからingress compositionまで一方向に保ってchannel・account・audit adapterを合成する
   - migration適用済みの標準Backendで同じhandler instanceをfollowとunfollowへ登録し、他イベントは既存unsupported処理へ委ねる
   - LINE client、reply、delivery service、queue、workerを生成しないruntime構成にする
@@ -79,7 +79,7 @@
   - _Depends: 2.5_
   - _Requirements: 1.7, 5.6, 6.6, 6.8_
   - _Boundary: HandlerComposition_
-- [ ] 3.2 signed eventによる正常projectionと限定更新を統合検証する
+- [x] 3.2 signed eventによる正常projectionと限定更新を統合検証する
   - signed follow/unfollowで同provider・subject・channelのrecipientだけをfriend/not_friendへ収束させる
   - 他provider/channel/identityを不変にし、disabled recipientのenabledと非所有fieldを維持してstate/orderだけを更新する
   - 同状態の新eventでorderだけが前進し、LINEへのreplyや配信が起動しないことを確認する
@@ -87,7 +87,7 @@
   - _Depends: 3.1_
   - _Requirements: 2.1, 2.2, 2.3, 2.7, 3.1, 3.2, 3.5, 3.6, 5.1, 5.2, 5.6_
   - _Boundary: FriendshipSyncService, AccountProjectionAdapter, HandlerComposition_
-- [ ] 3.3 正常非更新・監査・rollback・既存行移行を統合検証する
+- [x] 3.3 正常非更新・監査・rollback・既存行移行を統合検証する
   - identity/recipient欠落、provider未設定、不正、group/room、stale、duplicateを正常非更新としてsafe auditへ保存する
   - order metadataがnullの既存recipientでは登録境界後のeventから追跡を開始し、境界以前を拒否する
   - 監査insert failure時にstateと両order fieldがrollbackされ、ingress receiptがhandler failureになることを検証する
@@ -95,21 +95,21 @@
   - _Depends: 3.2_
   - _Requirements: 1.3, 1.4, 1.5, 2.4, 2.5, 2.6, 4.1, 4.2, 4.3, 4.6, 6.1, 6.2, 6.4, 6.5_
   - _Boundary: FriendshipSyncService, AccountProjectionAdapter, AuditRepository, HandlerComposition_
-- [ ] 3.4 provider変更とWebhookの競合を安全な照合結果へ収束させる
+- [x] 3.4 provider変更とWebhookの競合を安全な照合結果へ収束させる
   - 異provider updateとsigned eventを独立connectionで競合させる
   - provider変更だけを拒否し、元providerに属する対象recipient以外を不変に保つ
   - 日本語コメント付き競合試験が開始順に依存せず有限時間で通る状態にする
   - _Depends: 3.3_
   - _Requirements: 2.1, 2.3, 2.6_
   - _Boundary: ProviderBindingInvariant, FriendshipSyncService, AccountProjectionAdapter_
-- [ ] 3.5 並行する友だちイベントを最大order keyへ収束させる
+- [x] 3.5 並行する友だちイベントを最大order keyへ収束させる
   - 古いeventと新しいevent、および同時刻の反対eventを独立connectionで競合させる
   - 開始順に関係なくevent ID tie-breakを含む最大order keyの単一状態へ収束させる
   - isRedeliveryを反転しても結果が変わらず、試験が有限時間で通る状態にする
   - _Depends: 3.3_
   - _Requirements: 4.4, 4.5, 4.7, 4.8_
   - _Boundary: FriendshipSyncService, AccountProjectionAdapter_
-- [ ] 3.6 連携解除と再登録の競合で削除境界を維持する
+- [x] 3.6 連携解除と再登録の競合で削除境界を維持する
   - friendship updateと個別解除、全解除finalizeを独立connectionで競合させる
   - recipient、identity、sessionを再作成せず、解除済みの最終状態を維持する
   - 再登録後は新しい登録境界以前のeventを拒否し、境界後のeventだけを適用する

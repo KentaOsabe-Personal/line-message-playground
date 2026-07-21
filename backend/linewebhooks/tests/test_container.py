@@ -12,6 +12,7 @@ from linechannels.crypto import FernetCredentialCipher
 from linechannels.models import LineChannel, LineChannelCredential
 from linechannels.repositories import DjangoWebhookCredentialRepository
 from linechannels.types import AccessToken, ChannelSecret, CredentialContext
+from linefriendships.services import DefaultFriendshipSyncService
 from linewebhooks.audit import SafeWebhookAuditLogger
 from linewebhooks.container import build_webhook_ingress_service
 from linewebhooks.handlers import StaticHandlerRegistry
@@ -23,8 +24,8 @@ from linewebhooks.verification import RawSignatureVerifier, WebhookPayloadValida
 
 class WebhookCompositionRootTests(SimpleTestCase):
     # テストケース: Webhook ingress serviceをcomposition rootから構築する
-    # 期待値: 全具象componentと空のimmutable registryがconstructor injectionされる
-    def test_builds_service_with_concrete_dependencies_and_empty_registry(self) -> None:
+    # 期待値: follow/unfollowだけに同一の友だち同期handlerが登録される
+    def test_builds_service_with_friendship_handler_for_follow_and_unfollow(self) -> None:
         runtime.load_credential_keyring()
         service = build_webhook_ingress_service()
 
@@ -40,6 +41,10 @@ class WebhookCompositionRootTests(SimpleTestCase):
             DjangoEventReceiptRepository,
         )
         self.assertIsInstance(service._registry, StaticHandlerRegistry)
+        follow_handler = service._registry.resolve("follow")
+        unfollow_handler = service._registry.resolve("unfollow")
+        self.assertIsInstance(follow_handler, DefaultFriendshipSyncService)
+        self.assertIs(follow_handler, unfollow_handler)
         self.assertIsNone(service._registry.resolve("message"))
         self.assertIsInstance(service._audit_logger, SafeWebhookAuditLogger)
         self.assertIs(service._monotonic_clock, monotonic)
