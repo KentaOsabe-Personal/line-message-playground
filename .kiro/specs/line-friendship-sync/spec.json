@@ -1,0 +1,22 @@
+{
+  "feature_name": "line-friendship-sync",
+  "created_at": "2026-07-20T23:03:54+09:00",
+  "updated_at": "2026-07-21T20:36:08+09:00",
+  "language": "ja",
+  "phase": "tasks-approved",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}
