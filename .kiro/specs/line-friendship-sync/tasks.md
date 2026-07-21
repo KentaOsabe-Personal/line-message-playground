@@ -28,8 +28,8 @@
   - _Requirements: 3.3, 6.1, 6.2, 6.3, 6.4_
   - _Boundary: AuditRepository_
 
-- [ ] 2. 友だち状態projectionの中核を実装する
-- [ ] 2.1 (P) 検証済みイベントをPII-safeな友だち同期commandへ解釈する
+- [x] 2. 友だち状態projectionの中核を実装する
+- [x] 2.1 (P) 検証済みイベントをPII-safeな友だち同期commandへ解釈する
   - follow/unfollowのuser source、LINE user ID、strict booleanのisUnblockedを検証し、group/roomと不正入力を別分類にする
   - 未知fieldとisRedeliveryを状態根拠にせず、有効なfollow/unfollowをfriend/not_friendへ変換する
   - user IDを直ちにredacted値へ包み、typed result・repr・validation errorへ生値を残さない
@@ -37,7 +37,7 @@
   - _Depends: 1.2_
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 3.1, 3.2, 3.3, 3.4, 6.3_
   - _Boundary: EventParser_
-- [ ] 2.2 (P) 既存recipientだけをlocking readして限定更新する
+- [x] 2.2 (P) 既存recipientだけをlocking readして限定更新する
   - ownerからrecipientの順にlockし、provider・subject・channelが完全一致する既存行だけを対象にする
   - identityまたはrecipientがない場合を存在詳細を漏らさない未連携結果へ縮約し、create/upsert/undelete経路を持たせない
   - 更新対象を友だち状態、2つのorder field、更新時刻だけに限定し、enabledと非所有fieldを維持する
@@ -45,7 +45,7 @@
   - _Depends: 1.1, 1.2, 1.3_
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.7, 3.5, 3.6, 4.1, 4.7, 5.1, 5.2, 5.3, 5.4, 5.5_
   - _Boundary: AccountProjectionAdapter_
-- [ ] 2.3 (P) 同期結果をPII-freeな監査行としてappendする
+- [x] 2.3 (P) 同期結果をPII-freeな監査行としてappendする
   - safe audit recordだけを永続化し、insert失敗をstorage failureとして呼び出し元へ伝える
   - 適用、状態維持、stale、重複、未連携、照合不能、対象外、不正を共通の安全な分類で保持する
   - unfollowではunblock補助値を保持せず、event IDで既存receiptと相関できるようにする
@@ -53,7 +53,7 @@
   - _Depends: 1.2, 1.4_
   - _Requirements: 1.3, 1.5, 2.4, 2.5, 2.6, 3.3, 6.1, 6.2, 6.3, 6.4_
   - _Boundary: AuditRepository_
-- [ ] 2.4 イベント順序と登録境界の判定を純粋なdomain decisionとして実装する
+- [x] 2.4 イベント順序と登録境界の判定を純粋なdomain decisionとして実装する
   - 登録基準時刻以下をstaleとし、その後の（発生時刻, event ID）をASCII辞書順で比較する
   - 同一IDをduplicate、古いkeyをstale、新しい同状態eventをstate maintainedとしてorder前進へ分類する
   - 到着順とisRedeliveryを比較へ使わず、unknown/friend/not_friendからtarget stateへ収束させる
@@ -61,7 +61,7 @@
   - _Depends: 1.2, 1.3_
   - _Requirements: 3.5, 3.6, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.8, 5.5_
   - _Boundary: FriendshipSyncService_
-- [ ] 2.5 channel照合と原子transactionを統括する同期handlerを実装する
+- [x] 2.5 channel照合と原子transactionを統括する同期handlerを実装する
   - safe channel summaryを解決し、provider未設定またはchannel不明を照合不能として正常終了させる
   - account targetをlockし、order decisionに従う状態/order更新と全結果のauditを同一MySQL transactionで確定する
   - DB、lock、監査失敗時は全rollbackして安全な失敗結果を返し、正常非更新は成功として返す
