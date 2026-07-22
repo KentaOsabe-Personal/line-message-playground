@@ -18,7 +18,9 @@ Requirements should clarify the feature boundary in user- or operator-observable
 - Read and apply `.kiro/steering/spec-sizing.md` when it exists.
 - Before writing the draft, produce a Spec Size Assessment from the distinct user journeys, responsibility seams, external workflows, failure/compensation paths, migrations, integration work, and expected validation work.
 - Estimate the resulting executable 1-3 hour tasks; do not omit tests, migrations, setup, or integration to make the estimate smaller.
-- Treat 20+ projected executable tasks as `SPLIT_REQUIRED` by default. Also return `SPLIT_REQUIRED` below that threshold when multiple responsibilities can be delivered, changed, or reviewed independently.
+- Treat 40+ projected executable tasks as `SPLIT_REQUIRED` by default.
+- Treat 30-39 projected tasks as a review-attention band: record internal workstreams and dependency order, but allow `PASS (single-spec)` when the requirements remain one coherent outcome and the bounded review converges.
+- Do not split below 40 merely because multiple responsibilities can be delivered, changed, or reviewed independently. Require the compound boundary-risk or bounded review-instability evidence defined in `spec-sizing.md`.
 - If the brief already contains an assessment, validate it against the expanded requirements instead of copying it uncritically.
 - A size failure is not a local wording problem. Stop without writing `requirements.md`, report the evidence, and return to `$kiro-discovery` for roadmap decomposition.
 
@@ -58,5 +60,6 @@ Before applying judgment, verify these mechanically:
 - Run mechanical checks first, then judgment-based review.
 - If issues are local to the draft, repair the draft and re-run the review gate.
 - Keep the loop bounded: no more than 2 review-and-repair passes before escalating a real ambiguity back to the user.
+- If the same structural scope problem remains at the repair limit because the requirements cannot be reviewed coherently as one unit, return `SPLIT_REQUIRED` instead of continuing the loop.
 - Write `requirements.md` only after the review gate passes.
 - Do not use the review loop to merge or omit requirements solely to pass the size gate.

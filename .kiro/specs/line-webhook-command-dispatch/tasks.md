@@ -1,0 +1,183 @@
+# Implementation Plan
+
+- [ ] 1. Webhook の実行予算と一回実行権を拡張する
+- [ ] 1.1 handler 実行コンテキストと実行プロファイルを確立する
+  - request 全体の絶対期限、dispatch 位置、残件数、外部 I/O cutoff を有限で不変な値として handler へ渡せるようにする
+  - local と deadline-managed external の有限な実行プロファイルを静的 registry の登録契約へ追加し、欠落・未知値・重複 event type を拒否する
+  - 既存 friendship handler を context-aware 契約へ合わせ、外部通信を行わない local handler の振る舞いを維持する
+  - handler 登録と既存 projection の契約テストで、新しい context が全登録先へ一貫して渡ることを確認できる
+  - _Requirements: 2.9, 7.1, 7.2, 7.3_
+  - _Boundary: Webhook Execution Contract_
+- [ ] 1.2 未開始イベントの期限超過を receipt と安全な監査へ確定する
+  - handler を開始できなかった event 専用の期限超過分類を receipt の状態制約と安全な監査許可リストへ追加する
+  - 初回実行権を得た processing receipt だけを条件付きで期限超過へ finalize し、既存の一般的な handler failure と区別する
+  - migration、model、repository、audit の整合を検証し、期限超過後の再送では handler が再実行されない状態を観測できる
+  - _Requirements: 5.7, 6.1, 6.2, 6.6, 7.3_
+  - _Boundary: Dispatch deadline finalization_
+- [ ] 1.3 View 入口から始まる absolute deadline と起動時キャッシュを導入する
+  - body、header、service 取得より前に共有 monotonic clock で request 開始を採取し、HTTP response までの2秒期限を一度だけ確立する
+  - service graph を起動時に副作用なく構築・検証して process 内へ保持し、request ごとの再構築を行わない
+  - View と service provider のテストで、cached service の取得時間を含む同一 clock domain の期限が下流へ伝播することを確認できる
+  - _Requirements: 7.1, 7.3_
+  - _Boundary: Webhook request deadline_
+- [ ] 1.4 dispatch 予算配分と期限超過確定を統合する
+  - 残る local 処理、receipt finalize、HTTP response の予約時間から event ごとの外部 I/O cutoff を計算する
+  - 予約時間を満たせなくなった時点で dispatch を閉じ、現在以降の未開始 handler を呼ばず専用の期限超過へ確定する
+  - 一つの request 内で deadline、dispatch index、残件数が一貫して変化し、dispatch 閉鎖後に新しい作用が始まらないことを決定的な clock テストで観測できる
+  - _Depends: 1.1, 1.2, 1.3_
+  - _Requirements: 6.1, 6.6, 7.1, 7.2, 7.3, 7.5_
+  - _Boundary: Webhook deadline-dispatch integration_
+- [ ] 1.5 既存 Webhook 経路の回帰・重複・性能契約を再検証する
+  - follow、unfollow、empty、unsupported、handler failure が context 拡張後も既存の HTTP／receipt 結果を維持することを検証する
+  - 同一 event の再送・並行受付が既存 receipt の初回結果へ収束し、handler が一回だけ実行されることを確認する
+  - 1・5・10 event の request で期限伝播、query 増加、dispatch 閉鎖を測定し、既存の2秒契約を満たす結果を観測できる
+  - _Requirements: 2.9, 5.7, 7.1, 7.3, 7.5_
+  - _Boundary: Webhook Execution Contract validation_
+
+- [ ] 2. Interaction の安全な入力・照合・許可リスト・監査基盤を作る
+- [ ] 2.1 interaction app と共有される安全な値・port・結果契約を確立する
+  - 新しい Backend 機能領域を runtime と migration discovery に登録し、後続 component を配置できる最小構成を整える
+  - reply token、LINE subject、opaque payload、access token を不変・非 serializable・redacted な用途限定値として表現する
+  - parser の結果 union、channel／linked user projection と account directory port、command／action handler port、reply 結果、audit record／repository port、handler outcome を後続実装より先に共有契約として確定する
+  - command、action、reply、no-op、failure の有限な結果へ生例外や禁止データを含めず、後続の並列タスクが共有型定義を変更せず個別 component を実装できる状態にする
+  - import、repr、serialization の契約テストで秘密値が観測可能な表現へ露出せず、app と全共有契約が Django から読み込まれることを確認できる
+  - _Requirements: 1.4, 2.2, 2.3, 2.7, 4.7, 6.3, 6.4_
+  - _Boundary: Interaction domain foundation_
+- [ ] 2.2 (P) event 固有入力を安全な interaction へ変換する
+  - verified event から message／postback と user source だけを受理し、欠落・不正と group／room を別分類にする
+  - reply token、text、postback data を UTF-16 code unit で検証し、補助平面文字、lone surrogate、各境界値を安全に扱う
+  - versioned postback envelope は最初の2区切りだけを読み、safe action name と decode しない opaque payload へ分離する
+  - 未知追加 field は意味解釈せず、完全に有効な既知 field があれば処理を継続する
+  - parser の境界テストで valid、invalid、out-of-scope の各結果と補正なしの入力保持を観測できる
+  - _Depends: 2.1_
+  - _Requirements: 3.1, 3.3, 3.4, 3.6, 3.7, 4.2, 4.3, 4.4, 4.7_
+  - _Boundary: InteractionParser_
+- [ ] 2.3 (P) 既存の連携済み利用者を read-only で完全一致照合する
+  - active owner、同一 provider の identity、対象 channel の既存 recipient がすべて一致した場合だけ安全な公開識別子を返す
+  - inactive、provider 不一致、subject 不一致、recipient 不在を missing とし、作成・更新・lock を行わない
+  - account adapter の統合テストで全一致だけが成功し、各 mismatch 後も identity／owner／recipient 件数が変わらないことを確認できる
+  - _Depends: 2.1_
+  - _Requirements: 3.2, 3.5_
+  - _Boundary: InteractionAccountDirectory_
+- [ ] 2.4 (P) command と postback action の静的 registry を構築する
+  - `/ping` を `connectivity_ping_v1` と固定 reply `pong` へ完全一致で解決する有限 command registry を作る
+  - action 名を一つの handler へ結ぶ immutable registry を作り、unsafe 名と重複登録を起動前エラーとして拒否する
+  - trim、case fold、Unicode normalize、部分一致、動的 import、URL、SQL、path 解決を行わず、未知候補を正常な未解決へする
+  - production の action registry は空のまま、fake handler に typed channel、event、user、opaque payload、execution context を一度だけ渡せる契約を検証する
+  - action handler はネットワーク外部 I/O を行わず、interaction handler の local portion 合計100 ms以内に含まれる拡張契約として登録する
+  - registry テストで固定 command、未知入力、重複拒否、単一 resolve、既存 command 不変を観測できる
+  - _Depends: 2.1_
+  - _Requirements: 1.1, 1.6, 2.1, 2.2, 2.4, 2.6, 2.7, 2.8, 2.9, 4.1, 4.5, 4.6, 4.8, 4.9_
+  - _Boundary: CommandRegistry, PostbackActionRegistry_
+- [ ] 2.5 (P) PII-free な interaction 監査を永続化する
+  - event ごとに channel の不透明識別子、event ID、event type、許可済み operation ID、安全な interaction／reply 結果だけを一件保存する
+  - ingress receipt とは event ID だけで論理相関し、cross-app FK や identity／recipient 参照を作らない
+  - valid な結果組合せだけを許す database 制約、一意性、運用確認用 index を migration と model へ反映する
+  - storage failure を内容非露出の失敗へ縮約し、schema、repository、migration テストで禁止 field 不在と一意・CHECK 制約を観測できる
+  - _Depends: 2.1_
+  - _Requirements: 1.3, 6.1, 6.2, 6.3, 6.4, 6.7_
+  - _Boundary: InteractionAuditRepository_
+
+- [ ] 3. 一回限りの LINE reply transport を実装する
+- [ ] 3.1 同一チャネルの固定 text reply transport と基本結果分類を実装する
+  - LINE reply endpoint、Bearer credential、reply token、固定 text 一件だけを用いる transport を実装する
+  - push 系 endpoint、retry key、自動再試行、redirect、複数 message を公開契約から除外する
+  - request 開始前は呼出しゼロを許し、開始後は HTTP 200、明示的非200、status を確定できない結果を accepted／rejected／unknown のいずれかへ縮約する
+  - finite な total watchdog の範囲で一回だけ送信し、fast mock transport の基本契約テストで request 内容、単一呼出し、3結果分類を観測できる
+  - _Depends: 2.1_
+  - _Requirements: 1.2, 1.4, 1.5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.8, 7.2, 7.4, 7.5_
+  - _Boundary: LineReplyGateway_
+- [ ] 3.2 reply transport の逆境 timeout・cancellation・resource cleanup を検証する
+  - timeout、network、protocol failure を注入し、結果不明へ縮約して同じ token を再利用せず外部要求が最大一回になることを確認する
+  - cancellable delayed transport と controlled slow transport で authoritative wall-clock 上限と cancellation を検証する
+  - timeout／例外の各経路でも return 後に background task、open response、open client が残らない状態を観測できる
+  - response body、header、生例外が domain result や通常 log へ残らず、安全な unknown だけになることを検証する
+  - _Requirements: 1.2, 1.4, 1.5, 5.1, 5.5, 6.3, 6.4, 7.2, 7.4, 7.5_
+  - _Boundary: LineReplyGateway adversarial validation_
+
+- [ ] 4. Interaction の判定・action・command reply・監査を統合する
+- [ ] 4.1 event 判定と外部作用なしの no-op 経路を実装する
+  - event type、event shape／source、active channel／provider、linked user、対応 registry の順で信頼境界を進める
+  - invalid、out-of-scope、unlinked、unknown を安全に区別し、identity／recipient 作成、handler、credential 取得、reply を行わない
+  - message と postback を交差解釈せず、一 event から最大一 operation だけを解決する
+  - service テストで判定優先順位と各 no-op の安全な成功結果、作用回数ゼロを観測できる
+  - _Depends: 2.2, 2.3, 2.4, 2.5_
+  - _Requirements: 1.6, 2.4, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9, 6.5_
+  - _Boundary: InteractionService_
+- [ ] 4.2 登録済み postback action を一度だけ委譲する
+  - 解決済み action handler へ action 名、opaque payload、検証済み channel／user、event ID、execution context だけを渡す
+  - success、no-change、rejected、failed を区別し、exception と不正 return を安全な handler failure へ縮約する
+  - handler 失敗後に別 handler や同じ action を自動実行せず、payload の真正性・期限・冪等性・業務変更を dispatcher で推測しない
+  - action service テストで各4結果、例外、不正 return、単一呼出し、reply ゼロを観測できる
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.7, 2.8, 2.9, 4.1, 4.6, 4.8, 4.9, 6.4, 6.5, 6.6, 7.5_
+  - _Boundary: InteractionService action dispatch_
+- [ ] 4.3 command 解決から deadline-aware reply までを統合する
+  - 固定 command 解決後だけ同じ active channel の credential を取得し、別 channel や固定環境値へ fallback しない
+  - 外部 I/O cutoff と共有 clock から reply 直前の総予算を計算し、最低開始予算を満たさなければ transport を呼ばない
+  - reply 開始時に token を消費済みと扱い、accepted／rejected／unknown のどの結果でも再試行せず固定 text 一件へ限定する
+  - credential 不在、期限不足、3つの transport 結果を安全に分類し、fake clock／gateway テストで呼出し0回または1回を観測できる
+  - _Depends: 3.2, 4.1_
+  - _Requirements: 1.1, 1.2, 1.4, 1.5, 1.7, 5.1, 5.2, 5.3, 5.4, 5.5, 5.8, 7.2, 7.3, 7.4_
+  - _Boundary: InteractionService–LineReplyGateway integration_
+- [ ] 4.4 最終分類を安全な監査と ingress 結果へ確定する
+  - no-op、action 4結果、credential failure、deadline、reply 3結果、予期しない dependency failure を有限な監査結果へ変換する
+  - operation 解決前後を区別して safe identifier だけを残し、受信内容、token、LINE user ID、access token、生 exception を保持しない
+  - safe audit を一回だけ記録し、保存失敗、reply rejected／unknown、action／dependency failure を ingress の安全な失敗へ返す
+  - reply／action 後に監査が失敗しても再実行せず、テストで監査レコードまたは安全な failure のどちらかを観測できる
+  - _Depends: 4.2, 4.3_
+  - _Requirements: 1.3, 2.3, 2.5, 5.6, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7_
+  - _Boundary: InteractionService–InteractionAuditRepository integration_
+- [ ] 4.5 interaction service の分岐・失敗・予算契約を網羅検証する
+  - parser、channel、account、registry、credential、handler、gateway、audit の各 fake で判定順と作用回数を検証する
+  - operation 解決前後の dependency 例外、gateway／handler の不正 return、audit failure を安全な結果へ縮約することを確認する
+  - reply cutoff の直前・直後を共有 fake clock で再現し、期限不足時には外部要求を開始しない結果を観測できる
+  - 全分岐の返却値、監査分類、reply／handler の最大一回性を自動テストで確認できる
+  - _Requirements: 1.1, 1.3, 1.6, 1.7, 2.1, 2.3, 2.4, 2.5, 3.5, 4.6, 4.9, 5.1, 5.3, 5.4, 5.5, 5.6, 6.1, 6.4, 6.5, 6.6, 7.2, 7.3, 7.4_
+  - _Boundary: InteractionService validation_
+
+- [ ] 5. Runtime 統合と横断的な安全性を検証する
+- [ ] 5.1 interaction handler を Webhook composition root へ静的登録する
+  - 一つの interaction handler instance を message／postback の両 event type へ deadline-managed external profile で登録する
+  - friendship の local profile と shared monotonic clock を維持し、interaction の concrete dependencies と空の production action registry を合成する
+  - startup で graph を一度だけ構築・cacheし、重複 event／unsafe・重複 action registration を request 受付前に fail closed にする
+  - container と app startup テストで単一 graph、各 profile、同一 handler instance、外部 I/O ゼロの起動を観測できる
+  - _Depends: 1.5, 4.5_
+  - _Requirements: 2.6, 2.9, 3.6, 4.1, 7.1, 7.5_
+  - _Boundary: InteractionContainer–Webhook composition integration_
+- [ ] 5.2 signed message から固定 reply と監査までを統合検証する
+  - 署名済み message を View、receipt、interaction、same-channel fake reply、audit、HTTP response まで通す
+  - `/ping` だけが `pong` 一件を一回 reply し、未知 command と未連携利用者は外部作用なしの正常 no-op、資格情報不在は reply 未開始の安全な failure になることを個別に確認する
+  - accepted／rejected／unknown と receipt／audit／HTTP 結果の対応を検証し、同じ token や別 channel credential が使われないことを観測できる
+  - _Depends: 5.1_
+  - _Requirements: 1.1, 1.2, 1.3, 1.5, 1.6, 1.7, 3.2, 3.5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.8, 6.1, 6.2, 6.5, 6.6, 7.1, 7.2, 7.3, 7.4_
+  - _Boundary: Signed message integration_
+- [ ] 5.3 signed postback から action 結果までを統合検証する
+  - 署名済み postback を linked user と fake action handler へ通し、4結果を receipt／interaction audit／HTTP 結果へ確定する
+  - 未登録、malformed、未連携、group／room、unsafe action では handler、reply、業務 mutation が発生しないことを確認する
+  - 新しい fake action registration 後も固定 command、未知入力、reply token 一回利用の契約が変わらないことを観測できる
+  - _Depends: 5.1_
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.3, 3.4, 3.5, 4.1, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 6.1, 6.5, 6.6_
+  - _Boundary: Signed postback integration_
+- [ ] 5.4 redelivery・並行受付・失敗窓で一回実行へ収束することを検証する
+  - 同一 event ID を独立 DB connection から並行受付し、receipt 一件、reply または action 一回、interaction audit 一件へ収束させる
+  - reply accepted 後の audit failure と handler return 後の receipt finalize failure を注入し、再送でも外部作用を再実行しないことを確認する
+  - action handler の業務状態競合でも dispatcher は一回だけ委譲し、業務冪等性を推測しない結果を観測できる
+  - _Depends: 5.1_
+  - _Requirements: 2.1, 2.5, 2.7, 2.8, 5.1, 5.6, 5.7_
+  - _Boundary: Interaction concurrency and recovery validation_
+- [ ] 5.5 禁止データ非露出と静的振り分けを横断検証する
+  - text、postback data／payload、reply token、LINE user ID、access token、Authorization、生 response、生 exception の canary を全境界へ流す
+  - repr、log、audit、receipt、HTTP response に canary がなく、安全な分類と不透明 ID だけが残ることを確認する
+  - SQL、URL、module、file path、Unicode confusable、prefix 候補が静的完全一致 registry 以外を呼ばないことを検証する
+  - 別 channel、固定環境 token、push gateway への fallback がなく、禁止データを恒久保存しない状態を観測できる
+  - _Depends: 5.1_
+  - _Requirements: 1.4, 1.5, 1.7, 4.5, 4.8, 4.9, 6.2, 6.3, 6.4, 6.7_
+  - _Boundary: Interaction security validation_
+- [ ] 5.6 最大10イベントと遅い reply で2秒同期契約を検証する
+  - 1・5・10 event の signed request を View 入口から response 生成まで測定し、cached graph を含む fast path と query budget を検証する
+  - fake clock で先行 reply の消費時間を進め、残件ごとの local／finalize と response 予約後に予算不足なら新しい reply を開始しないことを確認する
+  - controlled loopback slow transport で full request が2秒未満に unknown／failed receipt／reply一回／background taskなしへ収束することを観測する
+  - action handler を含む local portion と既存 friendship handler が各性能契約を守り、HTTP response 後の queue／worker／遅延実行がないことを検証する
+  - _Depends: 5.1_
+  - _Requirements: 2.9, 5.5, 7.1, 7.2, 7.3, 7.4, 7.5_
+  - _Boundary: Webhook interaction performance validation_

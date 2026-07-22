@@ -117,8 +117,9 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
 
 - Read and apply `.kiro/steering/spec-sizing.md` when it exists.
 - Count executable task checkboxes in the draft. Exclude major headings that only group child tasks; include implementation, setup, migration, integration, and test tasks.
-- If the draft contains 20 or more executable tasks, return `SPLIT_REQUIRED` by default and stop without writing `tasks.md`.
-- Also return `SPLIT_REQUIRED` when multiple independently deliverable responsibility seams or repeated cross-boundary integrations are visible, even below 20 tasks.
+- If the draft contains 40 or more executable tasks, return `SPLIT_REQUIRED` by default and stop without writing `tasks.md`.
+- Treat 30-39 executable tasks as a review-attention band. Keep internal workstreams, dependencies, integration points, and validation tasks explicit; allow `PASS (single-spec)` when the review gate and independent task-graph sanity review converge.
+- Do not return `SPLIT_REQUIRED` below 40 for multiple responsibility seams alone. Require the compound boundary-risk or bounded review-instability evidence defined in `spec-sizing.md`.
 - Report the actual count, independent seams, and a proposed roadmap split. Do not merge unrelated outcomes, enlarge tasks beyond 1-3 hours, omit validation, or hide prerequisites merely to fall below the threshold.
 - Continue only when the verdict is `PASS (single-spec)`, or when the user has explicitly accepted and recorded the exception required by `spec-sizing.md`.
 
@@ -146,6 +147,7 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
 - Run the review gate on the draft task plan before writing `tasks.md`.
 - If issues are task-plan-local, repair the draft and re-run the review gate.
 - Keep the loop bounded: no more than 2 review-and-repair passes before escalating a real spec gap.
+- If the same structural task-graph problem remains at the repair limit because the plan cannot be reviewed coherently as one unit, return `SPLIT_REQUIRED` rather than extending the loop.
 - Write `tasks.md` only after the review gate passes.
 
 ### Optional Test Coverage Tasks

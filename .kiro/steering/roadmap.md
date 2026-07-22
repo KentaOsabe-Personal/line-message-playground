@@ -40,7 +40,7 @@ LINE Message Playground を、固定設定の自分宛て配信から、LIFF／L
 - **Verdict**: SPLIT_REQUIRED
 - **Projected executable tasks before split**: 25〜31件（公開受付、migration、競合・再送、状態遷移、外部reply、統合・セキュリティテスト、運用文書を含む）
 - **Independent responsibility seams**: 4（チャネル選択・署名／destination検証、イベント台帳・重複排除、follow／unfollow状態同期、message／postback dispatchと即時reply）
-- **Rationale**: 20件以上の停止基準を超え、セキュリティ受付、既存recipientの状態機械、外部replyという独立提供・変更・レビュー可能な成果を複数含むため、単一specを継続しない
+- **Rationale**: 件数は現在の40件基準未満だが、4つの独立成果に加えて複数の状態／外部作用workflow、上流・下流責任の同居、反復する境界横断統合という複合リスクがあるため、単一レビュー範囲ではなく分割を維持する
 
 ## Direct Implementation Prerequisite
 

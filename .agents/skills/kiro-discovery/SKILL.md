@@ -48,7 +48,7 @@ Based on the user's request and the metadata from Step 1, determine which path a
 - The Spec Size Assessment returns `PASS (single-spec)`
 
 **Path D: Multi-scope decomposition needed**
-- The request spans multiple independently deliverable responsibility seams, would produce 20+ executable tasks in a single spec, or otherwise returns `SPLIT_REQUIRED` under `spec-sizing.md`
+- The request would produce 40+ executable tasks in a single spec, has the compound boundary-risk signals defined by `spec-sizing.md`, or otherwise returns `SPLIT_REQUIRED` because a bounded review scope is unlikely to converge
 
 **Path E: Mixed decomposition**
 - The request contains a mix of: existing spec extensions, one or more new spec candidates, and optional direct-implementation work
