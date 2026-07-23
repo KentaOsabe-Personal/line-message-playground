@@ -5,7 +5,11 @@ from uuid import UUID
 
 from lineaccounts.types import LineSubject
 from linewebhooks.handlers import VerifiedEventHandler
-from linewebhooks.types import HandlerOutcome, VerifiedWebhookEvent
+from linewebhooks.types import (
+    HandlerExecutionContext,
+    HandlerOutcome,
+    VerifiedWebhookEvent,
+)
 
 
 FriendshipState: TypeAlias = Literal["friend", "not_friend"]
@@ -149,7 +153,11 @@ class FriendshipEventParser(Protocol):
 
 @runtime_checkable
 class FriendshipSyncHandler(VerifiedEventHandler, Protocol):
-    def handle(self, event: VerifiedWebhookEvent) -> HandlerOutcome: ...
+    def handle(
+        self,
+        event: VerifiedWebhookEvent,
+        context: HandlerExecutionContext,
+    ) -> HandlerOutcome: ...
 
 
 @runtime_checkable

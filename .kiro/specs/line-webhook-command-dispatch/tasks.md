@@ -1,33 +1,33 @@
 # Implementation Plan
 
-- [ ] 1. Webhook の実行予算と一回実行権を拡張する
-- [ ] 1.1 handler 実行コンテキストと実行プロファイルを確立する
+- [x] 1. Webhook の実行予算と一回実行権を拡張する
+- [x] 1.1 handler 実行コンテキストと実行プロファイルを確立する
   - request 全体の絶対期限、dispatch 位置、残件数、外部 I/O cutoff を有限で不変な値として handler へ渡せるようにする
   - local と deadline-managed external の有限な実行プロファイルを静的 registry の登録契約へ追加し、欠落・未知値・重複 event type を拒否する
   - 既存 friendship handler を context-aware 契約へ合わせ、外部通信を行わない local handler の振る舞いを維持する
   - handler 登録と既存 projection の契約テストで、新しい context が全登録先へ一貫して渡ることを確認できる
   - _Requirements: 2.9, 7.1, 7.2, 7.3_
   - _Boundary: Webhook Execution Contract_
-- [ ] 1.2 未開始イベントの期限超過を receipt と安全な監査へ確定する
+- [x] 1.2 未開始イベントの期限超過を receipt と安全な監査へ確定する
   - handler を開始できなかった event 専用の期限超過分類を receipt の状態制約と安全な監査許可リストへ追加する
   - 初回実行権を得た processing receipt だけを条件付きで期限超過へ finalize し、既存の一般的な handler failure と区別する
   - migration、model、repository、audit の整合を検証し、期限超過後の再送では handler が再実行されない状態を観測できる
   - _Requirements: 5.7, 6.1, 6.2, 6.6, 7.3_
   - _Boundary: Dispatch deadline finalization_
-- [ ] 1.3 View 入口から始まる absolute deadline と起動時キャッシュを導入する
+- [x] 1.3 View 入口から始まる absolute deadline と起動時キャッシュを導入する
   - body、header、service 取得より前に共有 monotonic clock で request 開始を採取し、HTTP response までの2秒期限を一度だけ確立する
   - service graph を起動時に副作用なく構築・検証して process 内へ保持し、request ごとの再構築を行わない
   - View と service provider のテストで、cached service の取得時間を含む同一 clock domain の期限が下流へ伝播することを確認できる
   - _Requirements: 7.1, 7.3_
   - _Boundary: Webhook request deadline_
-- [ ] 1.4 dispatch 予算配分と期限超過確定を統合する
+- [x] 1.4 dispatch 予算配分と期限超過確定を統合する
   - 残る local 処理、receipt finalize、HTTP response の予約時間から event ごとの外部 I/O cutoff を計算する
   - 予約時間を満たせなくなった時点で dispatch を閉じ、現在以降の未開始 handler を呼ばず専用の期限超過へ確定する
   - 一つの request 内で deadline、dispatch index、残件数が一貫して変化し、dispatch 閉鎖後に新しい作用が始まらないことを決定的な clock テストで観測できる
   - _Depends: 1.1, 1.2, 1.3_
   - _Requirements: 6.1, 6.6, 7.1, 7.2, 7.3, 7.5_
   - _Boundary: Webhook deadline-dispatch integration_
-- [ ] 1.5 既存 Webhook 経路の回帰・重複・性能契約を再検証する
+- [x] 1.5 既存 Webhook 経路の回帰・重複・性能契約を再検証する
   - follow、unfollow、empty、unsupported、handler failure が context 拡張後も既存の HTTP／receipt 結果を維持することを検証する
   - 同一 event の再送・並行受付が既存 receipt の初回結果へ収束し、handler が一回だけ実行されることを確認する
   - 1・5・10 event の request で期限伝播、query 増加、dispatch 閉鎖を測定し、既存の2秒契約を満たす結果を観測できる

@@ -15,6 +15,7 @@ from linechannels.types import AccessToken, ChannelSecret, CredentialContext
 from linefriendships.services import DefaultFriendshipSyncService
 from linewebhooks.audit import SafeWebhookAuditLogger
 from linewebhooks.container import build_webhook_ingress_service
+from linewebhooks.container import get_webhook_ingress_service
 from linewebhooks.handlers import StaticHandlerRegistry
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.repositories import DjangoEventReceiptRepository
@@ -23,6 +24,14 @@ from linewebhooks.verification import RawSignatureVerifier, WebhookPayloadValida
 
 
 class WebhookCompositionRootTests(SimpleTestCase):
+    # テストケース: startupで構築済みのWebhook serviceを二度取得する
+    # 期待値: requestごとに再構築せずprocess内の同一instanceを返す
+    def test_returns_one_startup_cached_service_instance(self) -> None:
+        self.assertIs(
+            get_webhook_ingress_service(),
+            get_webhook_ingress_service(),
+        )
+
     # テストケース: Webhook ingress serviceをcomposition rootから構築する
     # 期待値: follow/unfollowだけに同一の友だち同期handlerが登録される
     def test_builds_service_with_friendship_handler_for_follow_and_unfollow(self) -> None:
@@ -41,10 +50,16 @@ class WebhookCompositionRootTests(SimpleTestCase):
             DjangoEventReceiptRepository,
         )
         self.assertIsInstance(service._registry, StaticHandlerRegistry)
-        follow_handler = service._registry.resolve("follow")
-        unfollow_handler = service._registry.resolve("unfollow")
+        follow_registration = service._registry.resolve("follow")
+        unfollow_registration = service._registry.resolve("unfollow")
+        assert follow_registration is not None
+        assert unfollow_registration is not None
+        follow_handler = follow_registration.handler
+        unfollow_handler = unfollow_registration.handler
         self.assertIsInstance(follow_handler, DefaultFriendshipSyncService)
         self.assertIs(follow_handler, unfollow_handler)
+        self.assertEqual(follow_registration.execution_profile, "local")
+        self.assertEqual(unfollow_registration.execution_profile, "local")
         self.assertIsNone(service._registry.resolve("message"))
         self.assertIsInstance(service._audit_logger, SafeWebhookAuditLogger)
         self.assertIs(service._monotonic_clock, monotonic)

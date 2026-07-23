@@ -88,12 +88,20 @@ class WebhookEventReceiptTests(TestCase):
                 failure_code=WebhookEventReceipt.FailureCode.HANDLER_FAILED,
                 completed_at=completed_at,
             ),
+            self._values(
+                webhook_event_id="01ARZ3NDEKTSV4RRFFQ69G5FAZ",
+                status=WebhookEventReceipt.Status.FAILED,
+                failure_code=(
+                    WebhookEventReceipt.FailureCode.DISPATCH_DEADLINE_EXCEEDED
+                ),
+                completed_at=completed_at,
+            ),
         )
 
         for values in rows:
             WebhookEventReceipt.objects.create(**values)
 
-        self.assertEqual(WebhookEventReceipt.objects.count(), 4)
+        self.assertEqual(WebhookEventReceipt.objects.count(), 5)
 
     # テストケース: status と完了時刻・失敗分類が矛盾する行を保存する
     # 期待値: 各不正な状態組合せを DB CHECK 制約が拒否する

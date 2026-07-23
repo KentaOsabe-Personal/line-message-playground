@@ -15,7 +15,9 @@ from linechannels.models import LineChannel, LineChannelCredential
 from linechannels.types import AccessToken, ChannelSecret, CredentialContext
 from linefriendships.models import FriendshipSyncAudit
 from linefriendships.repositories import DjangoFriendshipAuditRepository
+from linewebhooks.container import get_webhook_ingress_service
 from linewebhooks.models import WebhookEventReceipt
+from linewebhooks.types import HandlerExecutionContext
 
 
 class SignedFriendshipProjectionIntegrationTests(TestCase):
@@ -458,3 +460,49 @@ class SignedFriendshipProjectionIntegrationTests(TestCase):
             ["applied", "state_maintained"],
         )
         self.assertEqual(DeliveryAttempt.objects.count(), 0)
+
+    # テストケース: production登録のfollowとunfollowを署名済みrequestから処理する
+    # 期待値: 同じlocal friendship handlerへ各requestのfinite execution contextを一度ずつ渡す
+    def test_follow_and_unfollow_registrations_receive_execution_context(
+        self,
+    ) -> None:
+        service = get_webhook_ingress_service()
+        follow_registration = service._registry.resolve("follow")
+        unfollow_registration = service._registry.resolve("unfollow")
+        assert follow_registration is not None
+        assert unfollow_registration is not None
+        self.assertIs(follow_registration.handler, unfollow_registration.handler)
+        self.assertEqual(follow_registration.execution_profile, "local")
+        self.assertEqual(unfollow_registration.execution_profile, "local")
+        handler = follow_registration.handler
+        original_handle = handler.handle
+        contexts: list[HandlerExecutionContext] = []
+
+        def capture_context(
+            event: object,
+            context: HandlerExecutionContext,
+        ) -> object:
+            contexts.append(context)
+            return original_handle(event, context)  # type: ignore[arg-type]
+
+        with patch.object(handler, "handle", side_effect=capture_context):
+            follow = self._post(
+                event_type="follow",
+                event_id="01ARZ3NDEKTSV4RRFFQ69G5FCA",
+                occurred_at_ms=self._after_registration(1),
+                follow={"isUnblocked": False},
+            )
+            unfollow = self._post(
+                event_type="unfollow",
+                event_id="01ARZ3NDEKTSV4RRFFQ69G5FCB",
+                occurred_at_ms=self._after_registration(2),
+            )
+
+        self.assertEqual(follow.status_code, 200)
+        self.assertEqual(unfollow.status_code, 200)
+        self.assertEqual(len(contexts), 2)
+        for context in contexts:
+            self.assertGreater(context.response_deadline_monotonic, 0)
+            self.assertEqual(context.dispatch_index, 0)
+            self.assertEqual(context.remaining_dispatch_count, 0)
+            self.assertIsNone(context.external_io_deadline_monotonic)

@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, TypeAlias
+from math import isfinite
+from typing import TYPE_CHECKING, Literal, TypeAlias
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from .handlers import VerifiedEventHandler
 
 
 FrozenJsonScalar: TypeAlias = str | int | float | bool | None
@@ -109,6 +115,65 @@ class HandlerFailed:
 
 
 HandlerOutcome: TypeAlias = HandlerSucceeded | HandlerFailed
+HandlerExecutionProfile: TypeAlias = Literal[
+    "local", "deadline_managed_external"
+]
+
+
+@dataclass(frozen=True, slots=True)
+class HandlerExecutionContext:
+    response_deadline_monotonic: float
+    dispatch_index: int
+    remaining_dispatch_count: int
+    external_io_deadline_monotonic: float | None
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.response_deadline_monotonic, (int, float))
+            or isinstance(self.response_deadline_monotonic, bool)
+            or not isfinite(self.response_deadline_monotonic)
+            or self.response_deadline_monotonic <= 0
+        ):
+            raise ValueError("invalid response deadline")
+        if (
+            type(self.dispatch_index) is not int
+            or not 0 <= self.dispatch_index <= 9
+        ):
+            raise ValueError("invalid dispatch index")
+        if (
+            type(self.remaining_dispatch_count) is not int
+            or not 0 <= self.remaining_dispatch_count <= 9
+        ):
+            raise ValueError("invalid remaining dispatch count")
+        cutoff = self.external_io_deadline_monotonic
+        if cutoff is None:
+            return
+        if (
+            not isinstance(cutoff, (int, float))
+            or isinstance(cutoff, bool)
+            or not isfinite(cutoff)
+            or cutoff <= 0
+            or cutoff > self.response_deadline_monotonic
+        ):
+            raise ValueError("invalid external I/O deadline")
+
+
+@dataclass(frozen=True, slots=True)
+class HandlerRegistration:
+    event_type: str
+    handler: VerifiedEventHandler
+    execution_profile: HandlerExecutionProfile
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.event_type, str) or not self.event_type:
+            raise ValueError("invalid event type registration")
+        if not callable(getattr(self.handler, "handle", None)):
+            raise ValueError("invalid event handler")
+        if self.execution_profile not in (
+            "local",
+            "deadline_managed_external",
+        ):
+            raise ValueError("unknown handler execution profile")
 
 IngressFailureCode: TypeAlias = Literal[
     "channel_unavailable",
@@ -170,9 +235,24 @@ AuditOutcome: TypeAlias = Literal[
     "event_unsupported",
     "handler_processed",
     "handler_failed",
+    "dispatch_deadline_exceeded",
     "storage_unavailable",
     "response_deadline_exceeded",
 ]
+_AUDIT_OUTCOMES = {
+    "channel_rejected",
+    "signature_rejected",
+    "payload_rejected",
+    "empty_accepted",
+    "event_accepted",
+    "event_duplicate",
+    "event_unsupported",
+    "handler_processed",
+    "handler_failed",
+    "dispatch_deadline_exceeded",
+    "storage_unavailable",
+    "response_deadline_exceeded",
+}
 
 
 @dataclass(frozen=True)
@@ -185,6 +265,14 @@ class WebhookAuditEntry:
     elapsed_ms: int | None = None
 
     def __post_init__(self) -> None:
+        if self.outcome not in _AUDIT_OUTCOMES:
+            raise ValueError("invalid webhook audit outcome")
+        if self.outcome == "dispatch_deadline_exceeded" and (
+            self.channel_public_id is None
+            or self.webhook_event_id is None
+            or self.event_type is None
+        ):
+            raise ValueError("dispatch deadline audit requires event metadata")
         if self.outcome == "response_deadline_exceeded":
             if type(self.elapsed_ms) is not int or self.elapsed_ms < 0:
                 raise ValueError("deadline audit requires non-negative elapsed_ms")
