@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "lineaccounts.apps.LineAccountsConfig",
     "linefriendships.apps.LineFriendshipsConfig",
     "linewebhooks.apps.LineWebhooksConfig",
+    "lineinteractions.apps.LineInteractionsConfig",
 ]
 
 MIDDLEWARE = [

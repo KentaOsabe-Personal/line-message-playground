@@ -34,8 +34,8 @@
   - _Requirements: 2.9, 5.7, 7.1, 7.3, 7.5_
   - _Boundary: Webhook Execution Contract validation_
 
-- [ ] 2. Interaction の安全な入力・照合・許可リスト・監査基盤を作る
-- [ ] 2.1 interaction app と共有される安全な値・port・結果契約を確立する
+- [x] 2. Interaction の安全な入力・照合・許可リスト・監査基盤を作る
+- [x] 2.1 interaction app と共有される安全な値・port・結果契約を確立する
   - 新しい Backend 機能領域を runtime と migration discovery に登録し、後続 component を配置できる最小構成を整える
   - reply token、LINE subject、opaque payload、access token を不変・非 serializable・redacted な用途限定値として表現する
   - parser の結果 union、channel／linked user projection と account directory port、command／action handler port、reply 結果、audit record／repository port、handler outcome を後続実装より先に共有契約として確定する
@@ -43,7 +43,7 @@
   - import、repr、serialization の契約テストで秘密値が観測可能な表現へ露出せず、app と全共有契約が Django から読み込まれることを確認できる
   - _Requirements: 1.4, 2.2, 2.3, 2.7, 4.7, 6.3, 6.4_
   - _Boundary: Interaction domain foundation_
-- [ ] 2.2 (P) event 固有入力を安全な interaction へ変換する
+- [x] 2.2 (P) event 固有入力を安全な interaction へ変換する
   - verified event から message／postback と user source だけを受理し、欠落・不正と group／room を別分類にする
   - reply token、text、postback data を UTF-16 code unit で検証し、補助平面文字、lone surrogate、各境界値を安全に扱う
   - versioned postback envelope は最初の2区切りだけを読み、safe action name と decode しない opaque payload へ分離する
@@ -52,14 +52,14 @@
   - _Depends: 2.1_
   - _Requirements: 3.1, 3.3, 3.4, 3.6, 3.7, 4.2, 4.3, 4.4, 4.7_
   - _Boundary: InteractionParser_
-- [ ] 2.3 (P) 既存の連携済み利用者を read-only で完全一致照合する
+- [x] 2.3 (P) 既存の連携済み利用者を read-only で完全一致照合する
   - active owner、同一 provider の identity、対象 channel の既存 recipient がすべて一致した場合だけ安全な公開識別子を返す
   - inactive、provider 不一致、subject 不一致、recipient 不在を missing とし、作成・更新・lock を行わない
   - account adapter の統合テストで全一致だけが成功し、各 mismatch 後も identity／owner／recipient 件数が変わらないことを確認できる
   - _Depends: 2.1_
   - _Requirements: 3.2, 3.5_
   - _Boundary: InteractionAccountDirectory_
-- [ ] 2.4 (P) command と postback action の静的 registry を構築する
+- [x] 2.4 (P) command と postback action の静的 registry を構築する
   - `/ping` を `connectivity_ping_v1` と固定 reply `pong` へ完全一致で解決する有限 command registry を作る
   - action 名を一つの handler へ結ぶ immutable registry を作り、unsafe 名と重複登録を起動前エラーとして拒否する
   - trim、case fold、Unicode normalize、部分一致、動的 import、URL、SQL、path 解決を行わず、未知候補を正常な未解決へする
@@ -69,7 +69,7 @@
   - _Depends: 2.1_
   - _Requirements: 1.1, 1.6, 2.1, 2.2, 2.4, 2.6, 2.7, 2.8, 2.9, 4.1, 4.5, 4.6, 4.8, 4.9_
   - _Boundary: CommandRegistry, PostbackActionRegistry_
-- [ ] 2.5 (P) PII-free な interaction 監査を永続化する
+- [x] 2.5 (P) PII-free な interaction 監査を永続化する
   - event ごとに channel の不透明識別子、event ID、event type、許可済み operation ID、安全な interaction／reply 結果だけを一件保存する
   - ingress receipt とは event ID だけで論理相関し、cross-app FK や identity／recipient 参照を作らない
   - valid な結果組合せだけを許す database 制約、一意性、運用確認用 index を migration と model へ反映する
