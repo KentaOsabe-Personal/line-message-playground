@@ -135,8 +135,8 @@
   - _Requirements: 1.1, 1.3, 1.6, 1.7, 2.1, 2.3, 2.4, 2.5, 3.5, 4.6, 4.9, 5.1, 5.3, 5.4, 5.5, 5.6, 6.1, 6.4, 6.5, 6.6, 7.2, 7.3, 7.4_
   - _Boundary: InteractionService validation_
 
-- [ ] 5. Runtime 統合と横断的な安全性を検証する
-- [ ] 5.1 interaction handler を Webhook composition root へ静的登録する
+- [x] 5. Runtime 統合と横断的な安全性を検証する
+- [x] 5.1 interaction handler を Webhook composition root へ静的登録する
   - 一つの interaction handler instance を message／postback の両 event type へ deadline-managed external profile で登録する
   - friendship の local profile と shared monotonic clock を維持し、interaction の concrete dependencies と空の production action registry を合成する
   - startup で graph を一度だけ構築・cacheし、重複 event／unsafe・重複 action registration を request 受付前に fail closed にする
@@ -144,28 +144,28 @@
   - _Depends: 1.5, 4.5_
   - _Requirements: 2.6, 2.9, 3.6, 4.1, 7.1, 7.5_
   - _Boundary: InteractionContainer–Webhook composition integration_
-- [ ] 5.2 signed message から固定 reply と監査までを統合検証する
+- [x] 5.2 signed message から固定 reply と監査までを統合検証する
   - 署名済み message を View、receipt、interaction、same-channel fake reply、audit、HTTP response まで通す
   - `/ping` だけが `pong` 一件を一回 reply し、未知 command と未連携利用者は外部作用なしの正常 no-op、資格情報不在は reply 未開始の安全な failure になることを個別に確認する
   - accepted／rejected／unknown と receipt／audit／HTTP 結果の対応を検証し、同じ token や別 channel credential が使われないことを観測できる
   - _Depends: 5.1_
   - _Requirements: 1.1, 1.2, 1.3, 1.5, 1.6, 1.7, 3.2, 3.5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.8, 6.1, 6.2, 6.5, 6.6, 7.1, 7.2, 7.3, 7.4_
   - _Boundary: Signed message integration_
-- [ ] 5.3 signed postback から action 結果までを統合検証する
+- [x] 5.3 signed postback から action 結果までを統合検証する
   - 署名済み postback を linked user と fake action handler へ通し、4結果を receipt／interaction audit／HTTP 結果へ確定する
   - 未登録、malformed、未連携、group／room、unsafe action では handler、reply、業務 mutation が発生しないことを確認する
   - 新しい fake action registration 後も固定 command、未知入力、reply token 一回利用の契約が変わらないことを観測できる
   - _Depends: 5.1_
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.3, 3.4, 3.5, 4.1, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 6.1, 6.5, 6.6_
   - _Boundary: Signed postback integration_
-- [ ] 5.4 redelivery・並行受付・失敗窓で一回実行へ収束することを検証する
+- [x] 5.4 redelivery・並行受付・失敗窓で一回実行へ収束することを検証する
   - 同一 event ID を独立 DB connection から並行受付し、receipt 一件、reply または action 一回、interaction audit 一件へ収束させる
   - reply accepted 後の audit failure と handler return 後の receipt finalize failure を注入し、再送でも外部作用を再実行しないことを確認する
   - action handler の業務状態競合でも dispatcher は一回だけ委譲し、業務冪等性を推測しない結果を観測できる
   - _Depends: 5.1_
   - _Requirements: 2.1, 2.5, 2.7, 2.8, 5.1, 5.6, 5.7_
   - _Boundary: Interaction concurrency and recovery validation_
-- [ ] 5.5 禁止データ非露出と静的振り分けを横断検証する
+- [x] 5.5 禁止データ非露出と静的振り分けを横断検証する
   - text、postback data／payload、reply token、LINE user ID、access token、Authorization、生 response、生 exception の canary を全境界へ流す
   - repr、log、audit、receipt、HTTP response に canary がなく、安全な分類と不透明 ID だけが残ることを確認する
   - SQL、URL、module、file path、Unicode confusable、prefix 候補が静的完全一致 registry 以外を呼ばないことを検証する
@@ -173,7 +173,7 @@
   - _Depends: 5.1_
   - _Requirements: 1.4, 1.5, 1.7, 4.5, 4.8, 4.9, 6.2, 6.3, 6.4, 6.7_
   - _Boundary: Interaction security validation_
-- [ ] 5.6 最大10イベントと遅い reply で2秒同期契約を検証する
+- [x] 5.6 最大10イベントと遅い reply で2秒同期契約を検証する
   - 1・5・10 event の signed request を View 入口から response 生成まで測定し、cached graph を含む fast path と query budget を検証する
   - fake clock で先行 reply の消費時間を進め、残件ごとの local／finalize と response 予約後に予算不足なら新しい reply を開始しないことを確認する
   - controlled loopback slow transport で full request が2秒未満に unknown／failed receipt／reply一回／background taskなしへ収束することを観測する

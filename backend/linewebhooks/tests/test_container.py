@@ -13,6 +13,7 @@ from linechannels.models import LineChannel, LineChannelCredential
 from linechannels.repositories import DjangoWebhookCredentialRepository
 from linechannels.types import AccessToken, ChannelSecret, CredentialContext
 from linefriendships.services import DefaultFriendshipSyncService
+from lineinteractions.services import DefaultInteractionService
 from linewebhooks.audit import SafeWebhookAuditLogger
 from linewebhooks.container import build_webhook_ingress_service
 from linewebhooks.container import get_webhook_ingress_service
@@ -33,8 +34,8 @@ class WebhookCompositionRootTests(SimpleTestCase):
         )
 
     # テストケース: Webhook ingress serviceをcomposition rootから構築する
-    # 期待値: follow/unfollowだけに同一の友だち同期handlerが登録される
-    def test_builds_service_with_friendship_handler_for_follow_and_unfollow(self) -> None:
+    # 期待値: friendshipとinteractionがprofile付きで静的登録される
+    def test_builds_service_with_static_runtime_handlers(self) -> None:
         runtime.load_credential_keyring()
         service = build_webhook_ingress_service()
 
@@ -60,7 +61,30 @@ class WebhookCompositionRootTests(SimpleTestCase):
         self.assertIs(follow_handler, unfollow_handler)
         self.assertEqual(follow_registration.execution_profile, "local")
         self.assertEqual(unfollow_registration.execution_profile, "local")
-        self.assertIsNone(service._registry.resolve("message"))
+        message_registration = service._registry.resolve("message")
+        postback_registration = service._registry.resolve("postback")
+        assert message_registration is not None
+        assert postback_registration is not None
+        self.assertIsInstance(
+            message_registration.handler,
+            DefaultInteractionService,
+        )
+        self.assertIs(
+            message_registration.handler,
+            postback_registration.handler,
+        )
+        self.assertEqual(
+            message_registration.execution_profile,
+            "deadline_managed_external",
+        )
+        self.assertEqual(
+            postback_registration.execution_profile,
+            "deadline_managed_external",
+        )
+        self.assertIs(
+            message_registration.handler._monotonic,
+            service._monotonic_clock,
+        )
         self.assertIsInstance(service._audit_logger, SafeWebhookAuditLogger)
         self.assertIs(service._monotonic_clock, monotonic)
         self.assertIs(service._observed_at_clock, timezone.now)
