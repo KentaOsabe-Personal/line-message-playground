@@ -11,6 +11,10 @@ class WebhookEventReceipt(models.Model):
 
     class FailureCode(models.TextChoices):
         HANDLER_FAILED = "handler_failed", "Handler failed"
+        DISPATCH_DEADLINE_EXCEEDED = (
+            "dispatch_deadline_exceeded",
+            "Dispatch deadline exceeded",
+        )
 
     webhook_event_id = models.CharField(max_length=26, unique=True)
     channel_public_id = models.UUIDField()
@@ -56,7 +60,10 @@ class WebhookEventReceipt(models.Model):
                         status="failed",
                         completed_at__isnull=False,
                         failure_code__isnull=False,
-                        failure_code="handler_failed",
+                        failure_code__in=(
+                            "handler_failed",
+                            "dispatch_deadline_exceeded",
+                        ),
                     )
                 ),
                 name="linewh_receipt_status_consistent",

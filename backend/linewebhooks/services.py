@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from datetime import datetime
+from math import isfinite
 from time import monotonic
 from uuid import UUID
 
@@ -9,6 +10,8 @@ from linechannels.types import WebhookChannelAvailable
 
 from .types import (
     HandlerSucceeded,
+    HandlerExecutionContext,
+    HandlerRegistration,
     IngressAccepted,
     IngressRejected,
     IngressResult,
@@ -24,6 +27,9 @@ from .types import (
 
 
 _DEADLINE_SECONDS = 2.0
+_LOCAL_HANDLER_RESERVE_SECONDS = 0.1
+_RECEIPT_FINALIZE_RESERVE_SECONDS = 0.02
+_HTTP_RESPONSE_RESERVE_SECONDS = 0.2
 
 
 class WebhookIngressService:
@@ -53,8 +59,22 @@ class WebhookIngressService:
         channel_public_key: str,
         raw_body: bytes,
         signature: str | None,
+        *,
+        request_started_at_monotonic: float | None = None,
     ) -> IngressResult:
-        started_at = self._monotonic_clock()
+        started_at = (
+            self._monotonic_clock()
+            if request_started_at_monotonic is None
+            else request_started_at_monotonic
+        )
+        if (
+            not isinstance(started_at, (int, float))
+            or isinstance(started_at, bool)
+            or not isfinite(started_at)
+            or started_at <= 0
+        ):
+            return IngressRejected(code="unexpected")
+        response_deadline = started_at + _DEADLINE_SECONDS
         channel_public_id: UUID | None = None
         try:
             channel_public_id = self._canonical_uuid4(channel_public_key)
@@ -90,13 +110,21 @@ class WebhookIngressService:
                 self._audit("empty_accepted", channel_public_id=channel_public_id)
                 return IngressAccepted()
 
-            handlers = tuple(
+            registrations = tuple(
                 self._registry.resolve(event.event_type)  # type: ignore[attr-defined]
                 for event in payload.events
             )
             candidates = tuple(
-                self._candidate(channel_public_id, event, handler is not None)
-                for event, handler in zip(payload.events, handlers, strict=True)
+                self._candidate(
+                    channel_public_id,
+                    event,
+                    registration is not None,
+                )
+                for event, registration in zip(
+                    payload.events,
+                    registrations,
+                    strict=True,
+                )
             )
             decisions = self._receipt_repository.accept_batch(candidates)  # type: ignore[attr-defined]
             if isinstance(decisions, ReceiptStorageFailed) or not self._valid_decisions(
@@ -108,8 +136,9 @@ class WebhookIngressService:
             storage_failed = self._dispatch(
                 channel_public_id,
                 payload.events,
-                handlers,
+                registrations,
                 decisions,
+                response_deadline,
             )
             if storage_failed:
                 return IngressRejected(code="storage_unavailable")
@@ -169,31 +198,95 @@ class WebhookIngressService:
         self,
         channel_public_id: UUID,
         events: tuple[VerifiedEventData, ...],
-        handlers: tuple[object | None, ...],
+        registrations: tuple[object | None, ...],
         decisions: tuple[ReceiptDecision, ...],
+        response_deadline: float,
     ) -> bool:
         storage_failed = False
-        for event, handler, decision in zip(
-            events,
-            handlers,
-            decisions,
-            strict=True,
+        dispatch_closed = False
+        dispatch_index = 0
+        dispatchable = tuple(
+            isinstance(registration, HandlerRegistration)
+            and decision.created
+            and decision.status == "processing"
+            for registration, decision in zip(
+                registrations,
+                decisions,
+                strict=True,
+            )
+        )
+        for position, (event, registration, decision) in enumerate(
+            zip(events, registrations, decisions, strict=True)
         ):
             if not decision.created:
                 self._audit_event("event_duplicate", channel_public_id, event)
                 continue
-            if decision.status == "unsupported" or handler is None:
+            if decision.status == "unsupported" or registration is None:
                 self._audit_event("event_unsupported", channel_public_id, event)
                 continue
             if decision.status != "processing":
                 self._audit_event("event_duplicate", channel_public_id, event)
                 continue
+            if not isinstance(registration, HandlerRegistration):
+                storage_failed = True
+                self._audit_event("storage_unavailable", channel_public_id, event)
+                continue
+
+            remaining_dispatch_count = sum(dispatchable[position + 1 :])
+            pending_dispatch_count = remaining_dispatch_count + 1
+            if not dispatch_closed:
+                required_reserve = (
+                    pending_dispatch_count * _LOCAL_HANDLER_RESERVE_SECONDS
+                    + pending_dispatch_count
+                    * _RECEIPT_FINALIZE_RESERVE_SECONDS
+                    + _HTTP_RESPONSE_RESERVE_SECONDS
+                )
+                dispatch_closed = (
+                    self._monotonic_clock() + required_reserve
+                    > response_deadline
+                )
+            if dispatch_closed:
+                finalization = self._receipt_repository.mark_failed(  # type: ignore[attr-defined]
+                    decision.receipt_id,
+                    "dispatch_deadline_exceeded",
+                )
+                self._audit_event(
+                    "dispatch_deadline_exceeded",
+                    channel_public_id,
+                    event,
+                )
+                if finalization == "failed":
+                    storage_failed = True
+                    self._audit_event(
+                        "storage_unavailable",
+                        channel_public_id,
+                        event,
+                    )
+                continue
 
             self._audit_event("event_accepted", channel_public_id, event)
+            external_cutoff = None
+            if registration.execution_profile == "deadline_managed_external":
+                external_cutoff = response_deadline - (
+                    pending_dispatch_count * _LOCAL_HANDLER_RESERVE_SECONDS
+                    + pending_dispatch_count
+                    * _RECEIPT_FINALIZE_RESERVE_SECONDS
+                    + _HTTP_RESPONSE_RESERVE_SECONDS
+                )
+            context = HandlerExecutionContext(
+                response_deadline_monotonic=response_deadline,
+                dispatch_index=dispatch_index,
+                remaining_dispatch_count=remaining_dispatch_count,
+                external_io_deadline_monotonic=external_cutoff,
+            )
             try:
-                outcome = handler.handle(self._envelope(channel_public_id, event))  # type: ignore[attr-defined]
+                outcome = registration.handler.handle(  # type: ignore[attr-defined]
+                    self._envelope(channel_public_id, event),
+                    context,
+                )
             except Exception:
                 outcome = None
+            dispatch_index += 1
 
             if isinstance(outcome, HandlerSucceeded):
                 finalization = self._receipt_repository.mark_processed(  # type: ignore[attr-defined]

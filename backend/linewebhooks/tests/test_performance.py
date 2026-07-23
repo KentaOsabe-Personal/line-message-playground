@@ -70,6 +70,31 @@ class WebhookPerformanceIntegrationTests(TransactionTestCase):
                 self.assertLess(elapsed_ms, 1500)
                 self.assertLess(elapsed_ms, 2000)
                 self.assertEqual(len(handler.events), event_count)
+                self.assertEqual(
+                    [
+                        context.response_deadline_monotonic
+                        for context in handler.contexts
+                    ],
+                    [handler.contexts[0].response_deadline_monotonic]
+                    * event_count,
+                )
+                self.assertEqual(
+                    [context.dispatch_index for context in handler.contexts],
+                    list(range(event_count)),
+                )
+                self.assertEqual(
+                    [
+                        context.remaining_dispatch_count
+                        for context in handler.contexts
+                    ],
+                    list(reversed(range(event_count))),
+                )
+                self.assertTrue(
+                    all(
+                        context.external_io_deadline_monotonic is None
+                        for context in handler.contexts
+                    )
+                )
                 self.assertEqual(WebhookEventReceipt.objects.count(), event_count)
                 query_counts[event_count] = len(queries)
                 self.assertLessEqual(
@@ -78,6 +103,59 @@ class WebhookPerformanceIntegrationTests(TransactionTestCase):
 
         self.assertEqual(query_counts[5] - query_counts[1], 4 * (5 - 1))
         self.assertEqual(query_counts[10] - query_counts[5], 4 * (10 - 5))
+
+    # テストケース: 10件requestの途中で共有clockを進めてdispatch予算を枯渇させる
+    # 期待値: 以後の8件はhandlerを開始せず専用receipt/auditへ確定し、位置とdeadlineは一貫する
+    def test_ten_event_request_closes_dispatch_after_budget_is_exhausted(
+        self,
+    ) -> None:
+        handler = RecordingHandler()
+        service, audit = build_service(
+            handler=handler,
+            monotonic_clock=_SequenceClock(10.1, 10.2, 10.9, 11.0),
+        )
+        raw_body, signature = signed_payload(
+            [event(item) for item in PERFORMANCE_EVENT_IDS]
+        )
+
+        result = service.ingest(
+            str(CHANNEL_ID),
+            raw_body,
+            signature,
+            request_started_at_monotonic=10.0,
+        )
+
+        self.assertIsInstance(result, IngressAccepted)
+        self.assertEqual(len(handler.events), 2)
+        self.assertEqual(
+            [
+                (
+                    context.response_deadline_monotonic,
+                    context.dispatch_index,
+                    context.remaining_dispatch_count,
+                )
+                for context in handler.contexts
+            ],
+            [(12.0, 0, 9), (12.0, 1, 8)],
+        )
+        self.assertEqual(
+            WebhookEventReceipt.objects.filter(status="processed").count(),
+            2,
+        )
+        self.assertEqual(
+            WebhookEventReceipt.objects.filter(
+                status="failed",
+                failure_code="dispatch_deadline_exceeded",
+            ).count(),
+            8,
+        )
+        self.assertEqual(
+            sum(
+                entry.outcome == "dispatch_deadline_exceeded"
+                for entry in audit.entries
+            ),
+            8,
+        )
 
     # テストケース: empty・duplicate・unsupported pathを標準Backend/MySQL経路で測定する
     # 期待値: 全pathが2,000ms未満の空200で、emptyはqueryなし、duplicateとunsupportedはhandlerを呼ばない

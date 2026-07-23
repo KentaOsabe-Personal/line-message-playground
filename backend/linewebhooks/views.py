@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from time import monotonic
 
 from rest_framework import status
 from rest_framework.response import Response
@@ -8,26 +9,29 @@ from .services import WebhookIngressService
 from .types import IngressAccepted, IngressRejected
 
 
-def _build_service() -> WebhookIngressService:
-    from .container import build_webhook_ingress_service
+def _get_service() -> WebhookIngressService:
+    from .container import get_webhook_ingress_service
 
-    return build_webhook_ingress_service()
+    return get_webhook_ingress_service()
 
 
 class WebhookAPIView(APIView):
     authentication_classes = []
     permission_classes = []
     parser_classes = []
-    service_factory: Callable[[], WebhookIngressService] = staticmethod(_build_service)
+    service_factory: Callable[[], WebhookIngressService] = staticmethod(_get_service)
+    monotonic_clock: Callable[[], float] = staticmethod(monotonic)
 
     def post(self, request: object, channel_public_key: str) -> Response:
         try:
+            request_started_at_monotonic = self.monotonic_clock()
             raw_body = request.body  # type: ignore[attr-defined]
             signature = request.headers.get("X-Line-Signature")  # type: ignore[attr-defined]
             result = self.service_factory().ingest(
                 channel_public_key,
                 raw_body,
                 signature,
+                request_started_at_monotonic=request_started_at_monotonic,
             )
         except Exception:
             return self._unavailable()

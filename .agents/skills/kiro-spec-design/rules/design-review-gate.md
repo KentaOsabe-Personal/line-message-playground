@@ -20,8 +20,9 @@ Before writing `design.md`, review the draft design and repair local issues unti
 
 - Read and apply `.kiro/steering/spec-sizing.md` when it exists.
 - Re-estimate executable 1-3 hour tasks using the concrete components, contracts, state transitions, external integrations, migrations, setup, and testing strategy in the draft.
-- Treat 20+ projected executable tasks as `SPLIT_REQUIRED` by default, even when every requirement is technically traceable.
-- Return `SPLIT_REQUIRED` below that threshold when the design contains multiple responsibility seams that can be delivered, changed, or reviewed independently, multiple independent state/compensation workflows, or repeated cross-boundary integration.
+- Treat 40+ projected executable tasks as `SPLIT_REQUIRED` by default, even when every requirement is technically traceable.
+- Treat 30-39 projected tasks as a review-attention band. Require explicit workstreams, file ownership, contract boundaries, integration order, and validation strategy, then allow `PASS (single-spec)` when bounded review converges.
+- Do not split below 40 for multiple responsibility seams alone. Return `SPLIT_REQUIRED` only when the compound boundary-risk or bounded review-instability criteria in `spec-sizing.md` are present.
 - Record the verdict, projected task range, independent seams, and rationale in `research.md`.
 - A size failure cannot be repaired by hiding components or combining tasks. Stop without writing `design.md` and return to roadmap discovery.
 
@@ -33,7 +34,7 @@ Before writing `design.md`, review the draft design and repair local issues unti
 - If data, behavior, or integration responsibility appears shared across multiple areas without a clear seam, stop and repair the design.
 - If downstream assumptions are embedded in upstream components "for convenience," stop and repair the design.
 - If the boundary cannot be explained in a few direct bullets, it is probably still too vague for task generation.
-- If the design reveals multiple independent responsibility seams that could move separately, stop and split the spec or return to roadmap discovery instead of forcing them into one spec.
+- If the design reveals multiple independent responsibility seams, verify that ownership, dependency order, and explicit integration tasks keep them reviewable as one outcome. Split only when the compound risk criteria apply or the bounded review cannot converge.
 
 ## Executability Review
 
@@ -57,4 +58,5 @@ Before applying judgment, verify these mechanically:
 - Run mechanical checks first, then judgment-based review.
 - If issues are local to the draft, repair the draft and re-run the review gate.
 - Keep the loop bounded: no more than 2 review-and-repair passes before escalating a real spec gap.
+- If the same boundary or executability problem remains at the repair limit because the design is too broad to review coherently, return `SPLIT_REQUIRED` rather than extending the loop.
 - Write `design.md` only after the review gate passes.

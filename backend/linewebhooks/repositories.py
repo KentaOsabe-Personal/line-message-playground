@@ -82,9 +82,12 @@ class DjangoEventReceiptRepository:
     def mark_failed(
         self,
         receipt_id: int,
-        code: Literal["handler_failed"],
+        code: Literal["handler_failed", "dispatch_deadline_exceeded"],
     ) -> FinalizationResult:
-        if code != WebhookEventReceipt.FailureCode.HANDLER_FAILED:
+        if code not in (
+            WebhookEventReceipt.FailureCode.HANDLER_FAILED,
+            WebhookEventReceipt.FailureCode.DISPATCH_DEADLINE_EXCEEDED,
+        ):
             raise ValueError("unsupported receipt failure code")
         return self._finalize(
             receipt_id,

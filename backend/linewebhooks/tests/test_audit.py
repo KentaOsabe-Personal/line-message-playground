@@ -21,6 +21,7 @@ class SafeWebhookAuditLoggerTests(SimpleTestCase):
         "event_unsupported",
         "handler_processed",
         "handler_failed",
+        "dispatch_deadline_exceeded",
         "storage_unavailable",
         "response_deadline_exceeded",
     )

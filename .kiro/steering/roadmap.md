@@ -40,7 +40,7 @@ LINE Message Playground を、固定設定の自分宛て配信から、LIFF／L
 - **Verdict**: SPLIT_REQUIRED
 - **Projected executable tasks before split**: 25〜31件（公開受付、migration、競合・再送、状態遷移、外部reply、統合・セキュリティテスト、運用文書を含む）
 - **Independent responsibility seams**: 4（チャネル選択・署名／destination検証、イベント台帳・重複排除、follow／unfollow状態同期、message／postback dispatchと即時reply）
-- **Rationale**: 20件以上の停止基準を超え、セキュリティ受付、既存recipientの状態機械、外部replyという独立提供・変更・レビュー可能な成果を複数含むため、単一specを継続しない
+- **Rationale**: 件数は現在の40件基準未満だが、4つの独立成果に加えて複数の状態／外部作用workflow、上流・下流責任の同居、反復する境界横断統合という複合リスクがあるため、単一レビュー範囲ではなく分割を維持する
 
 ## Direct Implementation Prerequisite
 
@@ -56,9 +56,9 @@ LINE Message Playground を、固定設定の自分宛て配信から、LIFF／L
 - [x] line-account-linking -- LIFF／LINEログインで本人確認し、LINE identityとチャネル別配信先関係を登録・解除する。Dependencies: line-channel-foundation
 - [x] line-webhook-ingress -- チャネル別Webhookをraw bodyから検証し、destination照合、空イベント疎通、イベント重複排除、安全な受付監査を提供する。Dependencies: line-channel-foundation
 - [x] line-friendship-sync -- 検証済みfollow／unfollowを既存のチャネル別recipientへ時系列どおり反映し、未連携ユーザーを自動登録しない。Dependencies: line-webhook-ingress, line-account-linking
-- [ ] line-webhook-command-dispatch -- 検証済みmessage／postbackを許可リストから処理し、限定replyと後続actionの安全な拡張契約を提供する。Dependencies: line-webhook-ingress, line-channel-foundation, line-account-linking
+- [x] line-webhook-command-dispatch -- 検証済みmessage／postbackを許可リストから処理し、限定replyと後続actionの安全な拡張契約を提供する。Dependencies: line-webhook-ingress, line-channel-foundation, line-account-linking
 - [ ] linked-recipient-delivery -- 登録済みチャネルと配信先を選び、既存の確認・冪等性・監査を維持してpushし、明示的な受取確認を追跡する。Dependencies: line-channel-foundation, line-account-linking, line-friendship-sync, line-webhook-command-dispatch
 - [ ] line-channel-admin-ui -- 自分専用の認証済み画面からチャネルとwrite-only資格情報を登録・更新・無効化する。Dependencies: line-channel-foundation, line-account-linking, line-webhook-ingress, linked-recipient-delivery
 
 ---
-_更新日: 2026-07-21。line-friendship-sync の完了と、ngrok 経由で外部到達する公開 endpoint の現在の境界を反映。_
+_更新日: 2026-07-23。line-webhook-command-dispatch の完了と、許可リスト型 interaction／限定 reply の現在の境界を反映。_

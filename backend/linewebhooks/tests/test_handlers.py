@@ -1,11 +1,20 @@
 from django.test import SimpleTestCase
 
 from linewebhooks.handlers import StaticHandlerRegistry
-from linewebhooks.types import HandlerSucceeded, VerifiedWebhookEvent
+from linewebhooks.types import (
+    HandlerExecutionContext,
+    HandlerRegistration,
+    HandlerSucceeded,
+    VerifiedWebhookEvent,
+)
 
 
 class _StubHandler:
-    def handle(self, event: VerifiedWebhookEvent) -> HandlerSucceeded:
+    def handle(
+        self,
+        event: VerifiedWebhookEvent,
+        context: HandlerExecutionContext,
+    ) -> HandlerSucceeded:
         return HandlerSucceeded()
 
 
@@ -16,11 +25,14 @@ class StaticHandlerRegistryTests(SimpleTestCase):
         message_handler = _StubHandler()
         follow_handler = _StubHandler()
         registry = StaticHandlerRegistry(
-            (("message", message_handler), ("follow", follow_handler))
+            (
+                HandlerRegistration("message", message_handler, "local"),
+                HandlerRegistration("follow", follow_handler, "local"),
+            )
         )
 
-        self.assertIs(registry.resolve("message"), message_handler)
-        self.assertIs(registry.resolve("follow"), follow_handler)
+        self.assertIs(registry.resolve("message").handler, message_handler)
+        self.assertIs(registry.resolve("follow").handler, follow_handler)
         self.assertIsNone(registry.resolve("unknown"))
 
     # テストケース: 同じ event type の handler を二件登録する
@@ -28,17 +40,20 @@ class StaticHandlerRegistryTests(SimpleTestCase):
     def test_rejects_duplicate_event_type_registration(self) -> None:
         with self.assertRaises(ValueError):
             StaticHandlerRegistry(
-                (("message", _StubHandler()), ("message", _StubHandler()))
+                (
+                    HandlerRegistration("message", _StubHandler(), "local"),
+                    HandlerRegistration("message", _StubHandler(), "local"),
+                )
             )
 
     # テストケース: registry 構築後に登録元の list を変更する
     # 期待値: request 処理で使う解決結果は起動時 snapshot から変化しない
     def test_registration_snapshot_is_immutable(self) -> None:
         handler = _StubHandler()
-        registrations = [("message", handler)]
+        registrations = [HandlerRegistration("message", handler, "local")]
         registry = StaticHandlerRegistry(registrations)
 
         registrations.clear()
 
-        self.assertIs(registry.resolve("message"), handler)
+        self.assertIs(registry.resolve("message").handler, handler)
         self.assertFalse(hasattr(registry, "register"))

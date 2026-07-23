@@ -4,24 +4,35 @@ from collections.abc import Iterable
 from types import MappingProxyType
 from typing import Protocol
 
-from .types import HandlerOutcome, VerifiedWebhookEvent
+from .types import (
+    HandlerExecutionContext,
+    HandlerOutcome,
+    HandlerRegistration,
+    VerifiedWebhookEvent,
+)
 
 
 class VerifiedEventHandler(Protocol):
-    def handle(self, event: VerifiedWebhookEvent) -> HandlerOutcome: ...
+    def handle(
+        self,
+        event: VerifiedWebhookEvent,
+        context: HandlerExecutionContext,
+    ) -> HandlerOutcome: ...
 
 
 class StaticHandlerRegistry:
     def __init__(
         self,
-        registrations: Iterable[tuple[str, VerifiedEventHandler]] = (),
+        registrations: Iterable[HandlerRegistration] = (),
     ) -> None:
-        handlers: dict[str, VerifiedEventHandler] = {}
-        for event_type, handler in registrations:
-            if event_type in handlers:
+        handlers: dict[str, HandlerRegistration] = {}
+        for registration in registrations:
+            if not isinstance(registration, HandlerRegistration):
+                raise TypeError("handler registration is required")
+            if registration.event_type in handlers:
                 raise ValueError("duplicate event type registration")
-            handlers[event_type] = handler
+            handlers[registration.event_type] = registration
         self._handlers = MappingProxyType(handlers)
 
-    def resolve(self, event_type: str) -> VerifiedEventHandler | None:
+    def resolve(self, event_type: str) -> HandlerRegistration | None:
         return self._handlers.get(event_type)

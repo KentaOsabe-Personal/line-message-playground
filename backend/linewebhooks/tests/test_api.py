@@ -1,4 +1,4 @@
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIRequestFactory
@@ -48,6 +48,7 @@ class WebhookAPIViewTests(SimpleTestCase):
             "public-key",
             b'{"raw":"bytes"}',
             "signature-value",
+            request_started_at_monotonic=ANY,
         )
 
     # テストケース: app-localのchannel別URLへCSRF tokenやowner sessionなしでPOSTする
@@ -73,6 +74,7 @@ class WebhookAPIViewTests(SimpleTestCase):
             "public-key",
             b'{"raw":"bytes"}',
             "signature-value",
+            request_started_at_monotonic=ANY,
         )
 
     # テストケース: raw bodyの読取り回数を記録するrequestをViewへ渡す
@@ -102,6 +104,38 @@ class WebhookAPIViewTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(request.body_reads, 1)
+
+    # テストケース: clock、body、header、cached service の取得順を記録してPOSTする
+    # 期待値: clockを最初に一度だけ読み、その値をkeywordでingestへ伝播する
+    def test_captures_request_start_before_request_and_service_access(self) -> None:
+        trace: list[str] = []
+
+        class OrderedRequest:
+            @property
+            def body(self) -> bytes:
+                trace.append("body")
+                return b"raw-body"
+
+            @property
+            def headers(self) -> dict[str, str]:
+                trace.append("headers")
+                return {"X-Line-Signature": "signature-value"}
+
+        self.service.ingest.return_value = IngressAccepted()
+        view = WebhookAPIView()
+        view.monotonic_clock = lambda: (trace.append("clock"), 10.0)[1]
+        view.service_factory = lambda: (trace.append("service"), self.service)[1]
+
+        response = view.post(OrderedRequest(), channel_public_key="public-key")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(trace, ["clock", "body", "headers", "service"])
+        self.service.ingest.assert_called_once_with(
+            "public-key",
+            b"raw-body",
+            "signature-value",
+            request_started_at_monotonic=10.0,
+        )
 
     # テストケース: service の安全な拒否分類を HTTP 応答へ変換する
     # 期待値: payloadは400、signatureは401、channelは404、保存と予期外は503へ固定写像する

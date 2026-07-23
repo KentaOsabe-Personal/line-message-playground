@@ -31,7 +31,7 @@ Project memory keeps persistent guidance (steering, specs notes, component docs)
 ## Minimal Workflow
 - Phase 0 (optional): `$kiro-steering`, `$kiro-steering-custom`
 - Discovery: `$kiro-discovery "idea"` — determines action path, writes brief.md + roadmap.md for multi-spec projects
-- Spec size gate: before choosing or continuing the single-spec path, apply `.kiro/steering/spec-sizing.md`; a projected 20+ executable tasks or multiple independently deliverable responsibility seams defaults to roadmap decomposition
+- Spec size gate: before choosing or continuing the single-spec path, apply `.kiro/steering/spec-sizing.md`; 40+ projected executable tasks defaults to roadmap decomposition, while smaller specs split only when compound boundary risk or bounded review instability shows that one review scope is not workable
 - Phase 1 (Specification):
   - Single spec: `$kiro-spec-quick {feature} [--auto]` or step by step:
     - `$kiro-spec-init "description"`

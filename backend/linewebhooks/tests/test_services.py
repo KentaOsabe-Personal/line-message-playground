@@ -14,6 +14,8 @@ from linechannels.types import (
 from linewebhooks.services import WebhookIngressService
 from linewebhooks.types import (
     HandlerFailed,
+    HandlerExecutionContext,
+    HandlerRegistration,
     HandlerSucceeded,
     IngressAccepted,
     IngressRejected,
@@ -109,7 +111,11 @@ class _Handler:
         self.trace = trace
         self.events: list[object] = []
 
-    def handle(self, event: object) -> object:
+    def handle(
+        self,
+        event: object,
+        context: HandlerExecutionContext,
+    ) -> object:
         self.trace.append("handle")
         self.events.append(event)
         if isinstance(self.result, Exception):
@@ -124,7 +130,10 @@ class _Registry:
 
     def resolve(self, event_type: str) -> object | None:
         self.trace.append(f"resolve:{event_type}")
-        return self.handlers.get(event_type)
+        handler = self.handlers.get(event_type)
+        if handler is None:
+            return None
+        return HandlerRegistration(event_type, handler, "local")
 
 
 class _Audit:
@@ -138,9 +147,10 @@ class _Audit:
 class _MonotonicClock:
     def __init__(self, values: list[float]) -> None:
         self.values = iter(values)
+        self.last = values[-1]
 
     def __call__(self) -> float:
-        return next(self.values)
+        return next(self.values, self.last)
 
 
 def _event(
@@ -579,7 +589,11 @@ class WebhookIngressServiceIntegrationTests(DjangoTestCase):
             def __init__(self) -> None:
                 self.events: list[object] = []
 
-            def handle(self, event: object) -> object:
+            def handle(
+                self,
+                event: object,
+                context: HandlerExecutionContext,
+            ) -> object:
                 self.events.append(event)
                 return HandlerFailed() if len(self.events) == 1 else HandlerSucceeded()
 

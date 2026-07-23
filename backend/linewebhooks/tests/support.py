@@ -14,7 +14,12 @@ from linechannels.types import ChannelSecret, WebhookChannelAvailable
 from linewebhooks.handlers import StaticHandlerRegistry
 from linewebhooks.repositories import DjangoEventReceiptRepository
 from linewebhooks.services import WebhookIngressService
-from linewebhooks.types import HandlerSucceeded, WebhookAuditEntry
+from linewebhooks.types import (
+    HandlerExecutionContext,
+    HandlerRegistration,
+    HandlerSucceeded,
+    WebhookAuditEntry,
+)
 from linewebhooks.verification import RawSignatureVerifier, WebhookPayloadValidator
 
 
@@ -53,13 +58,19 @@ class RecordingHandler:
         self.result = result if result is not None else HandlerSucceeded()
         self.callback = callback
         self.events: list[object] = []
+        self.contexts: list[HandlerExecutionContext] = []
         self._lock = threading.Lock()
 
-    def handle(self, event: object) -> object:
+    def handle(
+        self,
+        event: object,
+        context: HandlerExecutionContext,
+    ) -> object:
         if self.callback is not None:
             self.callback(event)
         with self._lock:
             self.events.append(event)
+            self.contexts.append(context)
         if isinstance(self.result, Exception):
             raise self.result
         return self.result
@@ -112,7 +123,11 @@ def build_service(
     observed_at_clock: Callable[[], datetime] = timezone.now,
 ) -> tuple[WebhookIngressService, CapturingAuditLogger]:
     audit = audit_logger or CapturingAuditLogger()
-    registrations = (("message", handler),) if handler is not None else ()
+    registrations = (
+        (HandlerRegistration("message", handler, "local"),)
+        if handler is not None
+        else ()
+    )
     return (
         WebhookIngressService(
             credential_repository=(

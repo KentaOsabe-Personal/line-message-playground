@@ -343,7 +343,9 @@ class FriendshipProviderConcurrencyIntegrationTests(TransactionTestCase):
         release_account = threading.Event()
         update_started = threading.Event()
         second_service = build_webhook_ingress_service()
-        second_handler = second_service._registry.resolve("follow")
+        second_registration = second_service._registry.resolve("follow")
+        assert second_registration is not None
+        second_handler = second_registration.handler
         self.assertIsInstance(second_handler, DefaultFriendshipSyncService)
         assert isinstance(second_handler, DefaultFriendshipSyncService)
         second_handler.account_repository = _BlockingAccountProjectionRepository(
@@ -461,7 +463,9 @@ class FriendshipProviderConcurrencyIntegrationTests(TransactionTestCase):
         event_locked = threading.Event()
         release_event = threading.Event()
         event_service = build_webhook_ingress_service()
-        event_handler = event_service._registry.resolve("follow")
+        event_registration = event_service._registry.resolve("follow")
+        assert event_registration is not None
+        event_handler = event_registration.handler
         self.assertIsInstance(event_handler, DefaultFriendshipSyncService)
         assert isinstance(event_handler, DefaultFriendshipSyncService)
         event_handler.account_repository = _BlockingAccountProjectionRepository(

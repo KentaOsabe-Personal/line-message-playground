@@ -14,11 +14,11 @@
 
 ## Approach
 
-検証済みevent envelopeをtext commandまたはpostback actionへ正規化し、完全一致する固定command／actionだけをdispatcherへ登録する。初期scopeでは疎通確認用の固定text commandとreply gatewayを提供し、postbackは許可されたaction名から型付けhandlerへ渡す拡張契約を提供する。reply結果はイベント受付と分けて監査し、結果不明時に同じtokenを自動再利用しない。
+検証済みevent envelopeをtext commandまたはpostback actionへ正規化し、完全一致する固定command／actionだけをdispatcherへ登録する。先行して`line-webhook-ingress`へView入口起点のabsolute deadline、deadline-aware handler context、未dispatch専用receipt結果を追加する。初期scopeでは疎通確認用の固定text commandとcancellable total watchdogを持つreply gatewayを提供し、postbackは許可されたaction名から型付けhandlerへ渡す拡張契約を提供する。reply結果はイベント受付と分けて監査し、結果不明時に同じtokenを自動再利用しない。
 
 ## Scope
 
-- **In**: user sourceのtext message、固定の疎通確認コマンド、postback actionの許可リスト、入力正規化と上限、型付けdispatcher契約、チャネル別reply資格情報、reply tokenの一回利用、reply結果の安全な分類、未知・不正・対象外イベントのno-op監査、後続handler拡張点
+- **In**: View入口起点の2秒deadlineとhandler予算、未dispatch専用receipt／audit結果、user sourceのtext message、固定の疎通確認コマンド、postback actionの許可リスト、入力正規化と上限、型付けdispatcher契約、チャネル別reply資格情報、reply tokenの一回利用、reply結果の安全な分類、未知・不正・対象外イベントのno-op監査、後続handler拡張点
 - **Out**: 汎用自然言語ボット、任意コマンド実行、SQLや動的import、画像・動画・音声処理、group／room、配信固有postback tokenの検証と配信記録更新、push配信、replyの自動再試行、queue／worker
 
 ## Boundary Candidates
@@ -42,15 +42,15 @@
 
 ## Existing Spec Touchpoints
 
-- **Extends**: なし。既存`delivery`のpush gatewayとは分離し、用途別アクセストークン取得と安全な外部エラー分類の原則だけを揃える
+- **Extends**: `line-webhook-ingress`のView／handler／receipt／safe audit契約をdeadline-awareに拡張する。既存`delivery`のpush gatewayとは分離し、用途別アクセストークン取得と安全な外部エラー分類の原則だけを揃える
 - **Adjacent**: Webhook真正性と重複排除は`line-webhook-ingress`、友だち状態は`line-friendship-sync`、配信固有postback処理は`linked-recipient-delivery`が所有する
 
 ## Spec Size Assessment
 
 - **Verdict**: PASS (single-spec)
-- **Projected executable tasks**: 9〜11件（event正規化、対象照合、allowlist、text command、postback契約、reply gateway、結果監査、単体・外部API・統合テストを含む）
-- **Independent responsibility seams**: 1（検証済みinteractionを既知actionへ制限し、必要な一回限りreplyまで完結させる垂直スライス）
-- **Rationale**: 受付、recipient状態、配信固有mutationを除外し、許可済みinteractionの安全な実行という1成果へ限定するため
+- **Projected executable tasks**: 22〜26件（生成結果23件）
+- **Independent responsibility seams**: 3（deadline-aware ingress実行基盤、interaction dispatch、command reply／audit）
+- **Rationale**: 23件は通常の単一Spec候補に収まり、3つの内部ワークストリームが一つの疎通確認／action拡張成果へ収束する。タスクグラフは境界を結合せず、`deadline contract → dispatch → reply/audit → signed integration`の依存順を保ったままbounded reviewと独立sanity reviewを通過した。
 
 ## Constraints
 

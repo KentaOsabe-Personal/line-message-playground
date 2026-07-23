@@ -3,6 +3,7 @@ import math
 from django.db import transaction
 from linechannels.repositories import LineChannelDirectory
 from linewebhooks.types import (
+    HandlerExecutionContext,
     HandlerFailed,
     HandlerOutcome,
     HandlerSucceeded,
@@ -67,7 +68,11 @@ class DefaultFriendshipSyncService:
         self.audit_repository = audit_repository
         self.using = using
 
-    def handle(self, event: VerifiedWebhookEvent) -> HandlerOutcome:
+    def handle(
+        self,
+        event: VerifiedWebhookEvent,
+        context: HandlerExecutionContext | None = None,
+    ) -> HandlerOutcome:
         try:
             parsed = self.parser.parse(event)
             if isinstance(parsed, InvalidFriendshipEvent):
