@@ -78,8 +78,8 @@
   - _Requirements: 1.3, 6.1, 6.2, 6.3, 6.4, 6.7_
   - _Boundary: InteractionAuditRepository_
 
-- [ ] 3. 一回限りの LINE reply transport を実装する
-- [ ] 3.1 同一チャネルの固定 text reply transport と基本結果分類を実装する
+- [x] 3. 一回限りの LINE reply transport を実装する
+- [x] 3.1 同一チャネルの固定 text reply transport と基本結果分類を実装する
   - LINE reply endpoint、Bearer credential、reply token、固定 text 一件だけを用いる transport を実装する
   - push 系 endpoint、retry key、自動再試行、redirect、複数 message を公開契約から除外する
   - request 開始前は呼出しゼロを許し、開始後は HTTP 200、明示的非200、status を確定できない結果を accepted／rejected／unknown のいずれかへ縮約する
@@ -87,7 +87,7 @@
   - _Depends: 2.1_
   - _Requirements: 1.2, 1.4, 1.5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.8, 7.2, 7.4, 7.5_
   - _Boundary: LineReplyGateway_
-- [ ] 3.2 reply transport の逆境 timeout・cancellation・resource cleanup を検証する
+- [x] 3.2 reply transport の逆境 timeout・cancellation・resource cleanup を検証する
   - timeout、network、protocol failure を注入し、結果不明へ縮約して同じ token を再利用せず外部要求が最大一回になることを確認する
   - cancellable delayed transport と controlled slow transport で authoritative wall-clock 上限と cancellation を検証する
   - timeout／例外の各経路でも return 後に background task、open response、open client が残らない状態を観測できる
