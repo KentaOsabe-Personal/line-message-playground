@@ -95,8 +95,8 @@
   - _Requirements: 1.2, 1.4, 1.5, 5.1, 5.5, 6.3, 6.4, 7.2, 7.4, 7.5_
   - _Boundary: LineReplyGateway adversarial validation_
 
-- [ ] 4. Interaction の判定・action・command reply・監査を統合する
-- [ ] 4.1 event 判定と外部作用なしの no-op 経路を実装する
+- [x] 4. Interaction の判定・action・command reply・監査を統合する
+- [x] 4.1 event 判定と外部作用なしの no-op 経路を実装する
   - event type、event shape／source、active channel／provider、linked user、対応 registry の順で信頼境界を進める
   - invalid、out-of-scope、unlinked、unknown を安全に区別し、identity／recipient 作成、handler、credential 取得、reply を行わない
   - message と postback を交差解釈せず、一 event から最大一 operation だけを解決する
@@ -104,14 +104,14 @@
   - _Depends: 2.2, 2.3, 2.4, 2.5_
   - _Requirements: 1.6, 2.4, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9, 6.5_
   - _Boundary: InteractionService_
-- [ ] 4.2 登録済み postback action を一度だけ委譲する
+- [x] 4.2 登録済み postback action を一度だけ委譲する
   - 解決済み action handler へ action 名、opaque payload、検証済み channel／user、event ID、execution context だけを渡す
   - success、no-change、rejected、failed を区別し、exception と不正 return を安全な handler failure へ縮約する
   - handler 失敗後に別 handler や同じ action を自動実行せず、payload の真正性・期限・冪等性・業務変更を dispatcher で推測しない
   - action service テストで各4結果、例外、不正 return、単一呼出し、reply ゼロを観測できる
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.7, 2.8, 2.9, 4.1, 4.6, 4.8, 4.9, 6.4, 6.5, 6.6, 7.5_
   - _Boundary: InteractionService action dispatch_
-- [ ] 4.3 command 解決から deadline-aware reply までを統合する
+- [x] 4.3 command 解決から deadline-aware reply までを統合する
   - 固定 command 解決後だけ同じ active channel の credential を取得し、別 channel や固定環境値へ fallback しない
   - 外部 I/O cutoff と共有 clock から reply 直前の総予算を計算し、最低開始予算を満たさなければ transport を呼ばない
   - reply 開始時に token を消費済みと扱い、accepted／rejected／unknown のどの結果でも再試行せず固定 text 一件へ限定する
@@ -119,7 +119,7 @@
   - _Depends: 3.2, 4.1_
   - _Requirements: 1.1, 1.2, 1.4, 1.5, 1.7, 5.1, 5.2, 5.3, 5.4, 5.5, 5.8, 7.2, 7.3, 7.4_
   - _Boundary: InteractionService–LineReplyGateway integration_
-- [ ] 4.4 最終分類を安全な監査と ingress 結果へ確定する
+- [x] 4.4 最終分類を安全な監査と ingress 結果へ確定する
   - no-op、action 4結果、credential failure、deadline、reply 3結果、予期しない dependency failure を有限な監査結果へ変換する
   - operation 解決前後を区別して safe identifier だけを残し、受信内容、token、LINE user ID、access token、生 exception を保持しない
   - safe audit を一回だけ記録し、保存失敗、reply rejected／unknown、action／dependency failure を ingress の安全な失敗へ返す
@@ -127,7 +127,7 @@
   - _Depends: 4.2, 4.3_
   - _Requirements: 1.3, 2.3, 2.5, 5.6, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7_
   - _Boundary: InteractionService–InteractionAuditRepository integration_
-- [ ] 4.5 interaction service の分岐・失敗・予算契約を網羅検証する
+- [x] 4.5 interaction service の分岐・失敗・予算契約を網羅検証する
   - parser、channel、account、registry、credential、handler、gateway、audit の各 fake で判定順と作用回数を検証する
   - operation 解決前後の dependency 例外、gateway／handler の不正 return、audit failure を安全な結果へ縮約することを確認する
   - reply cutoff の直前・直後を共有 fake clock で再現し、期限不足時には外部要求を開始しない結果を観測できる
