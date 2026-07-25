@@ -1,0 +1,252 @@
+# 実装計画
+
+- [ ] 1. 配信ドメインと互換migrationの基盤を整える
+- [x] 1.1 配信対象・確認・結果・受取確認を表す不変なドメイン値を定義する
+  - linked／fixedを区別し、owner principal、送信時identity、target snapshot、結果、receiptを型付きで扱う
+  - secret／PIIの生値が表示・直列化されない境界型を維持する
+  - 完了時、後続service／repository／gatewayがModelや外部SDK型へ直接依存せず同じ契約を利用できる
+  - _Requirements: 4.3, 5.2, 6.1, 7.1, 8.10, 9.5, 9.6, 9.7_
+- [ ] 1.2 linked recipient配信と受取確認を保持するschemaを追加する
+  - legacy列を保持し、owner／target snapshot、request identity、receipt commitment、status制約、indexを追加する
+  - processingだけがactive fingerprintを持ち、receipt列の組合せがDB制約で保証される
+  - 完了時、新規linked rowと既存fixed rowの両方が同じtableで有効な状態として保存できる
+  - _Requirements: 6.1, 6.4, 6.6, 7.1, 7.2, 7.8, 7.10, 8.3, 8.9, 8.10_
+- [ ] 1.3 既存fixed配信を破壊せずowner scopeと新制約へ移行する
+  - fingerprint値、operation ID、terminal結果、LINE ID、時刻を同値で保持する
+  - singleton owner slotをbackfillし、identity解決不能rowも削除しない
+  - 完了時、forward migration後も全legacy recordをowner scoped statusで参照でき、linked runtimeがfixed fallbackを作らない
+  - _Requirements: 7.6, 7.8, 7.10, 9.7_
+- [ ] 1.4 件名・本文の既存整形とLINE上限検証を新しい配信経路で再利用する
+  - blankをfield別に拒否し、件名・空行・本文と本文改行を維持する
+  - 5000 UTF-16 code unit境界を判定し、receipt template文言をtext長へ混入しない
+  - 完了時、有効入力は同じformatted textへ収束し、不正入力ではconfirmationも外部送信も作られない
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.7_
+
+- [ ] 2. owner scoped target projectionを実装する
+- [ ] 2.1 (P) owner・channel・recipient状態から共通target revisionを生成する
+  - preview、accept前、push直前で同じcanonical revision builderを使う
+  - 状態が変化して戻った場合もupdated revisionで古い確認を識別する
+  - 完了時、同じlive targetは同じdigest、配信可否へ影響する変更は異なるdigestになる
+  - _Requirements: 4.3, 4.6, 5.1_
+  - _Boundary: DeliveryTargetDirectory_
+  - _Depends: 1.1_
+- [ ] 2.2 ownerに属するchannel選択肢を安全なsummaryで返す
+  - provider／ownerを絞り、label、opaque ID、active、availabilityと理由だけを投影する
+  - fixed env targetやcredential／subjectをprojectionへ含めない
+  - 完了時、ownerは有効・無効channelを理由付きで区別でき、秘密値は選択肢に現れない
+  - _Requirements: 1.4, 2.1, 2.3, 2.6, 2.8_
+- [ ] 2.3 選択channel配下のrecipient選択肢を安全なsummaryで返す
+  - recipient display name、opaque ID、enabled、friendship、availability理由を返す
+  - 別provider・別channel・一覧外IDを受け付けず、配信可能recipientがない状態を表す
+  - 完了時、friend／not_friend／unknown／disabledを区別し、生LINE user IDなしで選択できる
+  - _Requirements: 1.5, 2.2, 2.3, 2.4, 2.6, 2.7_
+- [ ] 2.4 owner・provider・channel・recipientを一条件で解決するlive target lookupを実装する
+  - owner mismatch、存在しないID、関係不一致を同じhidden resultへ縮約する
+  - send用resultだけにredacted subjectを保持し、live availabilityとrevisionを返す
+  - 完了時、完全一致する対象だけが解決され、それ以外は存在や所有関係を開示しない
+  - _Requirements: 1.4, 1.5, 4.6, 5.1, 5.3, 5.4_
+- [ ] 2.5 target projectionの所有関係・理由分類・query budgetを検証する
+  - inactive／disabled／not_friend／unknown、別owner／provider／channel、一覧外IDを網羅する
+  - fixture件数に依存しないquery上限とsecret／subject非露出を固定する
+  - 完了時、account adapterのテストが全target状態とN+1不在を再現可能に証明する
+  - _Requirements: 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.6, 2.7, 2.8_
+
+- [ ] 3. 対象と内容に結び付く期限付き確認を実装する
+- [ ] 3.1 (P) owner principal・identity・target・message・receipt optionを一つの確認snapshotへ結ぶ
+  - PII-free payloadへversion、target revision、message fingerprint、receipt requested／expiryを含める
+  - 10分max ageと24時間receipt expiryを注入可能なclockで扱う
+  - 完了時、previewで発行したtokenだけが同じowner／target／message／optionのsendで検証成功する
+  - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.8, 8.1, 9.5_
+  - _Boundary: ConfirmationService_
+  - _Depends: 1.1_
+- [ ] 3.2 入力軸やtarget revisionの変更で古い確認を安全に拒否する
+  - channel、recipient、subject、body、receipt option、owner identity、revisionの一軸変更を完全一致で判定する
+  - tamper、期限切れ、別ownerをsafe rejectionへ縮約する
+  - 完了時、確認後の変更・unlink／relink・状態往復はいずれもLINE送信前に再previewを要求する
+  - _Requirements: 4.5, 4.6, 4.8, 5.1, 9.1_
+- [ ] 3.3 preview／send入力をcanonicalかつ余剰fieldなしで検証する
+  - UUID、string、strict boolean、required field、unknown fieldをHTTP境界でfail fastする
+  - 任意LINE user IDやclient supplied owner scopeを入力契約へ持ち込まない
+  - 完了時、不正入力はfield別safe errorとなりconfirmation・attempt・LINE callを作らない
+  - _Requirements: 2.7, 3.1, 3.2, 3.6, 3.7, 4.4, 9.1, 9.5_
+- [ ] 3.4 confirmationの全軸変更・改変・期限・秘密非露出を単体検証する
+  - clock境界、message fingerprint、target revision、receipt expiryを固定する
+  - token payload、例外、公開resultに本文・display name・subject・capabilityが出ないことを確認する
+  - 完了時、confirmation test suiteが有効系と全拒否系を観測可能に再現する
+  - _Requirements: 3.3, 3.4, 3.5, 4.3, 4.5, 4.6, 4.8, 8.1, 9.5, 9.6_
+
+- [ ] 4. 配信attemptの冪等性と直交状態を永続化する
+- [ ] 4.1 operation IDとactive request fingerprintによるacceptを実装する
+  - owner principal／identity、channel、recipient、message、receipt optionをversioned fingerprintへ含める
+  - 同operation同requestは既存状態、別requestはconflict、別operation同active requestはcanonical attemptへ収束させる
+  - 完了時、並行受付でもprocessing rowは一件だけ作成される
+  - _Requirements: 6.1, 6.2, 6.3, 6.4_
+- [ ] 4.2 owner scoped status lookup・processing expiry・first-terminal finalizeを実装する
+  - owner principal slotとoperation IDの同時条件でlookupし、identity UUIDを認可キーにしない
+  - processing rowだけをsucceeded／failed／unknownへ更新し、active fingerprintを解放する
+  - 30秒を超えたprocessingをstatus lookupから一度だけunknownへ条件付き更新するrepository契約を提供する
+  - 完了時、別ownerは存在を知れず、期限切れ／競合finalizeでも最初の終端結果が維持される
+  - _Requirements: 6.6, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 9.2_
+- [ ] 4.3 receipt commitmentの原子的保存とreceipt CASを実装する
+  - 新規attempt作成transactionでdigest／expiryを保存し、既存／競合attemptにはcandidateを保存しない
+  - digest、target、expiry、requested、delivery status、confirmed nullを照合して初回だけ記録する
+  - 完了時、receipt更新は初回日時／event IDへ収束し、delivery statusとLINE IDを変更しない
+  - _Requirements: 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10_
+- [ ] 4.4 repositoryのaccept・status・finalize・receipt契約を統合検証する
+  - operation reuse、target／option差、unlink後status、terminal不変、failed receipt拒否を網羅する
+  - legacy fixedとlinkedの双方が同じrepository契約で安全に読めることを確認する
+  - 完了時、各repository resultが保存済み状態と一致し、外部作用なしで再現できる
+  - _Requirements: 6.2, 6.3, 6.5, 6.6, 7.6, 7.8, 7.10, 8.5, 8.6, 8.10_
+- [ ] 4.5 独立DB connectionでaccept・finalize・receiptの競合を検証する
+  - barrierを使い、active fingerprint勝者、first terminal、first receiptを確認する
+  - 競合敗者が追加attempt、digest、terminal上書きを作らないことを検証する
+  - 完了時、再現可能なconcurrency testが三つのCAS不変条件を証明する
+  - _Requirements: 6.4, 6.6, 8.9, 8.10_
+
+- [ ] 5. 選択channelから一件だけ送るgatewayとserviceを実装する
+- [ ] 5.1 (P) 選択token・subject・operationから単一push requestを構築する
+  - text一件、receipt要求時だけButtons template一件を同じrequestへ追加する
+  - operation UUIDをretry keyとし、client retryを0にする
+  - 完了時、receiptなし／ありで1 recipient・1 HTTP call・期待message数が観測できる
+  - _Requirements: 5.2, 5.6, 5.7, 5.8, 6.1_
+  - _Boundary: ChannelPushGateway_
+  - _Depends: 1.1_
+- [ ] 5.2 LINE応答と例外をaccepted／rejected／unknownへ安全に縮約する
+  - 200／accepted 409、4xx／429、5xx／timeout／connection／decodeを閉じた結果へmapする
+  - body、token、subject、生exceptionをresult／logへ出さない
+  - 完了時、各応答fixtureは一意のsafe分類とLINE request ID有無へ変換される
+  - _Requirements: 7.3, 7.4, 7.5, 7.9, 9.1, 9.2, 9.5, 9.6_
+- [ ] 5.3 (P) 確認済み期限へ結び付く受取確認capability候補を生成する
+  - ConfirmationServiceがpreview時に確定しtokenへ結び付けたreceipt expiryを入力として受け取り、送信時に新しい期限を生成しない
+  - 256-bit random生値とSHA-256 digestを生成し、そのdigestと確認済みexpiryを同じcommitmentへ入れる
+  - raw値は新規attemptのgateway commandだけに渡せる境界値とし、repr／serialize／logを禁止する
+  - 完了時、preview表示・confirmation snapshot・attempt commitmentのexpiryが同一で、保存されるcapability情報はdigest／expiryだけになる
+  - _Requirements: 5.7, 8.1, 8.4, 9.5_
+  - _Boundary: ReceiptCapabilityFactory_
+  - _Depends: 1.1, 3.1_
+- [ ] 5.4 確認済みcommandをlive targetへ再解決し冪等acceptする
+  - accept前にowner／target／revision／deliverabilityを検証し、request fingerprintを生成する
+  - 5.3のfactoryから候補を受け、新規acceptだけでgateway用raw値を保持し、既存／競合attemptでは直ちに破棄する
+  - 完了時、既存operation／active requestは保存状態だけを返しLINEを呼ばず、候補も外部へ渡さない
+  - _Requirements: 5.1, 5.3, 5.4, 6.1, 6.2, 6.3, 6.4_
+  - _Depends: 4.1, 4.3, 5.3_
+- [ ] 5.5 選択credential取得後にtargetを再検証してtransaction外でpushする
+  - selected channel tokenだけを使い、取得失敗時に別channel／fixed envへfallbackしない
+  - push直前revisionが変わればtarget failureへ確定しLINEを呼ばない
+  - 完了時、有効targetだけが選択channelから一件へ最大一回送信される
+  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6_
+- [ ] 5.6 push結果とprocessing expiryを保存済みstatusへ収束させる
+  - accepted／rejected／unknownをrepositoryのfirst-terminal CASで確定する
+  - status確認時はrepositoryのprocessing expiry判定を呼び、自動再送しない
+  - 完了時、再試行・競合・結果不明は追加pushなしで同じ保存結果を返す
+  - _Requirements: 6.5, 6.6, 7.2, 7.3, 7.4, 7.5, 7.6, 9.2_
+  - _Depends: 4.2_
+- [ ] 5.7 gatewayとserviceの一回性・fallback禁止・結果分類を検証する
+  - selected token／subject／retry key、transaction外call、receipt candidate勝者だけの利用を確認する
+  - target change、credential failure、network ambiguity、terminal競合を網羅する
+  - 完了時、fake gatewayのcall countが全経路で0または1になり、秘密canaryが観測面に残らない
+  - _Requirements: 3.7, 5.2, 5.5, 5.6, 5.7, 5.8, 6.2, 6.4, 6.5, 6.6, 9.5, 9.6_
+
+- [ ] 6. 明示的受取確認を検証済みpostbackへ統合する
+- [ ] 6.1 検証済みdelivery.received actionを一件のattemptへ収束させる
+  - opaque payloadをhash化しchannel／recipient／expiry／requested／statusを照合する
+  - processing／succeeded／unknownは記録、failed／unmatched／expired／deletedは変更なしで分類する
+  - 完了時、有効actionだけがreceiptをconfirmedにし、配信statusとLINE IDを維持する
+  - _Requirements: 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11_
+  - _Depends: 4.3, 5.3_
+- [ ] 6.2 receipt handlerを静的postback registryへ明示登録する
+  - 既存verified command／event dedup／linked recipient保証を再利用する
+  - production action名を一件追加し、replyを開始しない
+  - 完了時、検証済みdelivery.receivedだけがhandlerへ届き、unknown actionと他event contractは変わらない
+  - _Requirements: 8.2, 8.4, 8.8, 8.11_
+- [ ] 6.3 receiptの期限・target・status・再操作・replyなしを統合検証する
+  - disabled／not_friend関係は許可し、unlink／delete、failed、token／channel／recipient不一致を拒否する
+  - 同event dedupと別event並行CAS、PII-free outcome／auditを検証する
+  - 完了時、receipt test suiteが初回確認への収束と外部reply 0件を証明する
+  - _Requirements: 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 9.1, 9.5, 9.6_
+
+- [ ] 7. owner向けtarget・preview・send・status APIを公開する
+- [ ] 7.1 channel／recipient選択APIをowner sessionで保護して公開する
+  - active ownerだけにsafe summaryを返し、未認証／unlink pendingをadapterより先に拒否する
+  - recipient routeのcanonical UUIDとhidden target errorを統一する
+  - 完了時、正しいownerだけが理由付き選択肢を取得し秘密／固定env値は応答にない
+  - _Requirements: 1.1, 1.2, 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.6, 2.7, 2.8_
+  - _Depends: 2.2, 2.3, 2.4_
+- [ ] 7.2 preview APIで対象・内容・receipt optionを確認summaryへ変換する
+  - state-changing POSTにexact-origin CSRFを要求し、live deliverabilityとformatterを検証する
+  - source label、recipient display name／friendship、formatted text、receipt expiry、tokenを返す
+  - 完了時、有効requestは送信前summaryを返し、不正／不可targetはattemptやLINE callを作らない
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 4.1, 4.2, 4.3, 4.4, 8.1_
+  - _Depends: 2.4, 3.1, 3.2, 3.3_
+- [ ] 7.3 send／status APIをowner scopeとsafe error envelopeへ統合する
+  - sendはconfirmation検証後だけserviceへ渡し、statusはowner principal scopeで取得する
+  - snapshot、delivery state、LINE受付ID／時刻、receipt stateを返し、PII／secret／capabilityを返さない
+  - 完了時、送信と状態確認は保存済み結果へ収束し、別owner／unknown operationは存在を開示しない
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 4.4, 4.8, 5.1, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10, 7.11, 9.1, 9.2, 9.3, 9.4, 9.5, 9.7_
+  - _Depends: 4.2, 5.4, 5.5, 5.6, 6.1_
+- [ ] 7.4 APIの認証・CSRF・strict DTO・safe分類を契約テストで固定する
+  - 未認証／unlink pendingをserializerより先に拒否し、unsafe POSTだけorigin／CSRFを要求する
+  - unknown field／enum／UUID、target hidden／stale、operation conflict、secret canaryを検証する
+  - 完了時、全endpointでstatus codeとbodyが契約どおりになり外部生応答やPIIが出ない
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.7, 3.7, 4.8, 7.7, 7.9, 7.11, 9.1, 9.5, 9.6, 9.7_
+
+- [ ] 8. linked recipient配信のFrontend状態と操作画面を実装する
+- [ ] 8.1 (P) target・preview・status・receipt応答をstrict runtime検証する
+  - exact key、canonical UUID、closed enum、nullable expiry、safe errorを検証する
+  - unknown key／enumとsecret canaryをprotocol errorへ変換する
+  - 完了時、画面stateへ入る境界データは公開DTO契約を満たすものだけになる
+  - _Requirements: 2.6, 7.6, 7.9, 8.1, 9.5, 9.6_
+  - _Boundary: DeliveryDTO_
+- [ ] 8.2 target取得・preview・send・status通信をprotected relative APIへ追加する
+  - relative `/api`、cookie／CSRF、safe error変換を既存adapterから再利用する
+  - network ambiguity時はsend再実行でなく既存operation status確認結果を返す
+  - 完了時、各通信はrequest／response契約と認証境界を一箇所で満たす
+  - _Requirements: 1.1, 1.2, 1.3, 4.2, 7.6, 9.2, 9.5_
+- [ ] 8.3 5つの編集軸と配信状態を純粋なstate遷移へ追加する
+  - channel変更でrecipientをclearし、target／subject／body／receipt変更でconfirmationを破棄する
+  - backは入力を保持し、submitting／processingは操作を無効にする
+  - 完了時、reducer testから各入力変更・戻る・結果開始が決定的に観測できる
+  - _Requirements: 2.4, 2.5, 3.1, 3.2, 3.6, 4.2, 4.4, 4.5, 4.7, 9.3, 9.4_
+- [ ] 8.4 channel／recipient選択と配信不可理由を画面へ表示する
+  - active／inactive、enabled／disabled、friend／not_friend／unknownを選択可否と理由で区別する
+  - 任意ID入力と固定env既定値を設けず、deliverable recipientなしではpreview／sendへ進めない
+  - 完了時、ownerはsafe labelだけで一件のtargetを選び、channel変更後にrecipient再選択を求められる
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8_
+  - _Depends: 7.1, 8.1, 8.2, 8.3_
+- [ ] 8.5 preview・送信結果・receipt状態を誤解なく表示する
+  - source／recipient／friendship／formatted text／receipt有無と期限をpreviewに表示する
+  - succeededはLINE受付として示し、unknownはstatus確認のみ、receiptは別行でpending／confirmed／expiredを表示する
+  - 完了時、確認後に送信でき、到達／既読表現や自動再送なしで保存済み状態を確認できる
+  - _Requirements: 3.3, 3.4, 3.6, 4.1, 4.2, 4.7, 7.6, 7.9, 8.1, 9.2, 9.3, 9.4_
+  - _Depends: 7.2, 7.3, 8.1, 8.2, 8.3_
+- [ ] 8.6 Frontendの選択・確認破棄・連打抑止・表示契約を検証する
+  - channel変更、全入力軸、back保持、不可target、processing無効化、network error／status確認を網羅する
+  - LINE受付文言とreceipt直交表示、DTO secret canary、API request payloadを固定する
+  - 完了時、Frontend test suiteとproduction buildが新しい配信journeyを通過する
+  - _Requirements: 2.3, 2.4, 2.5, 3.2, 3.7, 4.5, 4.7, 7.9, 8.1, 9.2, 9.3, 9.4, 9.5_
+
+- [ ] 9. migration・境界横断・安全性を最終検証する
+- [ ] 9.1 0001からのmigrationとfixed配信回帰を実DB契約で検証する
+  - record count、operation／message／fingerprint／terminal／LINE ID／timestampsの同値を比較する
+  - mode／receipt／status constraint、owner slot backfill、linked row存在時rollback停止を確認する
+  - 完了時、migration testがlegacy保持と新規不変条件を再現可能に証明する
+  - _Requirements: 7.8, 7.10, 9.7_
+  - _Depends: 1.2, 1.3_
+- [ ] 9.2 previewからpush・status・receiptまでの代表flowを実compositionで検証する
+  - target adapter、confirmation、repository、credential、gateway、webhook handler、APIのproduction compositionを接続する
+  - receipt付きの正常系一件でpreview、単一push、succeeded status、検証済みpostback、confirmed receiptまでを通す
+  - 個別failure／競合は5.7と6.3の責務に残し、このtaskでは重複検証しない
+  - 完了時、一つのoperationが一回だけpushされ、delivery statusとreceiptが独立して確定する
+  - _Requirements: 4.6, 5.1, 5.2, 5.7, 6.2, 7.3, 7.6, 8.2, 8.5, 8.10, 8.11_
+  - _Depends: 2.4, 3.2, 4.3, 5.6, 6.2, 7.3_
+- [ ] 9.3 query budget・競合・deadline・外部call一回性を安全なfakeで検証する
+  - list／preview／statusの固定query上限、accept／finalize／receipt barrier、processing expiryを測定する
+  - 外部LINEを負荷testせず、transaction外callとtimeout分類をfakeで確認する
+  - 完了時、performance／safety suiteがN+1不在、CAS収束、call count上限を数値で検証する
+  - _Requirements: 6.4, 6.5, 6.6, 7.2, 7.5, 8.9, 9.2_
+- [ ] 9.4 DB・API・UI・log・例外の秘密／PII非露出と全回帰を検証する
+  - live target API／UIでは現在のrecipient display nameを表示し、永続監査snapshot、通常log、例外、delivery status APIにはdisplay name canaryを残さない
+  - LINE subject／token／secret／receipt capabilityはDB、API、UI、log、例外の全観測面へ出さない
+  - Backend全test、Frontend全test、production buildを実行し、既存fixed記録と隣接Webhook／account機能の回帰を確認する
+  - 完了時、全検証commandが成功し、禁止対象の秘密canary、自動再送、固定fallbackが検出されない
+  - _Requirements: 2.6, 2.8, 5.5, 7.9, 7.10, 8.10, 9.1, 9.2, 9.5, 9.6, 9.7_
