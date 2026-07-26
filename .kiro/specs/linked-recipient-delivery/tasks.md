@@ -40,7 +40,7 @@
   - 別provider・別channel・一覧外IDを受け付けず、配信可能recipientがない状態を表す
   - 完了時、friend／not_friend／unknown／disabledを区別し、生LINE user IDなしで選択できる
   - _Requirements: 1.5, 2.2, 2.3, 2.4, 2.6, 2.7_
-- [ ] 2.4 owner・provider・channel・recipientを一条件で解決するlive target lookupを実装する
+- [x] 2.4 owner・provider・channel・recipientを一条件で解決するlive target lookupを実装する
   - owner mismatch、存在しないID、関係不一致を同じhidden resultへ縮約する
   - send用resultだけにredacted subjectを保持し、live availabilityとrevisionを返す
   - 完了時、完全一致する対象だけが解決され、それ以外は存在や所有関係を開示しない

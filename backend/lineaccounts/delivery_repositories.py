@@ -7,10 +7,14 @@ from django.db import models
 from delivery.types import (
     DeliveryChannelChoice,
     DeliveryRecipientChoice,
+    LinkedTargetSnapshot,
+    LiveDeliveryTarget,
+    OwnerIdentitySnapshot,
     TargetRevision,
     TargetUnavailable,
 )
 from lineaccounts.models import DeliveryRecipient, LineIdentity, OwnerAccount
+from lineaccounts.types import LineSubject
 from linechannels.models import LineChannel
 
 
@@ -115,6 +119,72 @@ class DeliveryTargetDirectory:
                 ),
             )
             for recipient in recipients
+        )
+
+    def resolve(
+        self,
+        owner_identity_id: UUID,
+        channel_id: UUID,
+        recipient_id: UUID,
+    ) -> LiveDeliveryTarget | TargetUnavailable:
+        target = (
+            DeliveryRecipient.objects.filter(
+                public_id=recipient_id,
+                identity__public_id=owner_identity_id,
+                identity__owner_account__state=OwnerAccount.State.ACTIVE,
+                identity__owner_account__identity_id=models.F("identity_id"),
+                line_channel__public_id=channel_id,
+                line_channel__provider_id=models.F("identity__provider_id"),
+            )
+            .values(
+                "identity__public_id",
+                "identity__provider_id",
+                "identity__subject",
+                "line_channel__public_id",
+                "line_channel__label",
+                "line_channel__is_active",
+                "line_channel__updated_at",
+                "public_id",
+                "enabled",
+                "friendship_state",
+                "updated_at",
+            )
+            .first()
+        )
+        if target is None:
+            return TargetUnavailable()
+
+        snapshot = LinkedTargetSnapshot(
+            channel_public_id=target["line_channel__public_id"],
+            channel_label=target["line_channel__label"],
+            recipient_public_id=target["public_id"],
+            channel_active=target["line_channel__is_active"],
+            recipient_enabled=target["enabled"],
+            friendship_state=target["friendship_state"],
+        )
+        revision = build_target_revision(
+            owner_identity_public_id=target["identity__public_id"],
+            channel_public_id=target["line_channel__public_id"],
+            provider_id=target["identity__provider_id"],
+            channel_active=target["line_channel__is_active"],
+            channel_updated_at=target["line_channel__updated_at"],
+            recipient_public_id=target["public_id"],
+            recipient_enabled=target["enabled"],
+            friendship_state=target["friendship_state"],
+            recipient_updated_at=target["updated_at"],
+        )
+        return LiveDeliveryTarget(
+            owner_identity=OwnerIdentitySnapshot(target["identity__public_id"]),
+            provider_id=target["identity__provider_id"],
+            snapshot=snapshot,
+            revision=revision,
+            subject=LineSubject(target["identity__subject"]),
+            delivery_available=(
+                snapshot.channel_active
+                and snapshot.recipient_enabled
+                and snapshot.friendship_state
+                == DeliveryRecipient.FriendshipState.FRIEND
+            ),
         )
 
 

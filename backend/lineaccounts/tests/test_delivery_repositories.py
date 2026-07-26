@@ -1,5 +1,10 @@
 import hashlib
+import json
+import logging
+import pickle
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta, timezone
+from io import StringIO
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
@@ -516,3 +521,218 @@ class DeliveryTargetDirectoryRecipientTests(TestCase):
             self.channel.bot_user_id,
         ):
             self.assertNotIn(secret, projection)
+
+
+class DeliveryTargetDirectoryResolveTests(TestCase):
+    provider_id = "0012345678"
+
+    def setUp(self):
+        self.subject = f"U{uuid4().hex}"
+        self.identity = LineIdentity.objects.create(
+            provider_id=self.provider_id,
+            subject=self.subject,
+            display_name="Owner display",
+        )
+        OwnerAccount.objects.get_or_create(slot=1)
+        OwnerAccount.objects.filter(slot=1).update(
+            state=OwnerAccount.State.ACTIVE,
+            identity=self.identity,
+        )
+        self.channel = LineChannel.objects.create(
+            messaging_api_channel_id=str(uuid4().int)[:20],
+            bot_user_id=f"U{uuid4().hex}",
+            label="配信チャネル",
+            provider_id=self.provider_id,
+            is_active=True,
+        )
+        self.recipient = DeliveryRecipient.objects.create(
+            identity=self.identity,
+            line_channel=self.channel,
+            enabled=True,
+            friendship_state=DeliveryRecipient.FriendshipState.FRIEND,
+        )
+        self.directory = DeliveryTargetDirectory()
+
+    # テストケース: active owner・provider・channel・recipientが完全一致する対象を解決する
+    # 期待値: send専用subject、live snapshot、availability、共通builderのrevisionを返す
+    def test_resolves_exact_live_target_with_shared_revision_builder(self):
+        from delivery.types import TargetRevision
+
+        expected_revision = TargetRevision("a" * 64)
+        with patch(
+            "lineaccounts.delivery_repositories.build_target_revision",
+            return_value=expected_revision,
+        ) as revision_builder:
+            with self.assertNumQueries(1):
+                result = self.directory.resolve(
+                    self.identity.public_id,
+                    self.channel.public_id,
+                    self.recipient.public_id,
+                )
+
+        self.assertEqual(result.owner_identity.public_id, self.identity.public_id)
+        self.assertEqual(result.provider_id, self.provider_id)
+        self.assertEqual(result.snapshot.channel_public_id, self.channel.public_id)
+        self.assertEqual(result.snapshot.channel_label, self.channel.label)
+        self.assertEqual(
+            result.snapshot.recipient_public_id,
+            self.recipient.public_id,
+        )
+        self.assertTrue(result.delivery_available)
+        self.assertEqual(result.revision, expected_revision)
+        revision_builder.assert_called_once_with(
+            owner_identity_public_id=self.identity.public_id,
+            channel_public_id=self.channel.public_id,
+            provider_id=self.provider_id,
+            channel_active=True,
+            channel_updated_at=self.channel.updated_at,
+            recipient_public_id=self.recipient.public_id,
+            recipient_enabled=True,
+            friendship_state=DeliveryRecipient.FriendshipState.FRIEND,
+            recipient_updated_at=self.recipient.updated_at,
+        )
+
+    # テストケース: channelまたはrecipientの配信可否状態が変化した対象を解決する
+    # 期待値: 完全一致関係を維持したlive targetとして返し、現在状態から配信不可と判定する
+    def test_returns_live_target_with_current_unavailable_state(self):
+        scenarios = (
+            ("channel", False, True, "friend"),
+            ("recipient", True, False, "friend"),
+            ("not_friend", True, True, "not_friend"),
+            ("unknown", True, True, "unknown"),
+        )
+
+        for name, channel_active, enabled, friendship_state in scenarios:
+            with self.subTest(name=name):
+                self.channel.is_active = channel_active
+                self.channel.save(update_fields=("is_active", "updated_at"))
+                self.recipient.enabled = enabled
+                self.recipient.friendship_state = friendship_state
+                self.recipient.save(
+                    update_fields=("enabled", "friendship_state", "updated_at")
+                )
+
+                result = self.directory.resolve(
+                    self.identity.public_id,
+                    self.channel.public_id,
+                    self.recipient.public_id,
+                )
+
+                self.assertFalse(result.delivery_available)
+                self.assertEqual(
+                    result.snapshot.channel_active,
+                    channel_active,
+                )
+                self.assertEqual(result.snapshot.recipient_enabled, enabled)
+                self.assertEqual(
+                    result.snapshot.friendship_state,
+                    friendship_state,
+                )
+
+    # テストケース: owner・provider・channel・recipient関係のいずれかが完全一致しない
+    # 期待値: 対象の存在や所有関係を区別せず同じhidden resultへ縮約する
+    def test_hides_all_nonmatching_target_relations(self):
+        from delivery.types import TargetUnavailable
+
+        other_identity = LineIdentity.objects.create(
+            provider_id=self.provider_id,
+            subject=f"U{uuid4().hex}",
+            display_name="Other",
+        )
+        other_channel = LineChannel.objects.create(
+            messaging_api_channel_id=str(uuid4().int)[:20],
+            bot_user_id=f"U{uuid4().hex}",
+            label="Other channel",
+            provider_id=self.provider_id,
+            is_active=True,
+        )
+        other_recipient = DeliveryRecipient.objects.create(
+            identity=other_identity,
+            line_channel=other_channel,
+            enabled=True,
+            friendship_state=DeliveryRecipient.FriendshipState.FRIEND,
+        )
+
+        mismatches = (
+            (uuid4(), self.channel.public_id, self.recipient.public_id),
+            (self.identity.public_id, uuid4(), self.recipient.public_id),
+            (self.identity.public_id, self.channel.public_id, uuid4()),
+            (
+                other_identity.public_id,
+                other_channel.public_id,
+                other_recipient.public_id,
+            ),
+            (
+                self.identity.public_id,
+                other_channel.public_id,
+                self.recipient.public_id,
+            ),
+            (
+                self.identity.public_id,
+                self.channel.public_id,
+                other_recipient.public_id,
+            ),
+        )
+        for owner_id, channel_id, recipient_id in mismatches:
+            with self.subTest(
+                owner_id=owner_id,
+                channel_id=channel_id,
+                recipient_id=recipient_id,
+            ):
+                self.assertEqual(
+                    self.directory.resolve(owner_id, channel_id, recipient_id),
+                    TargetUnavailable(),
+                )
+
+        self.channel.provider_id = "0099999999"
+        self.channel.save(update_fields=("provider_id", "updated_at"))
+        self.assertEqual(
+            self.directory.resolve(
+                self.identity.public_id,
+                self.channel.public_id,
+                self.recipient.public_id,
+            ),
+            TargetUnavailable(),
+        )
+
+        self.channel.provider_id = self.provider_id
+        self.channel.save(update_fields=("provider_id", "updated_at"))
+        OwnerAccount.objects.filter(slot=1).update(
+            state=OwnerAccount.State.DEAUTHORIZATION_PENDING,
+            unlink_generation=uuid4(),
+        )
+        self.assertEqual(
+            self.directory.resolve(
+                self.identity.public_id,
+                self.channel.public_id,
+                self.recipient.public_id,
+            ),
+            TargetUnavailable(),
+        )
+
+    # テストケース: secret canaryを持つ解決済みsend対象をrepr・log・serializeへ渡す
+    # 期待値: raw LINE subjectを露出せず、汎用serializationを拒否する
+    def test_send_target_redacts_subject_and_disables_serialization(self):
+        target = self.directory.resolve(
+            self.identity.public_id,
+            self.channel.public_id,
+            self.recipient.public_id,
+        )
+
+        log_output = StringIO()
+        handler = logging.StreamHandler(log_output)
+        logger = logging.getLogger("test.delivery.target")
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        try:
+            logger.info("resolved=%r", target)
+        finally:
+            logger.removeHandler(handler)
+
+        for projection in (repr(target), str(target), log_output.getvalue()):
+            self.assertNotIn(self.subject, projection)
+            self.assertIn("redacted", projection)
+        with self.assertRaises(TypeError):
+            pickle.dumps(target)
+        with self.assertRaises(TypeError):
+            json.dumps(asdict(target))
