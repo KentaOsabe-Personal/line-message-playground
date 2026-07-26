@@ -75,7 +75,7 @@
   - 完了時、confirmation test suiteが有効系と全拒否系を観測可能に再現する
   - _Requirements: 3.3, 3.4, 3.5, 4.3, 4.5, 4.6, 4.8, 8.1, 9.5, 9.6_
 
-- [ ] 4. 配信attemptの冪等性と直交状態を永続化する
+- [x] 4. 配信attemptの冪等性と直交状態を永続化する
 - [x] 4.1 operation IDとactive request fingerprintによるacceptを実装する
   - owner principal／identity、channel、recipient、message、receipt optionをversioned fingerprintへ含める
   - 同operation同requestは既存状態、別requestはconflict、別operation同active requestはcanonical attemptへ収束させる
@@ -97,7 +97,7 @@
   - legacy fixedとlinkedの双方が同じrepository契約で安全に読めることを確認する
   - 完了時、各repository resultが保存済み状態と一致し、外部作用なしで再現できる
   - _Requirements: 6.2, 6.3, 6.5, 6.6, 7.6, 7.8, 7.10, 8.5, 8.6, 8.10_
-- [ ] 4.5 独立DB connectionでaccept・finalize・receiptの競合を検証する
+- [x] 4.5 独立DB connectionでaccept・finalize・receiptの競合を検証する
   - barrierを使い、active fingerprint勝者、first terminal、first receiptを確認する
   - 競合敗者が追加attempt、digest、terminal上書きを作らないことを検証する
   - 完了時、再現可能なconcurrency testが三つのCAS不変条件を証明する
