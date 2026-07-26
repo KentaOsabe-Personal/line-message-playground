@@ -1,21 +1,23 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.test import override_settings
 from rest_framework.test import APIClient, APITestCase
 from django.utils import timezone
 
-from delivery.confirmation import ConfirmationTokenService
+from delivery.confirmation import ConfirmationService, ConfirmationTokenService
 from delivery.formatters import format_message
 from delivery.gateway import LINEGateway, LinePushAccepted, LinePushRejected, LinePushUnknown
 from delivery.models import DeliveryAttempt
 from lineaccounts.authentication import OWNER_SESSION_KEY
+from lineaccounts.delivery_repositories import DeliveryTargetDirectory
 from lineaccounts.gateway import VerifiedLineIdentity
-from lineaccounts.models import OwnerAccount
+from lineaccounts.models import DeliveryRecipient, LineIdentity, OwnerAccount
 from lineaccounts.repositories import DjangoAccountRepository
 from lineaccounts.types import LineSubject
+from linechannels.models import LineChannel
 
 
 class FakeGateway:
@@ -36,13 +38,29 @@ class DeliveryApiTests(APITestCase):
             owner = repository.lock_owner_account()
             identity = repository.upsert_identity(
                 VerifiedLineIdentity(
-                    "0012345678", LineSubject(f"U{uuid4().hex}"), "Owner"
+                    "0012345678",
+                    LineSubject("Usubject-secret-canary"),
+                    "Owner display",
                 )
             )
             owner = repository.bind_owner_identity(owner, identity.public_id)
             self.owner_session = repository.create_owner_session(
                 owner, timezone.now() + timedelta(hours=8)
             )
+        self.identity = LineIdentity.objects.get(public_id=identity.public_id)
+        self.channel = LineChannel.objects.create(
+            messaging_api_channel_id="channel-id-secret-canary",
+            bot_user_id="Ubot-secret-canary",
+            label="通知チャネル",
+            provider_id="0012345678",
+            is_active=True,
+        )
+        self.recipient = DeliveryRecipient.objects.create(
+            identity=self.identity,
+            line_channel=self.channel,
+            enabled=True,
+            friendship_state=DeliveryRecipient.FriendshipState.FRIEND,
+        )
 
         client = APIClient(enforce_csrf_checks=True)
         session = client.session
@@ -69,19 +87,205 @@ class DeliveryApiTests(APITestCase):
             processing_expires_at=expires_at or now + timedelta(seconds=30),
         )
 
-    # テストケース: active ownerが有効な件名と本文をpreviewする
-    # 期待値: 正規テキストとopaqueな確認トークンだけを200で返す
+    # テストケース: active ownerが配信可能な対象と有効な内容をpreviewする
+    # 期待値: 対象・整形済み内容・receipt期限とPII-freeな確認tokenをsafe summaryで返す
     def test_preview_returns_formatted_text_and_confirmation_token(self):
+        expected_target = DeliveryTargetDirectory().resolve(
+            self.identity.public_id,
+            self.channel.public_id,
+            self.recipient.public_id,
+        )
+        expected_message = format_message("件名", "一行目\n二行目")
         response = self.client.post(
             "/api/deliveries/preview/",
-            {"subject": "件名", "body": "一行目\n二行目"},
+            {
+                "channelId": str(self.channel.public_id),
+                "recipientId": str(self.recipient.public_id),
+                "subject": "件名",
+                "body": "一行目\n二行目",
+                "receiptRequested": True,
+            },
             format="json",
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["formattedText"], "【件名】\n\n一行目\n二行目")
-        self.assertEqual(set(response.data), {"formattedText", "confirmationToken"})
+        self.assertEqual(
+            response.data,
+            {
+                "channelId": str(self.channel.public_id),
+                "channelLabel": "通知チャネル",
+                "recipientId": str(self.recipient.public_id),
+                "recipientDisplayName": "Owner display",
+                "friendshipState": "friend",
+                "formattedText": "【件名】\n\n一行目\n二行目",
+                "receiptRequested": True,
+                "receiptExpiresAt": response.data["receiptExpiresAt"],
+                "confirmationToken": response.data["confirmationToken"],
+            },
+        )
+        self.assertIsNotNone(response.data["receiptExpiresAt"])
         self.assertNotIn("一行目", response.data["confirmationToken"])
+        decoded = ConfirmationService().decode_for_test(
+            response.data["confirmationToken"]
+        )
+        self.assertEqual(
+            decoded,
+            {
+                "v": 1,
+                "owner": 1,
+                "identity": str(self.identity.public_id),
+                "channel": str(self.channel.public_id),
+                "recipient": str(self.recipient.public_id),
+                "target_revision": expected_target.revision.digest,
+                "message_fingerprint": expected_message.fingerprint,
+                "receipt_requested": True,
+                "receipt_expires_at": (
+                    datetime.fromisoformat(response.data["receiptExpiresAt"])
+                    .astimezone(UTC)
+                    .isoformat(timespec="microseconds")
+                    .replace("+00:00", "Z")
+                ),
+            },
+        )
+        serialized = str(response.data)
+        for secret in (
+            "Usubject-secret-canary",
+            "channel-id-secret-canary",
+            "Ubot-secret-canary",
+        ):
+            self.assertNotIn(secret, serialized)
+        self.assertEqual(DeliveryAttempt.objects.count(), 0)
+
+    # テストケース: receiptなしで配信可能な対象をpreviewする
+    # 期待値: receipt期限をnullで返し、確認snapshotにもcapabilityや新しい期限を生成しない
+    def test_preview_without_receipt_returns_null_expiry(self):
+        expected_target = DeliveryTargetDirectory().resolve(
+            self.identity.public_id,
+            self.channel.public_id,
+            self.recipient.public_id,
+        )
+        expected_message = format_message("件名", "本文")
+        response = self.client.post(
+            "/api/deliveries/preview/",
+            {
+                "channelId": str(self.channel.public_id),
+                "recipientId": str(self.recipient.public_id),
+                "subject": "件名",
+                "body": "本文",
+                "receiptRequested": False,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIs(response.data["receiptRequested"], False)
+        self.assertIsNone(response.data["receiptExpiresAt"])
+        decoded = ConfirmationService().decode_for_test(
+            response.data["confirmationToken"]
+        )
+        self.assertEqual(
+            decoded,
+            {
+                "v": 1,
+                "owner": 1,
+                "identity": str(self.identity.public_id),
+                "channel": str(self.channel.public_id),
+                "recipient": str(self.recipient.public_id),
+                "target_revision": expected_target.revision.digest,
+                "message_fingerprint": expected_message.fingerprint,
+                "receipt_requested": False,
+                "receipt_expires_at": None,
+            },
+        )
+        self.assertEqual(DeliveryAttempt.objects.count(), 0)
+
+    # テストケース: owner範囲外または現在配信不可のtargetでpreviewする
+    # 期待値: hidden targetは404、状態不備は409へ安全に縮約しconfirmationとattemptを作らない
+    def test_preview_hides_missing_target_and_rejects_live_state_change(self):
+        payload = {
+            "channelId": str(self.channel.public_id),
+            "recipientId": str(uuid4()),
+            "subject": "件名",
+            "body": "本文",
+            "receiptRequested": False,
+        }
+        hidden = self.client.post(
+            "/api/deliveries/preview/",
+            payload,
+            format="json",
+        )
+        self.recipient.friendship_state = DeliveryRecipient.FriendshipState.NOT_FRIEND
+        self.recipient.save(update_fields=("friendship_state", "updated_at"))
+        payload["recipientId"] = str(self.recipient.public_id)
+        unavailable = self.client.post(
+            "/api/deliveries/preview/",
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(hidden.status_code, 404)
+        self.assertEqual(hidden.data["error"]["code"], "target_not_available")
+        self.assertEqual(unavailable.status_code, 409)
+        self.assertEqual(
+            unavailable.data["error"]["code"], "target_not_deliverable"
+        )
+        self.assertEqual(DeliveryAttempt.objects.count(), 0)
+
+    # テストケース: active ownerがOriginまたはCSRF tokenなしでpreviewを要求する
+    # 期待値: payload検証とtarget解決より先に403 csrf_failedで拒否する
+    def test_preview_requires_exact_origin_and_csrf_before_target_resolution(self):
+        self.client.credentials()
+        with patch(
+            "lineaccounts.delivery_repositories.DeliveryTargetDirectory.resolve",
+            side_effect=AssertionError("target adapter must not run"),
+        ):
+            response = self.client.post(
+                "/api/deliveries/preview/",
+                {"secret-canary": "must-not-be-validated"},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"]["code"], "csrf_failed")
+        self.assertNotIn("secret-canary", str(response.json()))
+        self.assertEqual(DeliveryAttempt.objects.count(), 0)
+
+    # テストケース: preview中のtarget directory読取がDBエラーになる
+    # 期待値: 固定safe 503へ縮約し、confirmation・attempt・LINE callを一切作らない
+    def test_preview_target_storage_failure_has_no_side_effects(self):
+        with (
+            patch(
+                "lineaccounts.delivery_repositories.DeliveryTargetDirectory.resolve",
+                side_effect=DatabaseError("database-secret-canary"),
+            ),
+            patch("delivery.views.ConfirmationService.issue") as issue,
+            patch("delivery.views.LINEGateway") as gateway,
+        ):
+            response = self.client.post(
+                "/api/deliveries/preview/",
+                {
+                    "channelId": str(self.channel.public_id),
+                    "recipientId": str(self.recipient.public_id),
+                    "subject": "件名",
+                    "body": "本文",
+                    "receiptRequested": True,
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.json(),
+            {
+                "error": {
+                    "code": "storage_unavailable",
+                    "summary": "処理を完了できませんでした。",
+                }
+            },
+        )
+        self.assertNotIn("database-secret-canary", str(response.json()))
+        issue.assert_not_called()
+        gateway.assert_not_called()
         self.assertEqual(DeliveryAttempt.objects.count(), 0)
 
     # テストケース: 空白だけの件名をpreviewする
@@ -89,7 +293,13 @@ class DeliveryApiTests(APITestCase):
     def test_preview_rejects_invalid_content_safely(self):
         response = self.client.post(
             "/api/deliveries/preview/",
-            {"subject": "  ", "body": "本文"},
+            {
+                "channelId": str(self.channel.public_id),
+                "recipientId": str(self.recipient.public_id),
+                "subject": "  ",
+                "body": "本文",
+                "receiptRequested": False,
+            },
             format="json",
         )
 

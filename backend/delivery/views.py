@@ -9,17 +9,25 @@ from rest_framework.exceptions import (
 )
 from rest_framework.response import Response
 
-from lineaccounts.authentication import OwnerPrincipal
+from lineaccounts.authentication import OwnerPrincipal, OwnerSessionContext
 from lineaccounts.views import OwnerProtectedAPIView
 
-from .confirmation import ConfirmationError, ConfirmationTokenService
-from .formatters import MessageValidationError, format_message
+from .confirmation import (
+    ConfirmationError,
+    ConfirmationService,
+    ConfirmationTokenService,
+)
+from .formatters import (
+    MessageValidationError,
+    format_message,
+    format_message_snapshot,
+)
 from .gateway import LINEGateway
 from .serializers import (
     CanonicalUUIDField,
     DeliveryChannelChoiceResponseSerializer,
     DeliveryRecipientChoiceResponseSerializer,
-    PreviewRequestSerializer,
+    LinkedPreviewRequestSerializer,
     SendDeliveryRequestSerializer,
 )
 from .services import (
@@ -28,7 +36,12 @@ from .services import (
     OperationIdReusedError,
     SubmitDeliveryCommand,
 )
-from .types import TargetUnavailable
+from .types import (
+    ConfirmationSnapshot,
+    OwnerIdentitySnapshot,
+    OwnerPrincipal as DeliveryOwnerPrincipal,
+    TargetUnavailable,
+)
 
 
 SAFE_SUMMARIES = {
@@ -39,6 +52,7 @@ SAFE_SUMMARIES = {
     "delivery_in_progress": "同じ内容の送信を処理中です。",
     "operation_not_found": "送信操作を確認できませんでした。",
     "target_not_available": "対象を確認できませんでした。",
+    "target_not_deliverable": "選択した対象は現在配信できません。",
     "storage_unavailable": "処理を完了できませんでした。",
     "unexpected": "配信処理を完了できませんでした。",
 }
@@ -179,17 +193,79 @@ class DeliveryTargetRecipientListAPIView(LocalDeliveryAPIView):
 
 class PreviewAPIView(LocalDeliveryAPIView):
     def post(self, request):
-        serializer = PreviewRequestSerializer(data=request.data)
+        serializer = LinkedPreviewRequestSerializer(data=request.data)
         if not serializer.is_valid():
             return serializer_error_response(serializer)
+        values = serializer.validated_data
         try:
-            message = format_message(**serializer.validated_data)
+            message = format_message_snapshot(
+                values["subject"],
+                values["body"],
+            )
         except MessageValidationError as error:
             return message_error_response(error)
+
+        principal = request.user
+        context = request.auth
+        assert isinstance(principal, OwnerPrincipal)
+        assert isinstance(context, OwnerSessionContext)
+        try:
+            from lineaccounts.delivery_repositories import DeliveryTargetDirectory
+
+            target = DeliveryTargetDirectory().resolve(
+                principal.identity_public_id,
+                values["channelId"],
+                values["recipientId"],
+            )
+        except DatabaseError:
+            return error_response(
+                "storage_unavailable",
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        if isinstance(target, TargetUnavailable):
+            return error_response(
+                "target_not_available",
+                status.HTTP_404_NOT_FOUND,
+            )
+        if not target.delivery_available:
+            return error_response(
+                "target_not_deliverable",
+                status.HTTP_409_CONFLICT,
+            )
+
+        confirmation_service = ConfirmationService()
+        receipt_expires_at = confirmation_service.receipt_expires_at(
+            values["receiptRequested"]
+        )
+        confirmation = confirmation_service.issue(
+            ConfirmationSnapshot(
+                owner=DeliveryOwnerPrincipal(context.session.owner_slot),
+                owner_identity=OwnerIdentitySnapshot(
+                    principal.identity_public_id
+                ),
+                channel_public_id=target.snapshot.channel_public_id,
+                recipient_public_id=target.snapshot.recipient_public_id,
+                target_revision=target.revision,
+                message_fingerprint=message.fingerprint,
+                receipt_requested=values["receiptRequested"],
+                receipt_expires_at=receipt_expires_at,
+            )
+        )
         return Response(
             {
+                "channelId": str(target.snapshot.channel_public_id),
+                "channelLabel": target.snapshot.channel_label,
+                "recipientId": str(target.snapshot.recipient_public_id),
+                "recipientDisplayName": context.session.display_name,
+                "friendshipState": target.snapshot.friendship_state,
                 "formattedText": message.formatted_text,
-                "confirmationToken": ConfirmationTokenService().issue(message),
+                "receiptRequested": values["receiptRequested"],
+                "receiptExpiresAt": (
+                    confirmation.receipt_expires_at.isoformat()
+                    if confirmation.receipt_expires_at is not None
+                    else None
+                ),
+                "confirmationToken": confirmation.token,
             }
         )
 

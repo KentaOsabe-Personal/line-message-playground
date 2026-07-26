@@ -172,7 +172,7 @@
   - 完了時、正しいownerだけが理由付き選択肢を取得し秘密／固定env値は応答にない
   - _Requirements: 1.1, 1.2, 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.6, 2.7, 2.8_
   - _Depends: 2.2, 2.3, 2.4_
-- [ ] 7.2 preview APIで対象・内容・receipt optionを確認summaryへ変換する
+- [x] 7.2 preview APIで対象・内容・receipt optionを確認summaryへ変換する
   - state-changing POSTにexact-origin CSRFを要求し、live deliverabilityとformatterを検証する
   - source label、recipient display name／friendship、formatted text、receipt expiry、tokenを返す
   - 完了時、有効requestは送信前summaryを返し、不正／不可targetはattemptやLINE callを作らない
