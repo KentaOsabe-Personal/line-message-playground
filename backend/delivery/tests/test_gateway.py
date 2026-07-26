@@ -1,4 +1,7 @@
+import json
+import socket
 import uuid
+from urllib.error import URLError
 from unittest.mock import Mock, patch
 
 from django.test import SimpleTestCase, override_settings
@@ -7,6 +10,12 @@ from linebot.v3.messaging import (
     PostbackAction,
     TemplateMessage,
     TextMessage,
+)
+from linebot.v3.messaging.exceptions import ApiException
+from urllib3.exceptions import (
+    MaxRetryError,
+    NewConnectionError,
+    ReadTimeoutError,
 )
 
 from delivery.gateway import (
@@ -20,6 +29,7 @@ from delivery.gateway import (
 )
 from delivery.types import (
     LinePushAccepted as LinkedLinePushAccepted,
+    LinePushRejected as LinkedLinePushRejected,
     LinePushUnknown as LinkedLinePushUnknown,
     PushLinkedRecipientCommand,
     ReceiptCapability,
@@ -275,7 +285,13 @@ class LINEChannelPushGatewayTests(SimpleTestCase):
     # 期待値: 固定宛先mapperを通さずlinked用の閉じたunknownへ安全に縮約する。
     def test_errors_return_linked_unknown_without_legacy_mapper(self):
         for error in (
-            FakeApiException(503, {}),
+            ApiException(
+                http_resp=_FakeHttpResponse(
+                    status=503,
+                    headers={},
+                    data="external-body-canary",
+                )
+            ),
             ConnectionError("raw connection detail"),
         ):
             with self.subTest(error=type(error).__name__):
@@ -296,10 +312,205 @@ class LINEChannelPushGatewayTests(SimpleTestCase):
 
                 self.assertEqual(
                     result,
-                    LinkedLinePushUnknown("response_unknown"),
+                    LinkedLinePushUnknown("service_unknown"),
                 )
                 api_mapper.assert_not_called()
                 unexpected_mapper.assert_not_called()
+                api.push_message_with_http_info.assert_called_once()
+
+    # テストケース: 200応答をtuple形式またはSDK応答object形式で受け取る。
+    # 期待値: header名の大小文字に依存せず、安全なLINE request IDだけをacceptedへ残す。
+    def test_maps_200_response_shapes_to_accepted(self):
+        response_object = Mock(
+            status_code=200,
+            headers={"x-line-request-id": "object-request-id"},
+        )
+        for response, expected_request_id in (
+            (
+                (object(), 200, {"X-Line-Request-Id": "tuple-request-id"}),
+                "tuple-request-id",
+            ),
+            (response_object, "object-request-id"),
+            ((object(), 200, {}), None),
+        ):
+            with self.subTest(response_type=type(response).__name__):
+                api = Mock()
+                api.push_message_with_http_info.return_value = response
+
+                result = LINEChannelPushGateway(
+                    api_client_factory=lambda _: api
+                ).push(self._command())
+
+                self.assertEqual(
+                    result,
+                    LinkedLinePushAccepted(expected_request_id, None),
+                )
+                api.push_message_with_http_info.assert_called_once()
+
+    # テストケース: SDKの実ApiException形状で409既受理と明示的4xxを受け取る。
+    # 期待値: accepted request ID付き409だけをacceptedとし、他は閉じたrejected分類へ写像する。
+    def test_maps_api_exception_409_and_explicit_4xx(self):
+        cases = (
+            (
+                409,
+                {"x-line-accepted-request-id": "accepted-request-id"},
+                LinkedLinePushAccepted(None, "accepted-request-id"),
+            ),
+            (400, {}, LinkedLinePushRejected("invalid_request")),
+            (401, {}, LinkedLinePushRejected("authentication")),
+            (403, {}, LinkedLinePushRejected("permission")),
+            (409, {}, LinkedLinePushRejected("conflict")),
+            (413, {}, LinkedLinePushRejected("invalid_request")),
+            (418, {}, LinkedLinePushRejected("invalid_request")),
+            (429, {}, LinkedLinePushRejected("rate_limited")),
+        )
+        for status, headers, expected in cases:
+            with self.subTest(status=status):
+                api = Mock()
+                api.push_message_with_http_info.side_effect = ApiException(
+                    http_resp=_FakeHttpResponse(
+                        status=status,
+                        headers=headers,
+                        data="external-body-canary",
+                    )
+                )
+
+                with self.assertNoLogs(level="DEBUG"):
+                    result = LINEChannelPushGateway(
+                        api_client_factory=lambda _: api
+                    ).push(self._command())
+
+                self.assertEqual(result, expected)
+                rendered = repr(result)
+                for canary in (
+                    "external-body-canary",
+                    "selected-token-canary",
+                    "selected-subject-canary",
+                ):
+                    self.assertNotIn(canary, rendered)
+                api.push_message_with_http_info.assert_called_once()
+
+    # テストケース: 5xx、timeout、connection、decode失敗を受け取る。
+    # 期待値: 再送せず一回のcallで原因別の閉じたunknownへ縮約する。
+    def test_maps_ambiguous_failures_to_canonical_unknown(self):
+        api_500 = ApiException(
+            http_resp=_FakeHttpResponse(
+                status=500,
+                headers={},
+                data="external-body-canary",
+            )
+        )
+        cases = (
+            (api_500, LinkedLinePushUnknown("service_unknown")),
+            (
+                ApiException(
+                    reason=TimeoutError("raw-api-timeout-canary")
+                ),
+                LinkedLinePushUnknown("timeout_unknown"),
+            ),
+            (
+                ApiException(
+                    reason=ConnectionError("raw-api-connection-canary")
+                ),
+                LinkedLinePushUnknown("service_unknown"),
+            ),
+            (
+                TimeoutError("raw-timeout-canary"),
+                LinkedLinePushUnknown("timeout_unknown"),
+            ),
+            (
+                socket.timeout("raw-socket-timeout-canary"),
+                LinkedLinePushUnknown("timeout_unknown"),
+            ),
+            (
+                URLError(TimeoutError("raw-url-timeout-canary")),
+                LinkedLinePushUnknown("timeout_unknown"),
+            ),
+            (
+                ConnectionError("raw-connection-canary"),
+                LinkedLinePushUnknown("service_unknown"),
+            ),
+            (
+                URLError(ConnectionResetError("raw-reset-canary")),
+                LinkedLinePushUnknown("service_unknown"),
+            ),
+            (
+                ReadTimeoutError(
+                    None,
+                    "/push",
+                    "raw-urllib3-timeout-canary",
+                ),
+                LinkedLinePushUnknown("timeout_unknown"),
+            ),
+            (
+                MaxRetryError(
+                    None,
+                    "/push",
+                    NewConnectionError(
+                        None,
+                        "raw-urllib3-connection-canary",
+                    ),
+                ),
+                LinkedLinePushUnknown("service_unknown"),
+            ),
+            (
+                json.JSONDecodeError(
+                    "raw-decode-canary",
+                    "external-body-canary",
+                    0,
+                ),
+                LinkedLinePushUnknown("response_unknown"),
+            ),
+            (
+                RuntimeError("raw-runtime-canary"),
+                LinkedLinePushUnknown("response_unknown"),
+            ),
+        )
+        for error, expected in cases:
+            with self.subTest(error=type(error).__name__):
+                api = Mock()
+                api.push_message_with_http_info.side_effect = error
+
+                with self.assertNoLogs(level="DEBUG"):
+                    result = LINEChannelPushGateway(
+                        api_client_factory=lambda _: api
+                    ).push(self._command())
+
+                self.assertEqual(result, expected)
+                rendered = repr(result)
+                for canary in (
+                    "raw-",
+                    "external-body-canary",
+                    "selected-token-canary",
+                    "selected-subject-canary",
+                ):
+                    self.assertNotIn(canary, rendered)
+                api.push_message_with_http_info.assert_called_once()
+
+    # テストケース: SDKが非例外の5xx、4xx、または解釈不能なresponseを返す。
+    # 期待値: bodyへ触れず、同じcanonical分類へ安全に閉じる。
+    def test_maps_nonstandard_response_status_without_exposing_raw_response(self):
+        cases = (
+            ((object(), 503, {}), LinkedLinePushUnknown("service_unknown")),
+            (
+                (object(), 400, {}),
+                LinkedLinePushRejected("invalid_request"),
+            ),
+            ((object(), 204, {}), LinkedLinePushUnknown("response_unknown")),
+            (object(), LinkedLinePushUnknown("response_unknown")),
+        )
+        for response, expected in cases:
+            with self.subTest(expected=expected):
+                api = Mock()
+                api.push_message_with_http_info.return_value = response
+
+                result = LINEChannelPushGateway(
+                    api_client_factory=lambda _: api
+                ).push(self._command())
+
+                self.assertEqual(result, expected)
+                self.assertNotIn("selected-token-canary", repr(result))
+                self.assertNotIn("selected-subject-canary", repr(result))
                 api.push_message_with_http_info.assert_called_once()
 
 
@@ -307,3 +518,14 @@ class FakeApiException(Exception):
     def __init__(self, status, headers):
         self.status = status
         self.headers = headers
+
+
+class _FakeHttpResponse:
+    def __init__(self, *, status, headers, data):
+        self.status = status
+        self.reason = "external-reason-canary"
+        self.data = data
+        self._headers = headers
+
+    def getheaders(self):
+        return self._headers

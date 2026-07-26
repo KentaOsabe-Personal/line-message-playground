@@ -111,7 +111,7 @@
   - _Requirements: 5.2, 5.6, 5.7, 5.8, 6.1_
   - _Boundary: ChannelPushGateway_
   - _Depends: 1.1_
-- [ ] 5.2 LINE応答と例外をaccepted／rejected／unknownへ安全に縮約する
+- [x] 5.2 LINE応答と例外をaccepted／rejected／unknownへ安全に縮約する
   - 200／accepted 409、4xx／429、5xx／timeout／connection／decodeを閉じた結果へmapする
   - body、token、subject、生exceptionをresult／logへ出さない
   - 完了時、各応答fixtureは一意のsafe分類とLINE request ID有無へ変換される
