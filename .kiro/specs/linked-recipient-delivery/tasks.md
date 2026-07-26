@@ -202,7 +202,7 @@
   - network ambiguity時はsend再実行でなく既存operation status確認結果を返す
   - 完了時、各通信はrequest／response契約と認証境界を一箇所で満たす
   - _Requirements: 1.1, 1.2, 1.3, 4.2, 7.6, 9.2, 9.5_
-- [ ] 8.3 5つの編集軸と配信状態を純粋なstate遷移へ追加する
+- [x] 8.3 5つの編集軸と配信状態を純粋なstate遷移へ追加する
   - channel変更でrecipientをclearし、target／subject／body／receipt変更でconfirmationを破棄する
   - backは入力を保持し、submitting／processingは操作を無効にする
   - 完了時、reducer testから各入力変更・戻る・結果開始が決定的に観測できる
