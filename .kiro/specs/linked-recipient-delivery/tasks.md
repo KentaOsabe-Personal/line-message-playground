@@ -103,7 +103,7 @@
   - 完了時、再現可能なconcurrency testが三つのCAS不変条件を証明する
   - _Requirements: 6.4, 6.6, 8.9, 8.10_
 
-- [ ] 5. 選択channelから一件だけ送るgatewayとserviceを実装する
+- [x] 5. 選択channelから一件だけ送るgatewayとserviceを実装する
 - [x] 5.1 (P) 選択token・subject・operationから単一push requestを構築する
   - text一件、receipt要求時だけButtons template一件を同じrequestへ追加する
   - operation UUIDをretry keyとし、client retryを0にする
@@ -141,7 +141,7 @@
   - 完了時、再試行・競合・結果不明は追加pushなしで同じ保存結果を返す
   - _Requirements: 6.5, 6.6, 7.2, 7.3, 7.4, 7.5, 7.6, 9.2_
   - _Depends: 4.2_
-- [ ] 5.7 gatewayとserviceの一回性・fallback禁止・結果分類を検証する
+- [x] 5.7 gatewayとserviceの一回性・fallback禁止・結果分類を検証する
   - selected token／subject／retry key、transaction外call、receipt candidate勝者だけの利用を確認する
   - target change、credential failure、network ambiguity、terminal競合を網羅する
   - 完了時、fake gatewayのcall countが全経路で0または1になり、秘密canaryが観測面に残らない

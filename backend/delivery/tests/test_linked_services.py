@@ -1,11 +1,13 @@
+import hashlib
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 from uuid import uuid4
 
 from django.db import connection
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, TransactionTestCase
 
+from delivery.models import DeliveryAttempt
 from delivery.receipt import ReceiptCapabilityFactory
 from delivery.repositories import (
     DjangoAttemptRepository,
@@ -14,6 +16,7 @@ from delivery.repositories import (
 from delivery.services import DeliveryService
 from delivery.types import (
     AcceptedDeliveryCommand,
+    AcceptedLinkedAttempt,
     AttemptAccepted,
     AttemptConflict,
     ConfirmationSnapshot,
@@ -60,6 +63,18 @@ class FakeDirectory:
     def resolve(self, owner_identity_id, channel_id, recipient_id):
         self.calls.append((owner_identity_id, channel_id, recipient_id))
         return self.result
+
+
+class SequencedDirectory(FakeDirectory):
+    def __init__(self, *results):
+        super().__init__(results[-1])
+        self.results = list(results)
+
+    def resolve(self, owner_identity_id, channel_id, recipient_id):
+        self.calls.append((owner_identity_id, channel_id, recipient_id))
+        if len(self.results) > 1:
+            return self.results.pop(0)
+        return self.results[0]
 
 
 class FakeAttemptRepository:
@@ -1048,4 +1063,372 @@ class LinkedDeliveryStoredResultIntegrationTests(TestCase):
                 receipt_requested=receipt,
             ),
             receipt_commitment=commitment,
+        )
+
+
+class LinkedDeliverySinglePushIntegrationTests(TransactionTestCase):
+    """acceptから保存済みstatusまでの一回性を実repositoryで検証する。"""
+
+    reset_sequences = True
+
+    def setUp(self):
+        self.now = NOW
+        self.owner = OwnerPrincipal(42)
+        self.owner_identity = OwnerIdentitySnapshot(uuid4())
+        self.channel_id = uuid4()
+        self.recipient_id = uuid4()
+        self.target_snapshot = LinkedTargetSnapshot(
+            channel_public_id=self.channel_id,
+            channel_label="通知用",
+            recipient_public_id=self.recipient_id,
+            channel_active=True,
+            recipient_enabled=True,
+            friendship_state="friend",
+        )
+        self.live_target = LiveDeliveryTarget(
+            owner_identity=self.owner_identity,
+            provider_id="line",
+            snapshot=self.target_snapshot,
+            revision=TargetRevision(DIGEST_A),
+            subject=LineSubject("selected-subject-integration-canary"),
+            delivery_available=True,
+        )
+        self.message = MessageSnapshot(
+            subject="件名",
+            body="本文",
+            formatted_text="件名\n\n本文",
+            fingerprint=DIGEST_B,
+        )
+        self.expiry = NOW + timedelta(hours=1)
+        self.repository = DjangoAttemptRepository(clock=lambda: self.now)
+
+    def test_new_attempt_uses_only_selected_secrets_once_and_persists_safe_result(
+        self,
+    ):
+        cases = (
+            (
+                False,
+                LinePushAccepted("request-id", None),
+                "succeeded",
+                None,
+            ),
+            (
+                True,
+                LinePushRejected("authentication"),
+                "failed",
+                "authentication",
+            ),
+            (
+                True,
+                LinePushUnknown("service_unknown"),
+                "unknown",
+                "service_unknown",
+            ),
+        )
+        for receipt_requested, gateway_result, status, failure in cases:
+            with self.subTest(status=status, receipt=receipt_requested):
+                operation_id = uuid4()
+                raw_capability = (
+                    f"receipt-{status}-integration-canary"
+                )
+                candidate = ReceiptCapabilityCandidate(
+                    capability=ReceiptCapability(raw_capability),
+                    commitment=ReceiptCommitment(
+                        hashlib.sha256(
+                            raw_capability.encode("utf-8")
+                        ).hexdigest(),
+                        self.expiry,
+                    ),
+                )
+                credentials = FakeCredentialRepository(
+                    CredentialAvailable(
+                        AccessToken("selected-token-integration-canary")
+                    )
+                )
+                gateway = FakePushGateway(gateway_result)
+                service = self._service(
+                    directory=FakeDirectory(self.live_target),
+                    credentials=credentials,
+                    gateway=gateway,
+                    candidate=candidate,
+                )
+
+                with self.assertNoLogs(level="DEBUG"):
+                    accepted = service.accept_confirmed(
+                        self._submit(
+                            operation_id,
+                            receipt_requested=receipt_requested,
+                        )
+                    )
+                    executed = service.push_accepted(accepted)
+                    self.now += timedelta(seconds=1)
+                    stored = service.finalize_linked_push(executed)
+
+                self.assertEqual(credentials.calls, [self.channel_id])
+                self.assertEqual(len(gateway.commands), 1)
+                self.assertEqual(gateway.atomic_states, [False])
+                pushed = gateway.commands[0]
+                self.assertEqual(pushed.operation_id, operation_id)
+                self.assertEqual(
+                    pushed.access_token.reveal_for_use(),
+                    "selected-token-integration-canary",
+                )
+                self.assertEqual(
+                    pushed.subject.reveal_for_identity_binding(),
+                    "selected-subject-integration-canary",
+                )
+                self.assertEqual(
+                    pushed.receipt_capability is not None,
+                    receipt_requested,
+                )
+                self.assertEqual(stored.snapshot.status, status)
+                self.assertEqual(stored.snapshot.failure, failure)
+
+                row = DeliveryAttempt.objects.get(
+                    operation_id=operation_id
+                )
+                persisted = repr(row.__dict__)
+                rendered = " ".join(
+                    (repr(accepted), repr(executed), repr(stored), persisted)
+                )
+                for canary in (
+                    "selected-token-integration-canary",
+                    "selected-subject-integration-canary",
+                    raw_capability,
+                ):
+                    self.assertNotIn(canary, rendered)
+
+    def test_only_accept_winner_retains_candidate_and_retries_do_not_push(self):
+        winner_raw = "winner-receipt-integration-canary"
+        winner = ReceiptCapabilityCandidate(
+            capability=ReceiptCapability(winner_raw),
+            commitment=ReceiptCommitment(
+                hashlib.sha256(winner_raw.encode("utf-8")).hexdigest(),
+                self.expiry,
+            ),
+        )
+        gateway = FakePushGateway(LinePushAccepted("request-id", None))
+        command = self._submit(uuid4(), receipt_requested=True)
+        service = self._service(
+            directory=FakeDirectory(self.live_target),
+            credentials=FakeCredentialRepository(
+                CredentialAvailable(
+                    AccessToken("selected-token-integration-canary")
+                )
+            ),
+            gateway=gateway,
+            candidate=winner,
+        )
+
+        accepted = service.accept_confirmed(command)
+        same_operation = self._service(
+            directory=FakeDirectory(self.live_target),
+            credentials=object(),
+            gateway=gateway,
+            candidate=self._candidate("same-operation-loser"),
+        ).accept_confirmed(command)
+        active_collision = self._service(
+            directory=FakeDirectory(self.live_target),
+            credentials=object(),
+            gateway=gateway,
+            candidate=self._candidate("active-loser"),
+        ).accept_confirmed(
+            self._submit(uuid4(), receipt_requested=True)
+        )
+        conflicting = self._service(
+            directory=FakeDirectory(self.live_target),
+            credentials=object(),
+            gateway=gateway,
+            candidate=self._candidate("conflict-loser"),
+        ).accept_confirmed(
+            self._submit(
+                command.operation_id,
+                receipt_requested=True,
+                message=self._other_message(),
+            )
+        )
+
+        self.assertIsInstance(accepted, AcceptedLinkedAttempt)
+        self.assertIsInstance(same_operation, ExistingAttempt)
+        self.assertIsInstance(active_collision, ExistingAttempt)
+        self.assertIsInstance(conflicting, AttemptConflict)
+        self.assertEqual(gateway.commands, [])
+        self.assertEqual(DeliveryAttempt.objects.count(), 1)
+        row = DeliveryAttempt.objects.get()
+        self.assertEqual(
+            row.receipt_token_digest,
+            hashlib.sha256(winner_raw.encode("utf-8")).hexdigest(),
+        )
+        self.assertNotIn("loser", repr(row.__dict__))
+
+        executed = service.push_accepted(accepted)
+        stored = service.finalize_linked_push(executed)
+        repeated = service.accept_confirmed(command)
+
+        self.assertEqual(stored.snapshot.status, "succeeded")
+        self.assertIsInstance(repeated, ExistingAttempt)
+        self.assertEqual(len(gateway.commands), 1)
+        capability = gateway.commands[0].receipt_capability
+        self.assertIsNotNone(capability)
+        self.assertEqual(
+            capability.reveal_for_push_action(),
+            winner_raw,
+        )
+
+    def test_credential_and_target_failures_never_fallback_or_call_gateway(self):
+        changed_target = replace(
+            self.live_target,
+            revision=TargetRevision("c" * 64),
+            subject=LineSubject("changed-subject-integration-canary"),
+        )
+        cases = (
+            (
+                FakeDirectory(self.live_target),
+                FakeCredentialRepository(
+                    CredentialUnavailable("credential_unreadable")
+                ),
+                "configuration",
+            ),
+            (
+                SequencedDirectory(self.live_target, changed_target),
+                FakeCredentialRepository(
+                    CredentialAvailable(
+                        AccessToken("selected-token-integration-canary")
+                    )
+                ),
+                "target_changed",
+            ),
+        )
+        for directory, credentials, expected_failure in cases:
+            with self.subTest(failure=expected_failure):
+                gateway = FakePushGateway(
+                    LinePushAccepted("must-not-be-used", None)
+                )
+                service = self._service(
+                    directory=directory,
+                    credentials=credentials,
+                    gateway=gateway,
+                    candidate=self._candidate(
+                        f"{expected_failure}-receipt-canary",
+                    ),
+                )
+                accepted = service.accept_confirmed(
+                    self._submit(uuid4(), receipt_requested=True)
+                )
+
+                prevented = service.push_accepted(accepted)
+
+                self.assertIsInstance(prevented, LinkedPushPrevented)
+                self.assertEqual(
+                    prevented.snapshot.failure,
+                    expected_failure,
+                )
+                self.assertEqual(gateway.commands, [])
+                self.assertEqual(
+                    DeliveryAttempt.objects.get(
+                        operation_id=accepted.snapshot.operation_id
+                    ).status,
+                    "failed",
+                )
+
+    def test_unknown_and_terminal_cas_loss_never_trigger_another_push(self):
+        gateway = FakePushGateway(LinePushUnknown("timeout_unknown"))
+        service = self._service(
+            directory=FakeDirectory(self.live_target),
+            credentials=FakeCredentialRepository(
+                CredentialAvailable(
+                    AccessToken("selected-token-integration-canary")
+                )
+            ),
+            gateway=gateway,
+            candidate=self._candidate(
+                "unknown-receipt-integration-canary",
+            ),
+        )
+        operation_id = uuid4()
+        accepted = service.accept_confirmed(
+            self._submit(operation_id, receipt_requested=True)
+        )
+        executed = service.push_accepted(accepted)
+        first = service.finalize_linked_push(executed)
+
+        late = service.finalize_linked_push(
+            LinkedPushExecuted(
+                accepted.attempt_id,
+                LinePushAccepted("late-request-id", None),
+            )
+        )
+        first_status = service.check_linked_status(
+            self.owner.slot,
+            operation_id,
+        )
+        second_status = service.check_linked_status(
+            self.owner.slot,
+            operation_id,
+        )
+
+        self.assertEqual(first.snapshot.status, "unknown")
+        self.assertEqual(late.snapshot.status, "unknown")
+        self.assertEqual(late.snapshot.failure, "timeout_unknown")
+        self.assertIsNone(late.snapshot.line_request_id)
+        self.assertEqual(first_status, second_status)
+        self.assertEqual(len(gateway.commands), 1)
+
+    def _service(
+        self,
+        *,
+        directory,
+        credentials,
+        gateway,
+        candidate,
+    ):
+        return DeliveryService(
+            clock=lambda: self.now,
+            target_directory=directory,
+            attempt_repository=self.repository,
+            receipt_capability_factory=FakeReceiptFactory(candidate),
+            credential_repository=credentials,
+            channel_push_gateway=gateway,
+        )
+
+    def _submit(
+        self,
+        operation_id,
+        *,
+        receipt_requested,
+        message=None,
+    ):
+        selected_message = message or self.message
+        return SubmitLinkedDelivery(
+            operation_id=operation_id,
+            confirmation=ConfirmationSnapshot(
+                owner=self.owner,
+                owner_identity=self.owner_identity,
+                channel_public_id=self.channel_id,
+                recipient_public_id=self.recipient_id,
+                target_revision=self.live_target.revision,
+                message_fingerprint=selected_message.fingerprint,
+                receipt_requested=receipt_requested,
+                receipt_expires_at=(
+                    self.expiry if receipt_requested else None
+                ),
+            ),
+            message=selected_message,
+        )
+
+    def _candidate(self, raw):
+        return ReceiptCapabilityCandidate(
+            capability=ReceiptCapability(raw),
+            commitment=ReceiptCommitment(
+                hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                self.expiry,
+            ),
+        )
+
+    def _other_message(self):
+        return MessageSnapshot(
+            subject="別件名",
+            body="本文",
+            formatted_text="別件名\n\n本文",
+            fingerprint="e" * 64,
         )
