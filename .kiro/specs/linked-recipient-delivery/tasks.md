@@ -35,7 +35,7 @@
   - fixed env targetやcredential／subjectをprojectionへ含めない
   - 完了時、ownerは有効・無効channelを理由付きで区別でき、秘密値は選択肢に現れない
   - _Requirements: 1.4, 2.1, 2.3, 2.6, 2.8_
-- [ ] 2.3 選択channel配下のrecipient選択肢を安全なsummaryで返す
+- [x] 2.3 選択channel配下のrecipient選択肢を安全なsummaryで返す
   - recipient display name、opaque ID、enabled、friendship、availability理由を返す
   - 別provider・別channel・一覧外IDを受け付けず、配信可能recipientがない状態を表す
   - 完了時、friend／not_friend／unknown／disabledを区別し、生LINE user IDなしで選択できる

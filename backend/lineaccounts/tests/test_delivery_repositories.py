@@ -1,5 +1,6 @@
 import hashlib
 from datetime import UTC, datetime, timedelta, timezone
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 from django.test import SimpleTestCase, TestCase
@@ -8,7 +9,7 @@ from lineaccounts.delivery_repositories import (
     DeliveryTargetDirectory,
     build_target_revision,
 )
-from lineaccounts.models import LineIdentity, OwnerAccount
+from lineaccounts.models import DeliveryRecipient, LineIdentity, OwnerAccount
 from linechannels.models import LineChannel, LineChannelCredential
 
 
@@ -271,3 +272,247 @@ class DeliveryTargetDirectoryChannelTests(TestCase):
             available=available,
             unavailable_reason=reason,
         )
+
+
+class DeliveryTargetDirectoryRecipientTests(TestCase):
+    provider_id = "0012345678"
+
+    def setUp(self):
+        self.identity = LineIdentity.objects.create(
+            provider_id=self.provider_id,
+            subject=f"U{uuid4().hex}",
+            display_name="Owner display",
+        )
+        OwnerAccount.objects.get_or_create(slot=1)
+        OwnerAccount.objects.filter(slot=1).update(
+            state=OwnerAccount.State.ACTIVE,
+            identity=self.identity,
+        )
+        self.channel = self._channel()
+        self.directory = DeliveryTargetDirectory()
+
+    def _channel(self, *, provider_id=None, active=True):
+        return LineChannel.objects.create(
+            messaging_api_channel_id=str(uuid4().int)[:20],
+            bot_user_id=f"U{uuid4().hex}",
+            label="配信チャネル",
+            provider_id=provider_id or self.provider_id,
+            is_active=active,
+        )
+
+    def _recipient(
+        self,
+        *,
+        identity=None,
+        channel=None,
+        enabled=True,
+        friendship_state=DeliveryRecipient.FriendshipState.FRIEND,
+    ):
+        return DeliveryRecipient.objects.create(
+            identity=identity or self.identity,
+            line_channel=channel or self.channel,
+            enabled=enabled,
+            friendship_state=friendship_state,
+        )
+
+    # テストケース: 選択channel配下のfriend／not_friend／unknown／disabled recipientを一覧する
+    # 期待値: safe summaryで各状態を区別し、配信可能性と理由を正しく返す
+    def test_lists_recipient_states_with_safe_availability(self):
+        scenarios = (
+            (True, "friend", True, None),
+            (False, "friend", False, "recipient_disabled"),
+            (True, "not_friend", False, "not_friend"),
+            (True, "unknown", False, "friendship_unknown"),
+        )
+
+        from delivery.types import DeliveryRecipientChoice
+
+        for enabled, friendship, available, reason in scenarios:
+            channel = self._channel()
+            recipient = self._recipient(
+                channel=channel,
+                enabled=enabled,
+                friendship_state=friendship,
+            )
+            with self.subTest(enabled=enabled, friendship=friendship):
+                self.assertEqual(
+                    self.directory.list_recipients(
+                        self.identity.public_id,
+                        channel.public_id,
+                    ),
+                    (
+                        DeliveryRecipientChoice(
+                            recipient.public_id,
+                            self.identity.display_name,
+                            enabled,
+                            friendship,
+                            available,
+                            reason,
+                        ),
+                    ),
+                )
+
+    # テストケース: inactive channel配下のrecipientを一覧する
+    # 期待値: recipientを除外せず全件をchannel_inactive理由の配信不可summaryとして返す
+    def test_inactive_channel_takes_availability_reason_precedence(self):
+        self.channel.is_active = False
+        self.channel.save(update_fields=("is_active", "updated_at"))
+        recipient = self._recipient(
+            enabled=False,
+            friendship_state=DeliveryRecipient.FriendshipState.NOT_FRIEND,
+        )
+
+        choices = self.directory.list_recipients(
+            self.identity.public_id,
+            self.channel.public_id,
+        )
+
+        self.assertEqual(len(choices), 1)
+        self.assertEqual(choices[0].recipient_public_id, recipient.public_id)
+        self.assertFalse(choices[0].available)
+        self.assertEqual(choices[0].unavailable_reason, "channel_inactive")
+
+    # テストケース: recipientを持たない正当な選択channelを一覧する
+    # 期待値: 最終送信へ進めないno_deliverable_recipient状態を明示する
+    def test_returns_no_deliverable_state_when_channel_has_no_recipients(self):
+        from delivery.types import TargetUnavailable
+
+        self.assertEqual(
+            self.directory.list_recipients(
+                self.identity.public_id,
+                self.channel.public_id,
+            ),
+            TargetUnavailable("no_deliverable_recipient"),
+        )
+
+    # テストケース: 別provider・別channel・一覧外IDをrecipient一覧へ指定する
+    # 期待値: 存在や所有関係を開示せず同じsafe unavailableへ縮約する
+    def test_rejects_out_of_scope_channel_without_disclosure(self):
+        other_provider_channel = self._channel(provider_id="0099999999")
+        other_identity = LineIdentity.objects.create(
+            provider_id=self.provider_id,
+            subject=f"U{uuid4().hex}",
+            display_name="Not owner",
+        )
+        other_identity_channel = self._channel()
+        self._recipient()
+        self._recipient(identity=other_identity, channel=other_identity_channel)
+
+        from delivery.types import TargetUnavailable
+
+        for owner_id, channel_id in (
+            (self.identity.public_id, other_provider_channel.public_id),
+            (other_identity.public_id, other_identity_channel.public_id),
+            (self.identity.public_id, uuid4()),
+        ):
+            with self.subTest(owner_id=owner_id, channel_id=channel_id):
+                self.assertEqual(
+                    self.directory.list_recipients(
+                        owner_id,
+                        channel_id,
+                    ),
+                    TargetUnavailable(),
+                )
+
+        self.assertEqual(
+            self.directory.list_recipients(
+                self.identity.public_id,
+                other_identity_channel.public_id,
+            ),
+            TargetUnavailable("no_deliverable_recipient"),
+        )
+
+    # テストケース: 先行channel確認後、recipient取得直前にchannelのprovider関係が変化する
+    # 期待値: recipient queryがowner・channel・provider関係を再照合し範囲外summaryを返さない
+    def test_rechecks_owner_channel_provider_relation_in_recipient_query(self):
+        self._recipient()
+        original_filter = DeliveryRecipient.objects.filter
+
+        def mutate_provider_before_recipient_query(*args, **kwargs):
+            LineChannel.objects.filter(pk=self.channel.pk).update(
+                provider_id="0099999999",
+            )
+            return original_filter(*args, **kwargs)
+
+        from delivery.types import TargetUnavailable
+
+        with patch.object(
+            DeliveryRecipient.objects,
+            "filter",
+            side_effect=mutate_provider_before_recipient_query,
+        ):
+            result = self.directory.list_recipients(
+                self.identity.public_id,
+                self.channel.public_id,
+            )
+
+        self.assertEqual(
+            result,
+            TargetUnavailable("no_deliverable_recipient"),
+        )
+
+    # テストケース: 先行owner確認後、recipient取得直前にownerがunlink処理へ遷移する
+    # 期待値: recipient queryがactive owner関係を再照合し範囲外summaryを返さない
+    def test_rechecks_active_owner_relation_in_recipient_query(self):
+        self._recipient()
+        original_filter = DeliveryRecipient.objects.filter
+
+        def deactivate_owner_before_recipient_query(*args, **kwargs):
+            OwnerAccount.objects.filter(slot=1).update(
+                state=OwnerAccount.State.DEAUTHORIZATION_PENDING,
+                unlink_generation=uuid4(),
+            )
+            return original_filter(*args, **kwargs)
+
+        from delivery.types import TargetUnavailable
+
+        with patch.object(
+            DeliveryRecipient.objects,
+            "filter",
+            side_effect=deactivate_owner_before_recipient_query,
+        ):
+            result = self.directory.list_recipients(
+                self.identity.public_id,
+                self.channel.public_id,
+            )
+
+        self.assertEqual(
+            result,
+            TargetUnavailable("no_deliverable_recipient"),
+        )
+
+    # テストケース: recipient選択肢をsecret canaryを持つidentity／channelから投影する
+    # 期待値: display name・opaque ID・enabled・friendship・availability・理由以外を含めない
+    def test_projection_excludes_line_subject_and_channel_secrets(self):
+        recipient = self._recipient()
+        LineChannelCredential.objects.create(
+            line_channel=self.channel,
+            access_token_ciphertext=b"recipient-token-canary",
+            channel_secret_ciphertext=b"recipient-secret-canary",
+        )
+
+        choice = self.directory.list_recipients(
+            self.identity.public_id,
+            self.channel.public_id,
+        )[0]
+
+        self.assertEqual(
+            set(choice.__dataclass_fields__),
+            {
+                "recipient_public_id",
+                "display_name",
+                "enabled",
+                "friendship_state",
+                "available",
+                "unavailable_reason",
+            },
+        )
+        projection = repr(choice)
+        for secret in (
+            recipient.identity.subject,
+            "recipient-token-canary",
+            "recipient-secret-canary",
+            self.channel.messaging_api_channel_id,
+            self.channel.bot_user_id,
+        ):
+            self.assertNotIn(secret, projection)

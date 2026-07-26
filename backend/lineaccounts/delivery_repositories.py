@@ -4,8 +4,13 @@ from uuid import UUID
 
 from django.db import models
 
-from delivery.types import DeliveryChannelChoice, TargetRevision
-from lineaccounts.models import LineIdentity, OwnerAccount
+from delivery.types import (
+    DeliveryChannelChoice,
+    DeliveryRecipientChoice,
+    TargetRevision,
+    TargetUnavailable,
+)
+from lineaccounts.models import DeliveryRecipient, LineIdentity, OwnerAccount
 from linechannels.models import LineChannel
 
 
@@ -39,6 +44,95 @@ class DeliveryTargetDirectory:
             )
             for channel in channels
         )
+
+    def list_recipients(
+        self,
+        owner_identity_id: UUID,
+        channel_id: UUID,
+    ) -> tuple[DeliveryRecipientChoice, ...] | TargetUnavailable:
+        owner_identity = (
+            LineIdentity.objects.filter(
+                public_id=owner_identity_id,
+                owner_account__state=OwnerAccount.State.ACTIVE,
+                owner_account__identity_id=models.F("pk"),
+            )
+            .values("pk", "provider_id")
+            .first()
+        )
+        if owner_identity is None:
+            return TargetUnavailable()
+
+        channel = (
+            LineChannel.objects.filter(
+                public_id=channel_id,
+                provider_id=owner_identity["provider_id"],
+            )
+            .values("pk", "is_active")
+            .first()
+        )
+        if channel is None:
+            return TargetUnavailable()
+
+        recipients = tuple(
+            DeliveryRecipient.objects.filter(
+                identity_id=owner_identity["pk"],
+                identity__public_id=owner_identity_id,
+                identity__owner_account__state=OwnerAccount.State.ACTIVE,
+                identity__owner_account__identity_id=models.F("identity_id"),
+                line_channel_id=channel["pk"],
+                line_channel__public_id=channel_id,
+                line_channel__provider_id=models.F("identity__provider_id"),
+            )
+            .select_related("identity", "line_channel")
+            .only(
+                "public_id",
+                "enabled",
+                "friendship_state",
+                "identity__display_name",
+                "line_channel__is_active",
+            )
+            .order_by("public_id")
+        )
+        if not recipients:
+            return TargetUnavailable("no_deliverable_recipient")
+
+        return tuple(
+            DeliveryRecipientChoice(
+                recipient_public_id=recipient.public_id,
+                display_name=recipient.identity.display_name,
+                enabled=recipient.enabled,
+                friendship_state=recipient.friendship_state,
+                available=(
+                    recipient.line_channel.is_active
+                    and recipient.enabled
+                    and recipient.friendship_state
+                    == DeliveryRecipient.FriendshipState.FRIEND
+                ),
+                unavailable_reason=_recipient_unavailable_reason(
+                    channel_active=recipient.line_channel.is_active,
+                    recipient_enabled=recipient.enabled,
+                    friendship_state=recipient.friendship_state,
+                ),
+            )
+            for recipient in recipients
+        )
+
+
+def _recipient_unavailable_reason(
+    *,
+    channel_active: bool,
+    recipient_enabled: bool,
+    friendship_state: str,
+) -> str | None:
+    if not channel_active:
+        return "channel_inactive"
+    if not recipient_enabled:
+        return "recipient_disabled"
+    if friendship_state == DeliveryRecipient.FriendshipState.NOT_FRIEND:
+        return "not_friend"
+    if friendship_state == DeliveryRecipient.FriendshipState.UNKNOWN:
+        return "friendship_unknown"
+    return None
 
 
 def build_target_revision(
