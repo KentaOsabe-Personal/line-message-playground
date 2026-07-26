@@ -191,7 +191,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.7, 3.7, 4.8, 7.7, 7.9, 7.11, 9.1, 9.5, 9.6, 9.7_
 
 - [ ] 8. linked recipient配信のFrontend状態と操作画面を実装する
-- [ ] 8.1 (P) target・preview・status・receipt応答をstrict runtime検証する
+- [x] 8.1 (P) target・preview・status・receipt応答をstrict runtime検証する
   - exact key、canonical UUID、closed enum、nullable expiry、safe errorを検証する
   - unknown key／enumとsecret canaryをprotocol errorへ変換する
   - 完了時、画面stateへ入る境界データは公開DTO契約を満たすものだけになる

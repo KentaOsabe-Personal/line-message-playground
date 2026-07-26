@@ -10,8 +10,8 @@ describe('delivery DTO', () => {
     expect(parseDeliveryResult({ status: 'processing', operationId: crypto.randomUUID(), acceptedAt: 'a', expiresAt: 'e' }).ok).toBe(true)
     expect(parseDeliveryResult({ status: 'processing', operationId: crypto.randomUUID(), acceptedAt: 'a' })).toEqual({ ok: false, error: { code: 'protocol_error', summary: '応答形式を確認できません。' } })
     expect(parsePreviewResponse({ formattedText: 'text', confirmationToken: 'token' }).ok).toBe(true)
-    expect(parseErrorResponse({ error: { code: 'invalid_input', summary: '入力を確認してください。', fields: { subject: ['件名は必須です。'] } } }).ok).toBe(true)
-    expect(parseErrorResponse({ error: { code: 'invalid_input', summary: '入力を確認してください。', fields: { subject: 'invalid' } } }).ok).toBe(false)
+    expect(parseErrorResponse({ error: { code: 'validation_error', summary: '入力を確認してください。', fields: { subject: ['件名は必須です。'] } } }).ok).toBe(true)
+    expect(parseErrorResponse({ error: { code: 'validation_error', summary: '入力を確認してください。', fields: { subject: 'invalid' } } }).ok).toBe(false)
   })
 
   // テストケース: 宛先や秘密値を含む未知の応答を判定する。

@@ -12,6 +12,7 @@ const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringif
 const createClient = () => createDeliveryApiClient(createProtectedHttpClient({
   readCookie: () => 'csrftoken=csrf-value',
 }))
+const operationId = '323e4567-e89b-12d3-a456-426614174000'
 
 describe('DeliveryApiClient', () => {
   afterEach(() => vi.restoreAllMocks())
@@ -21,18 +22,18 @@ describe('DeliveryApiClient', () => {
   test('calls the delivery endpoints with JSON requests', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(jsonResponse({ formattedText: '【件名】\n\n本文', confirmationToken: 'token' }))
-      .mockResolvedValueOnce(jsonResponse({ status: 'processing', operationId: 'id-1', acceptedAt: 'a', expiresAt: 'e' }, 202))
-      .mockResolvedValueOnce(jsonResponse({ status: 'succeeded', operationId: 'id-1', acceptedAt: 'a', completedAt: 'c', lineRequestId: null }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'processing', operationId, acceptedAt: 'a', expiresAt: 'e' }, 202))
+      .mockResolvedValueOnce(jsonResponse({ status: 'succeeded', operationId, acceptedAt: 'a', completedAt: 'c', lineRequestId: null }))
     const client = createClient()
 
     await client.preview({ subject: '件名', body: '本文' })
-    await client.send({ subject: '件名', body: '本文', operationId: 'id-1', confirmationToken: 'token' })
-    await client.checkStatus('id-1')
+    await client.send({ subject: '件名', body: '本文', operationId, confirmationToken: 'token' })
+    await client.checkStatus(operationId)
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/deliveries/preview/',
       '/api/deliveries/',
-      '/api/deliveries/id-1/status/',
+      `/api/deliveries/${operationId}/status/`,
     ])
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       method: 'POST',
@@ -52,14 +53,14 @@ describe('DeliveryApiClient', () => {
   test('routes every delivery operation through the protected HTTP client', async () => {
     const request = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ formattedText: '【件名】\n\n本文', confirmationToken: 'token' }))
-      .mockResolvedValueOnce(jsonResponse({ status: 'processing', operationId: 'id-1', acceptedAt: 'a', expiresAt: 'e' }, 202))
-      .mockResolvedValueOnce(jsonResponse({ status: 'succeeded', operationId: 'id-1', acceptedAt: 'a', completedAt: 'c', lineRequestId: null }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'processing', operationId, acceptedAt: 'a', expiresAt: 'e' }, 202))
+      .mockResolvedValueOnce(jsonResponse({ status: 'succeeded', operationId, acceptedAt: 'a', completedAt: 'c', lineRequestId: null }))
     const protectedClient: ProtectedHttpClient = { request }
     const client = createDeliveryApiClient(protectedClient)
 
     await client.preview({ subject: '件名', body: '本文' })
-    await client.send({ subject: '件名', body: '本文', operationId: 'id-1', confirmationToken: 'token' })
-    await client.checkStatus('id-1')
+    await client.send({ subject: '件名', body: '本文', operationId, confirmationToken: 'token' })
+    await client.checkStatus(operationId)
 
     expect(request).toHaveBeenNthCalledWith(1, {
       path: '/api/deliveries/preview/',
@@ -69,10 +70,10 @@ describe('DeliveryApiClient', () => {
     expect(request).toHaveBeenNthCalledWith(2, {
       path: '/api/deliveries/',
       method: 'POST',
-      body: { subject: '件名', body: '本文', operationId: 'id-1', confirmationToken: 'token' },
+      body: { subject: '件名', body: '本文', operationId, confirmationToken: 'token' },
     })
     expect(request).toHaveBeenNthCalledWith(3, {
-      path: '/api/deliveries/id-1/status/',
+      path: `/api/deliveries/${operationId}/status/`,
       method: 'POST',
       body: undefined,
     })
