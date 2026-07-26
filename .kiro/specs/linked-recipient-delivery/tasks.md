@@ -92,7 +92,7 @@
   - digest、target、expiry、requested、delivery status、confirmed nullを照合して初回だけ記録する
   - 完了時、receipt更新は初回日時／event IDへ収束し、delivery statusとLINE IDを変更しない
   - _Requirements: 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10_
-- [ ] 4.4 repositoryのaccept・status・finalize・receipt契約を統合検証する
+- [x] 4.4 repositoryのaccept・status・finalize・receipt契約を統合検証する
   - operation reuse、target／option差、unlink後status、terminal不変、failed receipt拒否を網羅する
   - legacy fixedとlinkedの双方が同じrepository契約で安全に読めることを確認する
   - 完了時、各repository resultが保存済み状態と一致し、外部作用なしで再現できる

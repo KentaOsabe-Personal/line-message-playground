@@ -26,6 +26,7 @@ from delivery.types import (
     ReceiptRejected,
     ReceiptUnchanged,
 )
+from lineaccounts.models import LineIdentity, OwnerAccount
 
 
 NOW = datetime(2026, 7, 26, 12, 0, tzinfo=timezone.utc)
@@ -813,3 +814,376 @@ class DjangoAttemptRepositoryReceiptTests(TestCase):
         attempt = DeliveryAttempt.objects.get(pk=accepted.attempt_id)
         self.assertFalse(attempt.receipt_requested)
         self.assertIsNone(attempt.receipt_confirmed_at)
+
+
+class DjangoAttemptRepositoryContractIntegrationTests(TestCase):
+    def setUp(self):
+        self.repository = DjangoAttemptRepository(clock=lambda: NOW)
+        self.owner = OwnerPrincipal(1)
+        self.owner_identity = OwnerIdentitySnapshot(
+            UUID("11111111-1111-4111-8111-111111111111")
+        )
+        self.target = LinkedTargetSnapshot(
+            channel_public_id=UUID(
+                "22222222-2222-4222-8222-222222222222"
+            ),
+            channel_label="通知チャネル",
+            recipient_public_id=UUID(
+                "33333333-3333-4333-8333-333333333333"
+            ),
+            channel_active=True,
+            recipient_enabled=True,
+            friendship_state="friend",
+        )
+        self.message = MessageSnapshot(
+            subject="統合件名",
+            body="統合本文",
+            formatted_text="【統合件名】\n\n統合本文",
+            fingerprint="4" * 64,
+        )
+
+    def command(
+        self,
+        *,
+        operation_id=None,
+        target=None,
+        receipt_digest=None,
+        identity=None,
+    ):
+        target = target or self.target
+        identity = identity or self.owner_identity
+        commitment = (
+            ReceiptCommitment(
+                digest=receipt_digest,
+                expires_at=NOW + timedelta(hours=24),
+            )
+            if receipt_digest is not None
+            else None
+        )
+        return AcceptedDeliveryCommand(
+            operation_id=operation_id or uuid4(),
+            owner=self.owner,
+            owner_identity=identity,
+            target=target,
+            message=self.message,
+            request_fingerprint=build_request_fingerprint(
+                owner=self.owner,
+                owner_identity=identity,
+                channel_public_id=target.channel_public_id,
+                recipient_public_id=target.recipient_public_id,
+                message_fingerprint=self.message.fingerprint,
+                receipt_requested=commitment is not None,
+            ),
+            receipt_commitment=commitment,
+        )
+
+    # テストケース: operation再利用とtarget／receipt option差を一連のaccept契約で扱う。
+    # 期待値: 同一requestはcanonical行へ収束し、同一operationの差分は競合、別requestは別行になる。
+    def test_accept_contract_distinguishes_operation_target_and_option(self):
+        operation_id = uuid4()
+        original = self.command(operation_id=operation_id)
+        changed_target = LinkedTargetSnapshot(
+            channel_public_id=self.target.channel_public_id,
+            channel_label=self.target.channel_label,
+            recipient_public_id=uuid4(),
+            channel_active=True,
+            recipient_enabled=True,
+            friendship_state="friend",
+        )
+
+        accepted = self.repository.accept(original)
+        same_operation = self.repository.accept(original)
+        same_request_new_operation = self.repository.accept(
+            self.command(operation_id=uuid4())
+        )
+        target_conflict = self.repository.accept(
+            self.command(
+                operation_id=operation_id,
+                target=changed_target,
+            )
+        )
+        option_conflict = self.repository.accept(
+            self.command(
+                operation_id=operation_id,
+                receipt_digest="6" * 64,
+            )
+        )
+        target_variant = self.repository.accept(
+            self.command(target=changed_target)
+        )
+        option_variant = self.repository.accept(
+            self.command(receipt_digest="7" * 64)
+        )
+
+        self.assertIsInstance(accepted, AttemptAccepted)
+        self.assertIsInstance(same_operation, ExistingAttempt)
+        self.assertIsInstance(same_request_new_operation, ExistingAttempt)
+        self.assertEqual(
+            same_request_new_operation.snapshot.operation_id,
+            operation_id,
+        )
+        self.assertIsInstance(target_conflict, AttemptConflict)
+        self.assertIsInstance(option_conflict, AttemptConflict)
+        self.assertIsInstance(target_variant, AttemptAccepted)
+        self.assertIsInstance(option_variant, AttemptAccepted)
+        self.assertEqual(DeliveryAttempt.objects.count(), 3)
+
+    # テストケース: linked attempt受理後にowner連携が消え、配信確定と受取確認が続く。
+    # 期待値: 保存snapshotだけでstatusを返し、first terminalとreceiptを直交して不変に保つ。
+    def test_linked_status_finalize_and_receipt_survive_unlink(self):
+        identity = LineIdentity.objects.create(
+            public_id=self.owner_identity.public_id,
+            provider_id="provider",
+            subject="U" + "1" * 32,
+            display_name="送信者",
+        )
+        OwnerAccount.objects.update_or_create(
+            slot=self.owner.slot,
+            defaults={
+                "state": OwnerAccount.State.ACTIVE,
+                "identity": identity,
+            },
+        )
+        accepted = self.repository.accept(
+            self.command(receipt_digest="6" * 64)
+        )
+
+        OwnerAccount.objects.filter(slot=self.owner.slot).update(
+            state=OwnerAccount.State.VACANT,
+            identity=None,
+        )
+        identity.delete()
+        before_finalize = self.repository.get_for_owner(
+            self.owner.slot,
+            accepted.snapshot.operation_id,
+        )
+        first_completed_at = NOW + timedelta(seconds=1)
+        first_terminal = self.repository.finalize(
+            accepted.attempt_id,
+            LinePushAccepted("line-request", "accepted-request"),
+            first_completed_at,
+        )
+        later_terminal = self.repository.finalize(
+            accepted.attempt_id,
+            LinePushUnknown("timeout_unknown"),
+            NOW + timedelta(seconds=2),
+        )
+        receipt = self.repository.confirm_receipt(
+            ConfirmReceiptCommand(
+                capability_digest="6" * 64,
+                channel_public_id=self.target.channel_public_id,
+                recipient_public_id=self.target.recipient_public_id,
+                occurred_at=NOW + timedelta(seconds=3),
+                webhook_event_id="01J00000000000000000000000",
+            )
+        )
+        final_status = self.repository.get_for_owner(
+            self.owner.slot,
+            accepted.snapshot.operation_id,
+        )
+
+        self.assertFalse(LineIdentity.objects.exists())
+        self.assertEqual(before_finalize.target, self.target)
+        self.assertEqual(first_terminal.status, "succeeded")
+        self.assertEqual(later_terminal.status, "succeeded")
+        self.assertEqual(later_terminal.completed_at, first_completed_at)
+        self.assertEqual(later_terminal.line_request_id, "line-request")
+        self.assertIsInstance(receipt, ReceiptRecorded)
+        self.assertEqual(final_status.status, "succeeded")
+        self.assertEqual(final_status.receipt_status, "confirmed")
+        self.assertEqual(final_status.completed_at, first_completed_at)
+        self.assertEqual(final_status.line_request_id, "line-request")
+        self.assertEqual(
+            final_status.line_accepted_request_id,
+            "accepted-request",
+        )
+
+    # テストケース: failedとunknownを確定した別attemptへreceiptを提示する。
+    # 期待値: failedは無変更で拒否し、unknownは確認を記録して終端結果を維持する。
+    def test_receipt_rejects_failed_but_records_unknown_independently(self):
+        failed = self.repository.accept(
+            self.command(
+                receipt_digest="6" * 64,
+                identity=OwnerIdentitySnapshot(uuid4()),
+            )
+        )
+        unknown = self.repository.accept(
+            self.command(
+                receipt_digest="7" * 64,
+                identity=OwnerIdentitySnapshot(uuid4()),
+            )
+        )
+        failed_at = NOW + timedelta(seconds=1)
+        unknown_at = NOW + timedelta(seconds=2)
+        self.repository.finalize(
+            failed.attempt_id,
+            LinePushRejected("permission"),
+            failed_at,
+        )
+        self.repository.finalize(
+            unknown.attempt_id,
+            LinePushUnknown("response_unknown"),
+            unknown_at,
+        )
+
+        failed_receipt = self.repository.confirm_receipt(
+            ConfirmReceiptCommand(
+                capability_digest="6" * 64,
+                channel_public_id=self.target.channel_public_id,
+                recipient_public_id=self.target.recipient_public_id,
+                occurred_at=NOW + timedelta(seconds=3),
+                webhook_event_id="01J00000000000000000000000",
+            )
+        )
+        unknown_receipt = self.repository.confirm_receipt(
+            ConfirmReceiptCommand(
+                capability_digest="7" * 64,
+                channel_public_id=self.target.channel_public_id,
+                recipient_public_id=self.target.recipient_public_id,
+                occurred_at=NOW + timedelta(seconds=4),
+                webhook_event_id="01J11111111111111111111111",
+            )
+        )
+
+        failed_attempt = DeliveryAttempt.objects.get(pk=failed.attempt_id)
+        unknown_attempt = DeliveryAttempt.objects.get(pk=unknown.attempt_id)
+        self.assertEqual(failed_receipt, ReceiptRejected("delivery_failed"))
+        self.assertIsNone(failed_attempt.receipt_confirmed_at)
+        self.assertEqual(failed_attempt.status, "failed")
+        self.assertEqual(failed_attempt.completed_at, failed_at)
+        self.assertIsInstance(unknown_receipt, ReceiptRecorded)
+        self.assertEqual(unknown_attempt.status, "unknown")
+        self.assertEqual(unknown_attempt.failure_type, "response_unknown")
+        self.assertEqual(unknown_attempt.completed_at, unknown_at)
+        self.assertEqual(
+            unknown_attempt.receipt_webhook_event_id,
+            "01J11111111111111111111111",
+        )
+
+    # テストケース: 0001由来のfixed終端行を0002でowner scopeへbackfillした形で照会する。
+    # 期待値: identity解決不能でも、backfill値と旧message・結果・ID・時刻を同値で返す。
+    def test_legacy_fixed_rows_share_owner_scoped_repository_contract(self):
+        succeeded_operation = uuid4()
+        failed_operation = uuid4()
+        succeeded_at = NOW - timedelta(days=2)
+        failed_at = NOW - timedelta(days=1)
+        succeeded_accepted_at = succeeded_at - timedelta(seconds=1)
+        failed_accepted_at = failed_at - timedelta(seconds=1)
+        succeeded = DeliveryAttempt.objects.create(
+            operation_id=succeeded_operation,
+            subject="旧成功件名",
+            body="旧成功本文",
+            formatted_text="【旧成功件名】\n\n旧成功本文",
+            content_fingerprint="a" * 64,
+            active_content_fingerprint=None,
+            request_fingerprint="a" * 64,
+            active_request_fingerprint=None,
+            target_mode=DeliveryAttempt.TargetMode.FIXED_USER,
+            owner_principal_slot=1,
+            owner_identity_public_id=None,
+            status=DeliveryAttempt.Status.SUCCEEDED,
+            line_request_id="legacy-line-request",
+            line_accepted_request_id="legacy-accepted-request",
+            accepted_at=succeeded_accepted_at,
+            processing_expires_at=succeeded_at,
+            sent_at=succeeded_at,
+            completed_at=succeeded_at,
+        )
+        failed = DeliveryAttempt.objects.create(
+            operation_id=failed_operation,
+            subject="旧失敗件名",
+            body="旧失敗本文",
+            formatted_text="【旧失敗件名】\n\n旧失敗本文",
+            content_fingerprint="b" * 64,
+            active_content_fingerprint=None,
+            request_fingerprint="b" * 64,
+            active_request_fingerprint=None,
+            target_mode=DeliveryAttempt.TargetMode.FIXED_USER,
+            owner_principal_slot=1,
+            owner_identity_public_id=None,
+            status=DeliveryAttempt.Status.FAILED,
+            failure_type=DeliveryAttempt.FailureType.SERVICE_UNAVAILABLE,
+            accepted_at=failed_accepted_at,
+            processing_expires_at=failed_at,
+            failed_at=failed_at,
+            completed_at=failed_at,
+        )
+
+        succeeded_snapshot = self.repository.get_for_owner(
+            1,
+            succeeded_operation,
+        )
+        failed_snapshot = self.repository.get_for_owner(
+            1,
+            failed_operation,
+        )
+
+        self.assertEqual(succeeded_snapshot.target.mode, "fixed_user")
+        self.assertEqual(
+            succeeded_snapshot.operation_id,
+            succeeded_operation,
+        )
+        self.assertEqual(succeeded_snapshot.owner, OwnerPrincipal(1))
+        self.assertIsNone(succeeded_snapshot.owner_identity)
+        self.assertEqual(succeeded_snapshot.message.subject, "旧成功件名")
+        self.assertEqual(succeeded_snapshot.message.body, "旧成功本文")
+        self.assertEqual(
+            succeeded_snapshot.message.formatted_text,
+            "【旧成功件名】\n\n旧成功本文",
+        )
+        self.assertEqual(
+            succeeded_snapshot.message.fingerprint,
+            "a" * 64,
+        )
+        self.assertEqual(succeeded_snapshot.status, "succeeded")
+        self.assertIsNone(succeeded_snapshot.failure)
+        self.assertEqual(
+            succeeded_snapshot.accepted_at,
+            succeeded_accepted_at,
+        )
+        self.assertEqual(
+            succeeded_snapshot.line_request_id,
+            "legacy-line-request",
+        )
+        self.assertEqual(
+            succeeded_snapshot.line_accepted_request_id,
+            "legacy-accepted-request",
+        )
+        self.assertEqual(succeeded_snapshot.completed_at, succeeded_at)
+        self.assertEqual(failed_snapshot.target.mode, "fixed_user")
+        self.assertEqual(failed_snapshot.operation_id, failed_operation)
+        self.assertEqual(failed_snapshot.owner, OwnerPrincipal(1))
+        self.assertIsNone(failed_snapshot.owner_identity)
+        self.assertEqual(failed_snapshot.message.subject, "旧失敗件名")
+        self.assertEqual(failed_snapshot.message.body, "旧失敗本文")
+        self.assertEqual(
+            failed_snapshot.message.formatted_text,
+            "【旧失敗件名】\n\n旧失敗本文",
+        )
+        self.assertEqual(failed_snapshot.message.fingerprint, "b" * 64)
+        self.assertEqual(failed_snapshot.status, "failed")
+        self.assertEqual(
+            failed_snapshot.failure,
+            "service_unavailable",
+        )
+        self.assertEqual(
+            failed_snapshot.accepted_at,
+            failed_accepted_at,
+        )
+        self.assertEqual(failed_snapshot.completed_at, failed_at)
+        self.assertIsNone(failed_snapshot.line_request_id)
+        self.assertIsNone(failed_snapshot.line_accepted_request_id)
+        succeeded.refresh_from_db()
+        failed.refresh_from_db()
+        self.assertEqual(succeeded.owner_principal_slot, 1)
+        self.assertEqual(failed.owner_principal_slot, 1)
+        self.assertEqual(
+            succeeded.request_fingerprint,
+            succeeded.content_fingerprint,
+        )
+        self.assertEqual(
+            failed.request_fingerprint,
+            failed.content_fingerprint,
+        )
+        self.assertEqual(succeeded.sent_at, succeeded_at)
+        self.assertEqual(failed.failed_at, failed_at)
