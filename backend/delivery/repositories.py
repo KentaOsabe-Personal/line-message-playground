@@ -11,17 +11,18 @@ from django.utils import timezone
 from .models import DeliveryAttempt
 from .types import (
     AcceptedDeliveryCommand,
+    AttemptFinalizationResult,
     AttemptAcceptResult,
     AttemptAccepted,
     AttemptConflict,
     ConfirmReceiptCommand,
     DeliverySnapshot,
+    DeliveryPrePushFailure,
     ExistingAttempt,
     FixedTargetSnapshot,
     LinkedTargetSnapshot,
     LinePushAccepted,
     LinePushRejected,
-    LinePushResult,
     LinePushUnknown,
     MessageSnapshot,
     OwnerIdentitySnapshot,
@@ -47,7 +48,7 @@ class AttemptRepository(Protocol):
     def finalize(
         self,
         attempt_id: int,
-        result: LinePushResult,
+        result: AttemptFinalizationResult,
         completed_at: datetime,
     ) -> DeliverySnapshot: ...
 
@@ -210,16 +211,21 @@ class DjangoAttemptRepository:
     def finalize(
         self,
         attempt_id: int,
-        result: LinePushResult,
+        result: AttemptFinalizationResult,
         completed_at: datetime,
     ) -> DeliverySnapshot:
         if type(attempt_id) is not int or attempt_id <= 0:
             raise ValueError("invalid attempt ID")
         if not isinstance(
             result,
-            (LinePushAccepted, LinePushRejected, LinePushUnknown),
+            (
+                LinePushAccepted,
+                LinePushRejected,
+                LinePushUnknown,
+                DeliveryPrePushFailure,
+            ),
         ):
-            raise ValueError("invalid LINE push result")
+            raise ValueError("invalid attempt finalization result")
         completed_at = _aware_datetime(completed_at)
 
         terminal_values: dict[str, object] = {
@@ -238,7 +244,10 @@ class DjangoAttemptRepository:
             terminal_values.update(
                 status=(
                     DeliveryAttempt.Status.FAILED
-                    if isinstance(result, LinePushRejected)
+                    if isinstance(
+                        result,
+                        (LinePushRejected, DeliveryPrePushFailure),
+                    )
                     else DeliveryAttempt.Status.UNKNOWN
                 ),
                 failure_type=result.failure_type,

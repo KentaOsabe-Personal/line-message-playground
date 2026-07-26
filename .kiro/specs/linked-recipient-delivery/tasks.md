@@ -130,7 +130,7 @@
   - 完了時、既存operation／active requestは保存状態だけを返しLINEを呼ばず、候補も外部へ渡さない
   - _Requirements: 5.1, 5.3, 5.4, 6.1, 6.2, 6.3, 6.4_
   - _Depends: 4.1, 4.3, 5.3_
-- [ ] 5.5 選択credential取得後にtargetを再検証してtransaction外でpushする
+- [x] 5.5 選択credential取得後にtargetを再検証してtransaction外でpushする
   - selected channel tokenだけを使い、取得失敗時に別channel／fixed envへfallbackしない
   - push直前revisionが変わればtarget failureへ確定しLINEを呼ばない
   - 完了時、有効targetだけが選択channelから一件へ最大一回送信される

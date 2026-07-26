@@ -14,9 +14,14 @@ from .types import (
     AcceptedLinkedAttempt,
     AttemptAccepted,
     AttemptConflict,
+    DeliveryPrePushFailure,
     ExistingAttempt,
+    LinkedPushExecuted,
+    LinkedPushPrevented,
+    LinkedPushStored,
     LinkedPushPreparation,
     LiveDeliveryTarget,
+    PushLinkedRecipientCommand,
     SubmitLinkedDelivery,
     TargetUnavailable,
 )
@@ -95,12 +100,16 @@ class DeliveryService:
         target_directory=None,
         attempt_repository=None,
         receipt_capability_factory=None,
+        credential_repository=None,
+        channel_push_gateway=None,
     ):
         self.gateway = gateway
         self.clock = clock
         self._target_directory = target_directory
         self._attempt_repository = attempt_repository
         self._receipt_capability_factory = receipt_capability_factory
+        self._credential_repository = credential_repository
+        self._channel_push_gateway = channel_push_gateway
 
     def submit(self, command):
         if self.gateway is None:
@@ -187,6 +196,63 @@ class DeliveryService:
             return accept_result
         raise ValueError("invalid attempt accept result")
 
+    def push_accepted(self, accepted):
+        """新規linked attemptだけをcredential再検証後に最大一回pushする。"""
+
+        if not isinstance(accepted, AcceptedLinkedAttempt):
+            raise ValueError("invalid accepted linked attempt")
+
+        preparation = accepted.push_preparation
+        selected_channel_id = (
+            preparation.target.snapshot.channel_public_id
+        )
+        credential = self._linked_credential_repository().get_access_token(
+            selected_channel_id
+        )
+
+        from linechannels.types import (
+            AccessToken,
+            CredentialAvailable,
+            CredentialUnavailable,
+        )
+
+        if isinstance(credential, CredentialUnavailable):
+            return self._prevent_linked_push(
+                accepted.attempt_id,
+                "configuration",
+            )
+        if not isinstance(credential, CredentialAvailable) or not isinstance(
+            credential.value,
+            AccessToken,
+        ):
+            raise ValueError("invalid access token credential result")
+
+        expected_target = preparation.target
+        current_target = self._linked_target_directory().resolve(
+            expected_target.owner_identity.public_id,
+            expected_target.snapshot.channel_public_id,
+            expected_target.snapshot.recipient_public_id,
+        )
+        if not self._same_push_target(current_target, expected_target):
+            return self._prevent_linked_push(
+                accepted.attempt_id,
+                "target_changed",
+            )
+
+        result = self._linked_channel_push_gateway().push(
+            PushLinkedRecipientCommand(
+                operation_id=accepted.snapshot.operation_id,
+                access_token=credential.value,
+                subject=current_target.subject,
+                text=preparation.message.formatted_text,
+                receipt_capability=preparation.receipt_capability,
+            )
+        )
+        return LinkedPushExecuted(
+            attempt_id=accepted.attempt_id,
+            result=result,
+        )
+
     def check_status(self, operation_id):
         attempt = DeliveryAttempt.objects.filter(operation_id=operation_id).first()
         if attempt is None:
@@ -234,6 +300,51 @@ class DeliveryService:
 
             self._receipt_capability_factory = ReceiptCapabilityFactory()
         return self._receipt_capability_factory
+
+    def _linked_credential_repository(self):
+        if self._credential_repository is None:
+            from linechannels.container import build_credential_repository
+
+            self._credential_repository = build_credential_repository()
+        return self._credential_repository
+
+    def _linked_channel_push_gateway(self):
+        if self._channel_push_gateway is None:
+            from .gateway import LINEChannelPushGateway
+
+            self._channel_push_gateway = LINEChannelPushGateway()
+        return self._channel_push_gateway
+
+    def _prevent_linked_push(self, attempt_id, failure_type):
+        failure = DeliveryPrePushFailure(failure_type)
+        snapshot = self._linked_attempt_repository().finalize(
+            attempt_id,
+            failure,
+            self.clock(),
+        )
+        if (
+            snapshot.status == "failed"
+            and snapshot.failure == failure.failure_type
+        ):
+            return LinkedPushPrevented(
+                snapshot=snapshot,
+                failure_type=failure.failure_type,
+            )
+        return LinkedPushStored(snapshot=snapshot)
+
+    @staticmethod
+    def _same_push_target(current, expected):
+        return (
+            isinstance(current, LiveDeliveryTarget)
+            and current.delivery_available
+            and current.owner_identity == expected.owner_identity
+            and current.provider_id == expected.provider_id
+            and current.snapshot.channel_public_id
+            == expected.snapshot.channel_public_id
+            and current.snapshot.recipient_public_id
+            == expected.snapshot.recipient_public_id
+            and current.revision == expected.revision
+        )
 
     @staticmethod
     def _validate_confirmed_target(target, confirmed):

@@ -1,7 +1,9 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 from unittest.mock import patch
 from uuid import uuid4
 
+from django.db import connection
 from django.test import SimpleTestCase
 
 from delivery.receipt import ReceiptCapabilityFactory
@@ -12,7 +14,11 @@ from delivery.types import (
     ConfirmationSnapshot,
     DeliverySnapshot,
     ExistingAttempt,
+    LinkedPushExecuted,
+    LinkedPushPrevented,
+    LinkedPushStored,
     LinkedTargetSnapshot,
+    LinePushAccepted,
     LiveDeliveryTarget,
     MessageSnapshot,
     OwnerIdentitySnapshot,
@@ -25,6 +31,13 @@ from delivery.types import (
     TargetUnavailable,
 )
 from lineaccounts.types import LineSubject
+from linechannels.repositories import CredentialRepository
+from linechannels.types import (
+    AccessToken,
+    ChannelSecret,
+    CredentialAvailable,
+    CredentialUnavailable,
+)
 
 
 NOW = datetime(2026, 7, 26, 1, 2, 3, tzinfo=UTC)
@@ -60,6 +73,52 @@ class FakeReceiptFactory:
     def create(self, expires_at):
         self.calls.append(expires_at)
         return self.candidate
+
+
+class FakeCredentialRepository:
+    def __init__(self, result, *, callback=None):
+        self.result = result
+        self.callback = callback
+        self.calls = []
+
+    def get_access_token(self, channel_public_id):
+        self.calls.append(channel_public_id)
+        if self.callback is not None:
+            self.callback()
+        return self.result
+
+    def get_channel_secret(self, channel_public_id):
+        raise AssertionError("channel secret must not be requested")
+
+
+class FakePushGateway:
+    def __init__(self, result):
+        self.result = result
+        self.commands = []
+        self.atomic_states = []
+
+    def push(self, command):
+        self.commands.append(command)
+        self.atomic_states.append(connection.in_atomic_block)
+        return self.result
+
+
+class FakeFinalizingAttemptRepository(FakeAttemptRepository):
+    def __init__(self, result, *, final_snapshot=None):
+        super().__init__(result)
+        self.final_snapshot = final_snapshot
+        self.finalizations = []
+
+    def finalize(self, attempt_id, result, completed_at):
+        self.finalizations.append((attempt_id, result, completed_at))
+        if self.final_snapshot is not None:
+            return self.final_snapshot
+        return replace(
+            self.result.snapshot,
+            status="failed",
+            completed_at=completed_at,
+            failure=result.failure_type,
+        )
 
 
 class LinkedDeliveryAcceptTests(SimpleTestCase):
@@ -314,4 +373,342 @@ class LinkedDeliveryAcceptTests(SimpleTestCase):
             revision=self.revision,
             subject=LineSubject("U-secret-subject"),
             delivery_available=False,
+        )
+
+
+class LinkedDeliveryPushTests(LinkedDeliveryAcceptTests):
+    def setUp(self):
+        super().setUp()
+        self.snapshot = self._snapshot(self.operation_id)
+        self.accepted = self._accepted()
+
+    def test_selected_credential_and_revalidated_target_are_pushed_once(self):
+        token = AccessToken("selected-token-canary")
+        credentials = FakeCredentialRepository(CredentialAvailable(token))
+        directory = FakeDirectory(self.live_target)
+        gateway_result = LinePushAccepted("request-id", None)
+        gateway = FakePushGateway(gateway_result)
+        repository = FakeFinalizingAttemptRepository(
+            AttemptAccepted(9, self.snapshot)
+        )
+        service = self._push_service(
+            directory=directory,
+            credentials=credentials,
+            gateway=gateway,
+            repository=repository,
+        )
+
+        result = service.push_accepted(self.accepted)
+
+        self.assertIsInstance(credentials, CredentialRepository)
+        self.assertEqual(credentials.calls, [self.channel_id])
+        self.assertEqual(
+            directory.calls,
+            [(self.owner_identity.public_id, self.channel_id, self.recipient_id)],
+        )
+        self.assertIsInstance(result, LinkedPushExecuted)
+        self.assertEqual(result.attempt_id, 9)
+        self.assertIs(result.result, gateway_result)
+        self.assertEqual(len(gateway.commands), 1)
+        pushed = gateway.commands[0]
+        self.assertEqual(pushed.operation_id, self.operation_id)
+        self.assertIs(pushed.access_token, token)
+        self.assertIs(pushed.subject, self.live_target.subject)
+        self.assertEqual(pushed.text, self.message.formatted_text)
+        self.assertIs(pushed.receipt_capability, self.candidate.capability)
+        self.assertEqual(gateway.atomic_states, [False])
+        self.assertEqual(repository.finalizations, [])
+        self.assertNotIn("selected-token-canary", repr(result))
+        self.assertNotIn("U-secret-subject", repr(result))
+        self.assertNotIn("raw-capability-secret", repr(result))
+
+    def test_credential_unavailable_finalizes_without_fallback_or_push(self):
+        credentials = FakeCredentialRepository(
+            CredentialUnavailable("credential_unreadable")
+        )
+        directory = FakeDirectory(self.live_target)
+        gateway = FakePushGateway(LinePushAccepted(None, None))
+        repository = FakeFinalizingAttemptRepository(
+            AttemptAccepted(9, self.snapshot)
+        )
+
+        result = self._push_service(
+            directory=directory,
+            credentials=credentials,
+            gateway=gateway,
+            repository=repository,
+        ).push_accepted(self.accepted)
+
+        self.assertIsInstance(result, LinkedPushPrevented)
+        self.assertEqual(result.failure_type, "configuration")
+        self.assertEqual(credentials.calls, [self.channel_id])
+        self.assertEqual(directory.calls, [])
+        self.assertEqual(gateway.commands, [])
+        self.assertEqual(len(repository.finalizations), 1)
+        attempt_id, failure, completed_at = repository.finalizations[0]
+        self.assertEqual(attempt_id, 9)
+        self.assertEqual(failure.failure_type, "configuration")
+        self.assertEqual(completed_at, NOW)
+
+    def test_target_changed_after_credential_finalizes_without_push(self):
+        changed_target = LiveDeliveryTarget(
+            owner_identity=self.owner_identity,
+            provider_id="line",
+            snapshot=self.target_snapshot,
+            revision=TargetRevision("c" * 64),
+            subject=LineSubject("U-other-secret-subject"),
+            delivery_available=True,
+        )
+        directory = FakeDirectory(changed_target)
+        credentials = FakeCredentialRepository(
+            CredentialAvailable(AccessToken("selected-token-canary"))
+        )
+        gateway = FakePushGateway(LinePushAccepted(None, None))
+        repository = FakeFinalizingAttemptRepository(
+            AttemptAccepted(9, self.snapshot)
+        )
+
+        result = self._push_service(
+            directory=directory,
+            credentials=credentials,
+            gateway=gateway,
+            repository=repository,
+        ).push_accepted(self.accepted)
+
+        self.assertIsInstance(result, LinkedPushPrevented)
+        self.assertEqual(result.failure_type, "target_changed")
+        self.assertEqual(len(directory.calls), 1)
+        self.assertEqual(gateway.commands, [])
+        self.assertEqual(len(repository.finalizations), 1)
+        self.assertEqual(
+            repository.finalizations[0][1].failure_type,
+            "target_changed",
+        )
+        self.assertNotIn("selected-token-canary", repr(result))
+        self.assertNotIn("U-other-secret-subject", repr(result))
+
+    def test_target_is_resolved_only_after_selected_credential_is_fetched(self):
+        events = []
+
+        class OrderedDirectory(FakeDirectory):
+            def resolve(inner_self, *args):
+                events.append("resolve")
+                return super().resolve(*args)
+
+        credentials = FakeCredentialRepository(
+            CredentialAvailable(AccessToken("selected-token")),
+            callback=lambda: events.append("credential"),
+        )
+        gateway = FakePushGateway(LinePushAccepted(None, None))
+
+        self._push_service(
+            directory=OrderedDirectory(self.live_target),
+            credentials=credentials,
+            gateway=gateway,
+        ).push_accepted(self.accepted)
+
+        self.assertEqual(events, ["credential", "resolve"])
+        self.assertEqual(len(gateway.commands), 1)
+
+    def test_invalid_credential_result_is_a_safe_programming_error(self):
+        invalid_results = (
+            CredentialAvailable(ChannelSecret("wrong-secret-type")),
+            object(),
+        )
+        for invalid_result in invalid_results:
+            with self.subTest(result=type(invalid_result).__name__):
+                gateway = FakePushGateway(LinePushAccepted(None, None))
+                repository = FakeFinalizingAttemptRepository(
+                    AttemptAccepted(9, self.snapshot)
+                )
+
+                with self.assertRaisesMessage(
+                    ValueError,
+                    "invalid access token credential result",
+                ):
+                    self._push_service(
+                        directory=FakeDirectory(self.live_target),
+                        credentials=FakeCredentialRepository(invalid_result),
+                        gateway=gateway,
+                        repository=repository,
+                    ).push_accepted(self.accepted)
+
+                self.assertEqual(gateway.commands, [])
+                self.assertEqual(repository.finalizations, [])
+
+    def test_pre_push_finalize_race_returns_actual_stored_terminal_state(self):
+        stored_snapshots = (
+            (
+                "configuration",
+                replace(
+                    self.snapshot,
+                    status="succeeded",
+                    completed_at=NOW,
+                    line_request_id="winner-request",
+                    line_accepted_request_id=None,
+                    failure=None,
+                ),
+            ),
+            (
+                "target_changed",
+                replace(
+                    self.snapshot,
+                    status="unknown",
+                    completed_at=NOW,
+                    failure="timeout_unknown",
+                ),
+            ),
+            (
+                "configuration",
+                replace(
+                    self.snapshot,
+                    status="failed",
+                    completed_at=NOW,
+                    failure="authentication",
+                ),
+            ),
+        )
+        for requested_failure, stored_snapshot in stored_snapshots:
+            with self.subTest(requested_failure=requested_failure):
+                repository = FakeFinalizingAttemptRepository(
+                    AttemptAccepted(9, self.snapshot),
+                    final_snapshot=stored_snapshot,
+                )
+                gateway = FakePushGateway(LinePushAccepted(None, None))
+                if requested_failure == "configuration":
+                    credentials = FakeCredentialRepository(
+                        CredentialUnavailable("credential_unreadable")
+                    )
+                    directory = FakeDirectory(self.live_target)
+                else:
+                    credentials = FakeCredentialRepository(
+                        CredentialAvailable(AccessToken("selected-token"))
+                    )
+                    directory = FakeDirectory(TargetUnavailable())
+
+                result = self._push_service(
+                    directory=directory,
+                    credentials=credentials,
+                    gateway=gateway,
+                    repository=repository,
+                ).push_accepted(self.accepted)
+
+                self.assertIsInstance(result, LinkedPushStored)
+                self.assertIs(result.snapshot, stored_snapshot)
+                self.assertEqual(
+                    result.snapshot.status,
+                    stored_snapshot.status,
+                )
+                self.assertEqual(
+                    result.snapshot.failure,
+                    stored_snapshot.failure,
+                )
+                self.assertEqual(gateway.commands, [])
+                self.assertEqual(
+                    repository.finalizations[0][1].failure_type,
+                    requested_failure,
+                )
+
+    def test_prevented_result_rejects_snapshot_failure_mismatch(self):
+        with self.assertRaisesMessage(
+            ValueError,
+            "pre-push failure does not match stored snapshot",
+        ):
+            LinkedPushPrevented(
+                snapshot=replace(
+                    self.snapshot,
+                    status="failed",
+                    completed_at=NOW,
+                    failure="target_changed",
+                ),
+                failure_type="configuration",
+            )
+
+    def test_each_revalidation_axis_blocks_gateway(self):
+        other_channel_snapshot = LinkedTargetSnapshot(
+            channel_public_id=uuid4(),
+            channel_label="別通知用",
+            recipient_public_id=self.recipient_id,
+            channel_active=True,
+            recipient_enabled=True,
+            friendship_state="friend",
+        )
+        other_recipient_snapshot = LinkedTargetSnapshot(
+            channel_public_id=self.channel_id,
+            channel_label="通知用",
+            recipient_public_id=uuid4(),
+            channel_active=True,
+            recipient_enabled=True,
+            friendship_state="friend",
+        )
+        unavailable_snapshot = replace(
+            self.target_snapshot,
+            recipient_enabled=False,
+        )
+        invalid_targets = (
+            TargetUnavailable(),
+            replace(
+                self.live_target,
+                owner_identity=OwnerIdentitySnapshot(uuid4()),
+            ),
+            replace(self.live_target, provider_id="other-provider"),
+            replace(self.live_target, snapshot=other_channel_snapshot),
+            replace(self.live_target, snapshot=other_recipient_snapshot),
+            replace(
+                self.live_target,
+                revision=TargetRevision("c" * 64),
+            ),
+            replace(
+                self.live_target,
+                snapshot=unavailable_snapshot,
+                delivery_available=False,
+            ),
+        )
+        for current_target in invalid_targets:
+            with self.subTest(target=repr(current_target)):
+                gateway = FakePushGateway(LinePushAccepted(None, None))
+                repository = FakeFinalizingAttemptRepository(
+                    AttemptAccepted(9, self.snapshot)
+                )
+
+                result = self._push_service(
+                    directory=FakeDirectory(current_target),
+                    credentials=FakeCredentialRepository(
+                        CredentialAvailable(AccessToken("selected-token"))
+                    ),
+                    gateway=gateway,
+                    repository=repository,
+                ).push_accepted(self.accepted)
+
+                self.assertIsInstance(result, LinkedPushPrevented)
+                self.assertEqual(result.failure_type, "target_changed")
+                self.assertEqual(gateway.commands, [])
+
+    def _accepted(self):
+        accepted_result = AttemptAccepted(9, self.snapshot)
+        return DeliveryService(
+            target_directory=FakeDirectory(self.live_target),
+            attempt_repository=FakeAttemptRepository(accepted_result),
+            receipt_capability_factory=FakeReceiptFactory(self.candidate),
+        ).accept_confirmed(self._command())
+
+    def _push_service(
+        self,
+        *,
+        directory,
+        credentials,
+        gateway,
+        repository=None,
+    ):
+        return DeliveryService(
+            clock=lambda: NOW,
+            target_directory=directory,
+            attempt_repository=(
+                repository
+                or FakeFinalizingAttemptRepository(
+                    AttemptAccepted(9, self.snapshot)
+                )
+            ),
+            credential_repository=credentials,
+            channel_push_gateway=gateway,
         )

@@ -13,6 +13,7 @@ from delivery.types import (
     AttemptAccepted,
     AttemptConflict,
     ConfirmReceiptCommand,
+    DeliveryPrePushFailure,
     ExistingAttempt,
     LinkedTargetSnapshot,
     LinePushAccepted,
@@ -446,6 +447,61 @@ class DjangoAttemptRepositoryFinalizeAndLookupTests(TestCase):
         self.assertEqual(second.failure, "timeout_unknown")
         self.assertEqual(second.completed_at, first_at)
         self.assertIsNone(second.line_request_id)
+
+    # テストケース: credential／target事前失敗と既存終端結果が競合する。
+    # 期待値: どちらが先でも最初の保存結果だけを返し、要求した失敗へ偽装しない。
+    def test_pre_push_failures_converge_to_first_terminal_result(self):
+        for index, failure_type in enumerate(
+            ("configuration", "target_changed")
+        ):
+            with self.subTest(failure_type=failure_type, winner="pre_push"):
+                accepted = self.accept(
+                    identity=OwnerIdentitySnapshot(uuid4())
+                )
+                first_at = NOW + timedelta(seconds=index + 1)
+                later_at = NOW + timedelta(seconds=index + 10)
+
+                first = self.repository.finalize(
+                    accepted.attempt_id,
+                    DeliveryPrePushFailure(failure_type),
+                    first_at,
+                )
+                later = self.repository.finalize(
+                    accepted.attempt_id,
+                    LinePushAccepted("late-request", None),
+                    later_at,
+                )
+
+                self.assertEqual(first.status, "failed")
+                self.assertEqual(first.failure, failure_type)
+                self.assertEqual(later.status, "failed")
+                self.assertEqual(later.failure, failure_type)
+                self.assertEqual(later.completed_at, first_at)
+                self.assertIsNone(later.line_request_id)
+
+            with self.subTest(failure_type=failure_type, winner="line"):
+                accepted = self.accept(
+                    identity=OwnerIdentitySnapshot(uuid4())
+                )
+                first_at = NOW + timedelta(seconds=index + 20)
+                later_at = NOW + timedelta(seconds=index + 30)
+
+                first = self.repository.finalize(
+                    accepted.attempt_id,
+                    LinePushAccepted("winner-request", None),
+                    first_at,
+                )
+                later = self.repository.finalize(
+                    accepted.attempt_id,
+                    DeliveryPrePushFailure(failure_type),
+                    later_at,
+                )
+
+                self.assertEqual(first.status, "succeeded")
+                self.assertEqual(later.status, "succeeded")
+                self.assertIsNone(later.failure)
+                self.assertEqual(later.line_request_id, "winner-request")
+                self.assertEqual(later.completed_at, first_at)
 
     # テストケース: operation IDをowner principal slotと同時に照会する。
     # 期待値: 正しいownerだけにsnapshotを返し、送信時identity UUIDは認可キーにしない。

@@ -604,6 +604,26 @@ LinePushResult: TypeAlias = (
 )
 
 
+PrePushFailureType: TypeAlias = Literal["configuration", "target_changed"]
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryPrePushFailure:
+    """外部送信前に確定した失敗。LINE gatewayの結果とは区別する。"""
+
+    failure_type: PrePushFailureType
+    status: Literal["failed"] = "failed"
+
+    def __post_init__(self) -> None:
+        if self.failure_type not in ("configuration", "target_changed"):
+            raise ValueError("invalid pre-push failure type")
+        if self.status != "failed":
+            raise ValueError("invalid pre-push failure status")
+
+
+AttemptFinalizationResult: TypeAlias = LinePushResult | DeliveryPrePushFailure
+
+
 @dataclass(frozen=True, slots=True, repr=False)
 class DeliverySnapshot(_SerializationDisabled):
     operation_id: UUID
@@ -773,6 +793,78 @@ class AcceptedLinkedAttempt(_SerializationDisabled):
             f"attempt_id={self.attempt_id} "
             f"operation_id={self.snapshot.operation_id} "
             "push_preparation=redacted>"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class LinkedPushExecuted:
+    """gatewayを一度呼んだ結果。保存への収束は後続境界が担う。"""
+
+    attempt_id: int
+    result: LinePushResult
+    status: Literal["executed"] = "executed"
+
+    def __post_init__(self) -> None:
+        if type(self.attempt_id) is not int or self.attempt_id <= 0:
+            raise ValueError("invalid attempt ID")
+        if not isinstance(
+            self.result,
+            (LinePushAccepted, LinePushRejected, LinePushUnknown),
+        ):
+            raise ValueError("invalid LINE push result")
+        if self.status != "executed":
+            raise ValueError("invalid linked push execution status")
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class LinkedPushPrevented(_SerializationDisabled):
+    """credentialまたはtarget再検証でpushせず終端化した結果。"""
+
+    snapshot: DeliverySnapshot
+    failure_type: PrePushFailureType
+    status: Literal["prevented"] = "prevented"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.snapshot, DeliverySnapshot):
+            raise ValueError("invalid delivery snapshot")
+        if self.failure_type not in ("configuration", "target_changed"):
+            raise ValueError("invalid pre-push failure type")
+        if (
+            self.snapshot.status != "failed"
+            or self.snapshot.failure != self.failure_type
+        ):
+            raise ValueError("pre-push failure does not match stored snapshot")
+        if self.status != "prevented":
+            raise ValueError("invalid linked push prevention status")
+
+    def __repr__(self) -> str:
+        return (
+            "<LinkedPushPrevented "
+            f"operation_id={self.snapshot.operation_id} "
+            f"failure_type={self.failure_type}>"
+        )
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class LinkedPushStored(_SerializationDisabled):
+    """pre-push finalize競合後に維持された、別の保存済み終端状態。"""
+
+    snapshot: DeliverySnapshot
+    status: Literal["stored"] = "stored"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.snapshot, DeliverySnapshot):
+            raise ValueError("invalid delivery snapshot")
+        if self.snapshot.status == "processing":
+            raise ValueError("stored linked push result must be terminal")
+        if self.status != "stored":
+            raise ValueError("invalid stored linked push status")
+
+    def __repr__(self) -> str:
+        return (
+            "<LinkedPushStored "
+            f"operation_id={self.snapshot.operation_id} "
+            f"delivery_status={self.snapshot.status}>"
         )
 
 
