@@ -76,7 +76,7 @@
   - _Requirements: 3.3, 3.4, 3.5, 4.3, 4.5, 4.6, 4.8, 8.1, 9.5, 9.6_
 
 - [ ] 4. 配信attemptの冪等性と直交状態を永続化する
-- [ ] 4.1 operation IDとactive request fingerprintによるacceptを実装する
+- [x] 4.1 operation IDとactive request fingerprintによるacceptを実装する
   - owner principal／identity、channel、recipient、message、receipt optionをversioned fingerprintへ含める
   - 同operation同requestは既存状態、別requestはconflict、別operation同active requestはcanonical attemptへ収束させる
   - 完了時、並行受付でもprocessing rowは一件だけ作成される
