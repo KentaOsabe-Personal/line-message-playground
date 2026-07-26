@@ -18,6 +18,10 @@ from .types import (
     ExistingAttempt,
     FixedTargetSnapshot,
     LinkedTargetSnapshot,
+    LinePushAccepted,
+    LinePushRejected,
+    LinePushResult,
+    LinePushUnknown,
     MessageSnapshot,
     OwnerIdentitySnapshot,
     OwnerPrincipal,
@@ -34,6 +38,19 @@ class AttemptRepository(Protocol):
         self,
         command: AcceptedDeliveryCommand,
     ) -> AttemptAcceptResult: ...
+
+    def finalize(
+        self,
+        attempt_id: int,
+        result: LinePushResult,
+        completed_at: datetime,
+    ) -> DeliverySnapshot: ...
+
+    def get_for_owner(
+        self,
+        owner_principal_slot: int,
+        operation_id: UUID,
+    ) -> DeliverySnapshot | None: ...
 
 
 def build_request_fingerprint(
@@ -179,6 +196,101 @@ class DjangoAttemptRepository:
                     )
                 )
             raise
+
+    def finalize(
+        self,
+        attempt_id: int,
+        result: LinePushResult,
+        completed_at: datetime,
+    ) -> DeliverySnapshot:
+        if type(attempt_id) is not int or attempt_id <= 0:
+            raise ValueError("invalid attempt ID")
+        if not isinstance(
+            result,
+            (LinePushAccepted, LinePushRejected, LinePushUnknown),
+        ):
+            raise ValueError("invalid LINE push result")
+        completed_at = _aware_datetime(completed_at)
+
+        terminal_values: dict[str, object] = {
+            "active_content_fingerprint": None,
+            "active_request_fingerprint": None,
+            "completed_at": completed_at,
+        }
+        if isinstance(result, LinePushAccepted):
+            terminal_values.update(
+                status=DeliveryAttempt.Status.SUCCEEDED,
+                sent_at=completed_at,
+                line_request_id=result.request_id,
+                line_accepted_request_id=result.accepted_request_id,
+            )
+        else:
+            terminal_values.update(
+                status=(
+                    DeliveryAttempt.Status.FAILED
+                    if isinstance(result, LinePushRejected)
+                    else DeliveryAttempt.Status.UNKNOWN
+                ),
+                failure_type=result.failure_type,
+                failed_at=completed_at,
+            )
+
+        # Model instanceのread-modify-writeを避け、processingだけを終端化する。
+        DeliveryAttempt.objects.filter(
+            pk=attempt_id,
+            status=DeliveryAttempt.Status.PROCESSING,
+        ).update(**terminal_values)
+        attempt = DeliveryAttempt.objects.get(pk=attempt_id)
+        return self._snapshot(
+            attempt,
+            now=_aware_datetime(self._clock()),
+        )
+
+    def get_for_owner(
+        self,
+        owner_principal_slot: int,
+        operation_id: UUID,
+    ) -> DeliverySnapshot | None:
+        if (
+            type(owner_principal_slot) is not int
+            or owner_principal_slot <= 0
+        ):
+            raise ValueError("invalid owner principal slot")
+        if not isinstance(operation_id, UUID):
+            raise ValueError("invalid operation ID")
+
+        attempt = DeliveryAttempt.objects.filter(
+            owner_principal_slot=owner_principal_slot,
+            operation_id=operation_id,
+        ).first()
+        if attempt is None:
+            return None
+
+        now = _aware_datetime(self._clock())
+        if (
+            attempt.status == DeliveryAttempt.Status.PROCESSING
+            and attempt.processing_expires_at <= now
+        ):
+            # owner scopeを満たした行だけを期限切れへCASし、競合時は
+            # finalize側が先に保存した終端結果をそのまま再読込する。
+            DeliveryAttempt.objects.filter(
+                pk=attempt.pk,
+                owner_principal_slot=owner_principal_slot,
+                operation_id=operation_id,
+                status=DeliveryAttempt.Status.PROCESSING,
+                processing_expires_at__lte=now,
+            ).update(
+                status=DeliveryAttempt.Status.UNKNOWN,
+                failure_type=(
+                    DeliveryAttempt.FailureType.PROCESSING_EXPIRED
+                ),
+                active_content_fingerprint=None,
+                active_request_fingerprint=None,
+                failed_at=now,
+                completed_at=now,
+            )
+            attempt = DeliveryAttempt.objects.get(pk=attempt.pk)
+        return self._snapshot(attempt, now=now)
 
     def _classify_operation(
         self,

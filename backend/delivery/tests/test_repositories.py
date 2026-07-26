@@ -14,6 +14,9 @@ from delivery.types import (
     AttemptConflict,
     ExistingAttempt,
     LinkedTargetSnapshot,
+    LinePushAccepted,
+    LinePushRejected,
+    LinePushUnknown,
     MessageSnapshot,
     OwnerIdentitySnapshot,
     OwnerPrincipal,
@@ -275,3 +278,279 @@ class DjangoAttemptRepositoryAcceptTests(TestCase):
         rendered = repr(result.snapshot)
         self.assertNotIn("秘密の件名", rendered)
         self.assertNotIn("秘密の本文", rendered)
+
+
+class DjangoAttemptRepositoryFinalizeAndLookupTests(TestCase):
+    def setUp(self):
+        self.clock_now = NOW
+        self.repository = DjangoAttemptRepository(
+            clock=lambda: self.clock_now
+        )
+        self.owner = OwnerPrincipal(1)
+        self.owner_identity = OwnerIdentitySnapshot(
+            UUID("11111111-1111-4111-8111-111111111111")
+        )
+        self.target = LinkedTargetSnapshot(
+            channel_public_id=UUID(
+                "22222222-2222-4222-8222-222222222222"
+            ),
+            channel_label="通知チャネル",
+            recipient_public_id=UUID(
+                "33333333-3333-4333-8333-333333333333"
+            ),
+            channel_active=True,
+            recipient_enabled=True,
+            friendship_state="friend",
+        )
+        self.message = MessageSnapshot(
+            subject="件名",
+            body="本文",
+            formatted_text="【件名】\n\n本文",
+            fingerprint="4" * 64,
+        )
+
+    def accept(self, *, identity=None, receipt=False):
+        identity = identity or self.owner_identity
+        commitment = (
+            ReceiptCommitment(
+                digest="6" * 64,
+                expires_at=NOW + timedelta(hours=24),
+            )
+            if receipt
+            else None
+        )
+        operation_id = uuid4()
+        command = AcceptedDeliveryCommand(
+            operation_id=operation_id,
+            owner=self.owner,
+            owner_identity=identity,
+            target=self.target,
+            message=self.message,
+            request_fingerprint=build_request_fingerprint(
+                owner=self.owner,
+                owner_identity=identity,
+                channel_public_id=self.target.channel_public_id,
+                recipient_public_id=self.target.recipient_public_id,
+                message_fingerprint=self.message.fingerprint,
+                receipt_requested=receipt,
+            ),
+            receipt_commitment=commitment,
+        )
+        result = self.repository.accept(command)
+        self.assertIsInstance(result, AttemptAccepted)
+        return result
+
+    # テストケース: LINE受付結果でprocessing attemptを確定する。
+    # 期待値: succeededと両request ID、送信・完了日時を保存し、active fingerprintを解放する。
+    def test_finalize_accepted_records_ids_and_releases_active_request(self):
+        accepted = self.accept(receipt=True)
+        completed_at = NOW + timedelta(seconds=2)
+
+        snapshot = self.repository.finalize(
+            accepted.attempt_id,
+            LinePushAccepted("line-request", "accepted-request"),
+            completed_at,
+        )
+
+        attempt = DeliveryAttempt.objects.get(pk=accepted.attempt_id)
+        self.assertEqual(snapshot.status, "succeeded")
+        self.assertEqual(snapshot.line_request_id, "line-request")
+        self.assertEqual(
+            snapshot.line_accepted_request_id,
+            "accepted-request",
+        )
+        self.assertIsNone(snapshot.failure)
+        self.assertEqual(snapshot.completed_at, completed_at)
+        self.assertEqual(attempt.sent_at, completed_at)
+        self.assertIsNone(attempt.failed_at)
+        self.assertIsNone(attempt.active_request_fingerprint)
+        self.assertEqual(attempt.receipt_token_digest, "6" * 64)
+        self.assertEqual(snapshot.receipt_status, "pending")
+
+    # テストケース: LINEの明示拒否分類をそれぞれ確定する。
+    # 期待値: failedへ移し、受け取った安全な分類を変換せず保存する。
+    def test_finalize_rejected_preserves_precise_failure_type(self):
+        for index, failure_type in enumerate(
+            (
+                "invalid_request",
+                "authentication",
+                "permission",
+                "conflict",
+                "rate_limited",
+            )
+        ):
+            with self.subTest(failure_type=failure_type):
+                accepted = self.accept(
+                    identity=OwnerIdentitySnapshot(uuid4())
+                )
+                completed_at = NOW + timedelta(seconds=index + 1)
+
+                snapshot = self.repository.finalize(
+                    accepted.attempt_id,
+                    LinePushRejected(failure_type),
+                    completed_at,
+                )
+
+                attempt = DeliveryAttempt.objects.get(
+                    pk=accepted.attempt_id
+                )
+                self.assertEqual(snapshot.status, "failed")
+                self.assertEqual(snapshot.failure, failure_type)
+                self.assertEqual(attempt.failed_at, completed_at)
+                self.assertIsNone(attempt.sent_at)
+                self.assertIsNone(
+                    attempt.active_request_fingerprint
+                )
+
+    # テストケース: LINEとの通信結果不明を確定する。
+    # 期待値: unknownとして安全な不明分類を保持し、成功とは推測しない。
+    def test_finalize_unknown_preserves_unknown_failure_type(self):
+        accepted = self.accept()
+        completed_at = NOW + timedelta(seconds=2)
+
+        snapshot = self.repository.finalize(
+            accepted.attempt_id,
+            LinePushUnknown("response_unknown"),
+            completed_at,
+        )
+
+        self.assertEqual(snapshot.status, "unknown")
+        self.assertEqual(snapshot.failure, "response_unknown")
+        self.assertEqual(snapshot.completed_at, completed_at)
+
+    # テストケース: 同じattemptへ異なる終端結果を順に確定する。
+    # 期待値: processing条件の先行結果だけが勝ち、後続結果と日時で上書きしない。
+    def test_finalize_keeps_first_terminal_result(self):
+        accepted = self.accept()
+        first_at = NOW + timedelta(seconds=1)
+        later_at = NOW + timedelta(seconds=2)
+        first = self.repository.finalize(
+            accepted.attempt_id,
+            LinePushUnknown("timeout_unknown"),
+            first_at,
+        )
+
+        second = self.repository.finalize(
+            accepted.attempt_id,
+            LinePushAccepted("late-request", None),
+            later_at,
+        )
+
+        self.assertEqual(first.status, "unknown")
+        self.assertEqual(second.status, "unknown")
+        self.assertEqual(second.failure, "timeout_unknown")
+        self.assertEqual(second.completed_at, first_at)
+        self.assertIsNone(second.line_request_id)
+
+    # テストケース: operation IDをowner principal slotと同時に照会する。
+    # 期待値: 正しいownerだけにsnapshotを返し、送信時identity UUIDは認可キーにしない。
+    def test_get_for_owner_scopes_by_principal_not_identity_snapshot(self):
+        historical_identity = OwnerIdentitySnapshot(uuid4())
+        accepted = self.accept(identity=historical_identity)
+
+        visible = self.repository.get_for_owner(
+            self.owner.slot,
+            accepted.snapshot.operation_id,
+        )
+        hidden = self.repository.get_for_owner(
+            self.owner.slot + 1,
+            accepted.snapshot.operation_id,
+        )
+
+        self.assertIsNotNone(visible)
+        self.assertEqual(
+            visible.owner_identity,
+            historical_identity,
+        )
+        self.assertIsNone(hidden)
+
+    # テストケース: processing期限の直前・境界・直後にowner照会する。
+    # 期待値: 直前だけprocessingで、境界以降は一度だけprocessing_expiredのunknownへ確定する。
+    def test_get_for_owner_expires_processing_at_inclusive_boundary(self):
+        for offset, expected_status in (
+            (timedelta(microseconds=-1), "processing"),
+            (timedelta(), "unknown"),
+            (timedelta(microseconds=1), "unknown"),
+        ):
+            with self.subTest(offset=offset):
+                self.clock_now = NOW
+                accepted = self.accept(
+                    identity=OwnerIdentitySnapshot(uuid4())
+                )
+                self.clock_now = NOW + timedelta(seconds=30) + offset
+
+                first = self.repository.get_for_owner(
+                    self.owner.slot,
+                    accepted.snapshot.operation_id,
+                )
+                second = self.repository.get_for_owner(
+                    self.owner.slot,
+                    accepted.snapshot.operation_id,
+                )
+
+                self.assertEqual(first.status, expected_status)
+                self.assertEqual(second.status, expected_status)
+                if expected_status == "unknown":
+                    self.assertEqual(
+                        first.failure,
+                        "processing_expired",
+                    )
+                    self.assertEqual(first.completed_at, self.clock_now)
+                    self.assertEqual(
+                        second.completed_at,
+                        self.clock_now,
+                    )
+                else:
+                    self.assertIsNone(first.failure)
+
+    # テストケース: 別ownerが期限切れprocessing operationを照会する。
+    # 期待値: 存在を隠すだけで、他ownerによる照会を契機にattemptを更新しない。
+    def test_wrong_owner_lookup_does_not_expire_attempt(self):
+        accepted = self.accept()
+        self.clock_now = NOW + timedelta(seconds=31)
+
+        result = self.repository.get_for_owner(
+            self.owner.slot + 1,
+            accepted.snapshot.operation_id,
+        )
+
+        self.assertIsNone(result)
+        attempt = DeliveryAttempt.objects.get(pk=accepted.attempt_id)
+        self.assertEqual(attempt.status, "processing")
+
+    # テストケース: migration済みのfixed配信に旧service failure分類が残っている。
+    # 期待値: 分類を別値へ読み替えず、owner status snapshotとしてそのまま参照できる。
+    def test_get_for_owner_preserves_legacy_fixed_failure_snapshot(self):
+        operation_id = uuid4()
+        completed_at = NOW - timedelta(days=1)
+        DeliveryAttempt.objects.create(
+            operation_id=operation_id,
+            subject="旧件名",
+            body="旧本文",
+            formatted_text="【旧件名】\n\n旧本文",
+            content_fingerprint="a" * 64,
+            active_content_fingerprint=None,
+            request_fingerprint="a" * 64,
+            active_request_fingerprint=None,
+            target_mode=DeliveryAttempt.TargetMode.FIXED_USER,
+            owner_principal_slot=self.owner.slot,
+            owner_identity_public_id=None,
+            status=DeliveryAttempt.Status.FAILED,
+            failure_type=(
+                DeliveryAttempt.FailureType.SERVICE_UNAVAILABLE
+            ),
+            accepted_at=completed_at - timedelta(seconds=1),
+            processing_expires_at=completed_at,
+            failed_at=completed_at,
+            completed_at=completed_at,
+        )
+
+        snapshot = self.repository.get_for_owner(
+            self.owner.slot,
+            operation_id,
+        )
+
+        self.assertEqual(snapshot.target.mode, "fixed_user")
+        self.assertIsNone(snapshot.owner_identity)
+        self.assertEqual(snapshot.status, "failed")
+        self.assertEqual(snapshot.failure, "service_unavailable")

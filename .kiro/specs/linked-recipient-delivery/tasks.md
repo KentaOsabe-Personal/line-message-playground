@@ -81,7 +81,7 @@
   - 同operation同requestは既存状態、別requestはconflict、別operation同active requestはcanonical attemptへ収束させる
   - 完了時、並行受付でもprocessing rowは一件だけ作成される
   - _Requirements: 6.1, 6.2, 6.3, 6.4_
-- [ ] 4.2 owner scoped status lookup・processing expiry・first-terminal finalizeを実装する
+- [x] 4.2 owner scoped status lookup・processing expiry・first-terminal finalizeを実装する
   - owner principal slotとoperation IDの同時条件でlookupし、identity UUIDを認可キーにしない
   - processing rowだけをsucceeded／failed／unknownへ更新し、active fingerprintを解放する
   - 30秒を超えたprocessingをstatus lookupから一度だけunknownへ条件付き更新するrepository契約を提供する
