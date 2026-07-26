@@ -195,30 +195,49 @@ class DeliveryTargetAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"items": []})
 
-    # テストケース: 未認証者とunlink pending ownerがtarget一覧を要求する
-    # 期待値: adapterを呼ぶ前にそれぞれ401／403で拒否する
+    # テストケース: 未認証者とunlink pending ownerがchannel・recipient両target一覧を要求する
+    # 期待値: UUID解釈とadapterを呼ぶ前に全routeをそれぞれ401／403で拒否する
     def test_inactive_sessions_are_rejected_before_target_adapter(self):
-        anonymous = APIClient().get("/api/deliveries/targets/channels/")
+        anonymous_client = APIClient()
+        anonymous = (
+            anonymous_client.get("/api/deliveries/targets/channels/"),
+            anonymous_client.get(
+                "/api/deliveries/targets/channels/not-a-uuid/recipients/"
+            ),
+        )
         pending_client = self.owner_client()
         with transaction.atomic():
             owner = self.repository.lock_owner_account()
             self.repository.begin_unlink(owner, uuid4())
 
-        with patch(
-            "lineaccounts.delivery_repositories.DeliveryTargetDirectory.list_channels",
-            side_effect=AssertionError("adapter must not run"),
+        with (
+            patch(
+                "lineaccounts.delivery_repositories.DeliveryTargetDirectory.list_channels",
+                side_effect=AssertionError("channel adapter must not run"),
+            ),
+            patch(
+                "lineaccounts.delivery_repositories.DeliveryTargetDirectory.list_recipients",
+                side_effect=AssertionError("recipient adapter must not run"),
+            ),
         ):
-            pending = pending_client.get("/api/deliveries/targets/channels/")
+            pending = (
+                pending_client.get("/api/deliveries/targets/channels/"),
+                pending_client.get(
+                    "/api/deliveries/targets/channels/not-a-uuid/recipients/"
+                ),
+            )
 
-        self.assertEqual(anonymous.status_code, 401)
-        self.assertEqual(
-            anonymous.json()["error"]["code"], "authentication_required"
-        )
-        self.assertEqual(pending.status_code, 403)
-        self.assertIn(
-            pending.json()["error"]["code"],
-            ("owner_not_allowed", "owner_operation_blocked"),
-        )
+        for response in anonymous:
+            self.assertEqual(response.status_code, 401)
+            self.assertEqual(
+                response.json()["error"]["code"], "authentication_required"
+            )
+        for response in pending:
+            self.assertEqual(response.status_code, 403)
+            self.assertIn(
+                response.json()["error"]["code"],
+                ("owner_not_allowed", "owner_operation_blocked"),
+            )
 
     # テストケース: recipient routeへ非canonical UUIDまたはowner範囲外channelを指定する
     # 期待値: 非canonical UUIDは400、hidden targetは同じ404分類で存在関係を開示しない

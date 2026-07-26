@@ -165,7 +165,7 @@
   - 完了時、receipt test suiteが初回確認への収束と外部reply 0件を証明する
   - _Requirements: 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 9.1, 9.5, 9.6_
 
-- [ ] 7. owner向けtarget・preview・send・status APIを公開する
+- [x] 7. owner向けtarget・preview・send・status APIを公開する
 - [x] 7.1 channel／recipient選択APIをowner sessionで保護して公開する
   - active ownerだけにsafe summaryを返し、未認証／unlink pendingをadapterより先に拒否する
   - recipient routeのcanonical UUIDとhidden target errorを統一する
@@ -184,7 +184,7 @@
   - 完了時、送信と状態確認は保存済み結果へ収束し、別owner／unknown operationは存在を開示しない
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 4.4, 4.8, 5.1, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10, 7.11, 9.1, 9.2, 9.3, 9.4, 9.5, 9.7_
   - _Depends: 4.2, 5.4, 5.5, 5.6, 6.1_
-- [ ] 7.4 APIの認証・CSRF・strict DTO・safe分類を契約テストで固定する
+- [x] 7.4 APIの認証・CSRF・strict DTO・safe分類を契約テストで固定する
   - 未認証／unlink pendingをserializerより先に拒否し、unsafe POSTだけorigin／CSRFを要求する
   - unknown field／enum／UUID、target hidden／stale、operation conflict、secret canaryを検証する
   - 完了時、全endpointでstatus codeとbodyが契約どおりになり外部生応答やPIIが出ない

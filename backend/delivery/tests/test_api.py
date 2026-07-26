@@ -7,12 +7,17 @@ from django.test import override_settings
 from rest_framework.test import APIClient, APITestCase
 from django.utils import timezone
 
-from delivery.confirmation import ConfirmationService, ConfirmationTokenService
+from delivery.confirmation import (
+    ConfirmationRejected,
+    ConfirmationService,
+    ConfirmationTokenService,
+)
 from delivery.formatters import format_message, format_message_snapshot
 from delivery.gateway import LINEGateway, LinePushAccepted, LinePushRejected, LinePushUnknown
 from delivery.models import DeliveryAttempt
 from delivery.types import (
     AcceptedLinkedAttempt,
+    AttemptConflict,
     DeliverySnapshot,
     ExistingAttempt,
     LinkedPushExecuted,
@@ -424,21 +429,71 @@ class DeliveryApiTests(APITestCase):
         self.assertEqual(DeliveryAttempt.objects.count(), 0)
         self.assertEqual(gateway.commands, [])
 
-    # テストケース: unlink pendingのownerが不正payloadで配信を要求する
-    # 期待値: serializerとLINE gatewayより先に403で拒否する
+    # テストケース: unlink pendingのownerが不正payloadでpreview・send・statusを要求する
+    # 期待値: serializer・target・serviceより先に全unsafe endpointを403で拒否する
     def test_pending_owner_is_rejected_before_validation_and_gateway(self):
         OwnerAccount.objects.filter(slot=1).update(
             state=OwnerAccount.State.DEAUTHORIZATION_PENDING,
             unlink_generation=uuid4(),
         )
         gateway = FakeGateway()
+        operation_id = uuid4()
 
-        with patch("delivery.views.LINEGateway", return_value=gateway):
-            response = self.client.post("/api/deliveries/", {}, format="json")
+        with (
+            patch("delivery.views.LINEGateway", return_value=gateway),
+            patch(
+                "delivery.views.LinkedPreviewRequestSerializer.is_valid",
+                side_effect=AssertionError("preview serializer must not run"),
+            ),
+            patch(
+                "delivery.views.LinkedSendDeliveryRequestSerializer.is_valid",
+                side_effect=AssertionError("send serializer must not run"),
+            ),
+            patch(
+                "delivery.views.EmptyRequestSerializer.is_valid",
+                side_effect=AssertionError("status serializer must not run"),
+            ),
+            patch(
+                "lineaccounts.delivery_repositories.DeliveryTargetDirectory.resolve",
+                side_effect=AssertionError("target adapter must not run"),
+            ),
+            patch("delivery.views.DeliveryService") as service_factory,
+        ):
+            responses = (
+                self.client.post(
+                    "/api/deliveries/preview/",
+                    {"channelId": "invalid"},
+                    format="json",
+                ),
+                self.client.post(
+                    "/api/deliveries/",
+                    {"channelId": "invalid"},
+                    format="json",
+                ),
+                self.client.post(
+                    f"/api/deliveries/{operation_id}/status/",
+                    {"secretCanary": "pending-secret-canary"},
+                    format="json",
+                ),
+            )
 
-        self.assertEqual(response.status_code, 403)
+        self.assertTrue(all(response.status_code == 403 for response in responses))
+        self.assertTrue(
+            all(
+                response.json()["error"]["code"]
+                in ("owner_not_allowed", "owner_operation_blocked")
+                for response in responses
+            )
+        )
+        self.assertTrue(
+            all(
+                "pending-secret-canary" not in str(response.json())
+                for response in responses
+            )
+        )
         self.assertEqual(DeliveryAttempt.objects.count(), 0)
         self.assertEqual(gateway.commands, [])
+        service_factory.assert_not_called()
 
     # テストケース: active ownerがOriginなしで配信を要求する
     # 期待値: payload処理とLINE gatewayより先に403 csrf_failedで拒否する
@@ -695,6 +750,9 @@ class DeliveryApiTests(APITestCase):
         completed_at=None,
         failure=None,
         receipt_status="not_requested",
+        receipt_expires_at=None,
+        receipt_confirmed_at=None,
+        receipt_webhook_event_id=None,
     ):
         target = DeliveryTargetDirectory().resolve(
             self.identity.public_id,
@@ -723,9 +781,9 @@ class DeliveryApiTests(APITestCase):
             ),
             failure=failure,
             receipt_status=receipt_status,
-            receipt_expires_at=None,
-            receipt_confirmed_at=None,
-            receipt_webhook_event_id=None,
+            receipt_expires_at=receipt_expires_at,
+            receipt_confirmed_at=receipt_confirmed_at,
+            receipt_webhook_event_id=receipt_webhook_event_id,
         )
 
     def _linked_send_payload(self, operation_id):
@@ -788,7 +846,10 @@ class DeliveryApiTests(APITestCase):
         service.push_accepted.return_value = executed
         service.finalize_linked_push.return_value = LinkedPushStored(terminal)
 
-        with patch("delivery.views.DeliveryService", return_value=service):
+        with patch(
+            "delivery.views.DeliveryService",
+            return_value=service,
+        ):
             response = self.client.post(
                 "/api/deliveries/",
                 payload,
@@ -938,7 +999,10 @@ class DeliveryApiTests(APITestCase):
     def test_linked_status_rejects_nonempty_body_before_lookup(self):
         operation_id = uuid4()
         service = Mock()
-        with patch("delivery.views.DeliveryService", return_value=service):
+        with patch(
+            "delivery.views.DeliveryService",
+            return_value=service,
+        ) as service_factory:
             response = self.client.post(
                 f"/api/deliveries/{operation_id}/status/",
                 {"capability": "receipt-secret-canary"},
@@ -948,4 +1012,484 @@ class DeliveryApiTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["error"]["code"], "validation_error")
         self.assertNotIn("receipt-secret-canary", str(response.data))
+        service_factory.assert_not_called()
         service.check_linked_status.assert_not_called()
+
+    # テストケース: OriginまたはCSRF tokenなしでpreview・send・statusの全unsafe endpointへ不正payloadを送る
+    # 期待値: serializer・target・serviceより先に全要求を同じ403 csrf_failedで拒否し副作用を起こさない
+    def test_all_unsafe_endpoints_enforce_csrf_before_request_contracts(self):
+        self.client.credentials()
+        operation_id = uuid4()
+        with (
+            patch(
+                "delivery.views.LinkedPreviewRequestSerializer.is_valid",
+                side_effect=AssertionError("preview serializer must not run"),
+            ),
+            patch(
+                "delivery.views.LinkedSendDeliveryRequestSerializer.is_valid",
+                side_effect=AssertionError("send serializer must not run"),
+            ),
+            patch(
+                "delivery.views.EmptyRequestSerializer.is_valid",
+                side_effect=AssertionError("status serializer must not run"),
+            ),
+            patch(
+                "lineaccounts.delivery_repositories.DeliveryTargetDirectory.resolve",
+                side_effect=AssertionError("target adapter must not run"),
+            ),
+            patch("delivery.views.DeliveryService") as service_factory,
+        ):
+            responses = (
+                self.client.post(
+                    "/api/deliveries/preview/",
+                    {"secretCanary": "csrf-secret-canary"},
+                    format="json",
+                ),
+                self.client.post(
+                    "/api/deliveries/",
+                    {"secretCanary": "csrf-secret-canary"},
+                    format="json",
+                ),
+                self.client.post(
+                    f"/api/deliveries/{operation_id}/status/",
+                    {"secretCanary": "csrf-secret-canary"},
+                    format="json",
+                ),
+            )
+
+        for response in responses:
+            with self.subTest(path=response.request["PATH_INFO"]):
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(
+                    response.json(),
+                    {
+                        "error": {
+                            "code": "csrf_failed",
+                            "summary": "ページを再読み込みしてください。",
+                        }
+                    },
+                )
+                self.assertNotIn("csrf-secret-canary", str(response.json()))
+        service_factory.assert_not_called()
+        self.assertEqual(DeliveryAttempt.objects.count(), 0)
+
+    # テストケース: linked previewとsendへ欠落・余剰・型違い・非canonical UUIDを入力する
+    # 期待値: 全入力を固定400 envelopeへ縮約しconfirmation・attempt・service呼出しを作らない
+    def test_linked_requests_reject_strict_dto_mutations_without_side_effects(self):
+        valid_preview = {
+            "channelId": str(self.channel.public_id),
+            "recipientId": str(self.recipient.public_id),
+            "subject": "件名",
+            "body": "本文",
+            "receiptRequested": False,
+        }
+        preview_mutations = (
+            {key: value for key, value in valid_preview.items() if key != "body"},
+            {**valid_preview, "unknownField": "secret-dto-canary"},
+            {**valid_preview, "receiptRequested": "false"},
+            {**valid_preview, "channelId": str(self.channel.public_id).upper()},
+            {**valid_preview, "recipientId": self.recipient.public_id.hex},
+            {**valid_preview, "subject": ["件名"]},
+        )
+        service = Mock()
+        with (
+            patch("delivery.views.ConfirmationService.issue") as issue,
+            patch(
+                "delivery.views.DeliveryService",
+                return_value=service,
+            ) as service_factory,
+        ):
+            preview_responses = tuple(
+                self.client.post(
+                    "/api/deliveries/preview/",
+                    payload,
+                    format="json",
+                )
+                for payload in preview_mutations
+            )
+
+            valid_send = {
+                **valid_preview,
+                "operationId": str(uuid4()),
+                "confirmationToken": "opaque-confirmation",
+            }
+            send_mutations = (
+                {
+                    key: value
+                    for key, value in valid_send.items()
+                    if key != "confirmationToken"
+                },
+                {**valid_send, "unknownField": "secret-dto-canary"},
+                {**valid_send, "operationId": uuid4().hex},
+                {**valid_send, "confirmationToken": {"token": "secret-dto-canary"}},
+                {**valid_send, "receiptRequested": 0},
+            )
+            send_responses = tuple(
+                self.client.post(
+                    "/api/deliveries/",
+                    payload,
+                    format="json",
+                )
+                for payload in send_mutations
+            )
+
+        for response in (*preview_responses, *send_responses):
+            with self.subTest(path=response.request["PATH_INFO"]):
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(
+                    response.data["error"]["code"],
+                    "validation_error",
+                )
+                self.assertEqual(
+                    response.data["error"]["summary"],
+                    "入力内容を確認してください。",
+                )
+                self.assertNotIn("secret-dto-canary", str(response.data))
+                self.assertEqual(set(response.data), {"error"})
+        issue.assert_not_called()
+        service_factory.assert_not_called()
+        service.accept_confirmed.assert_not_called()
+        service.push_accepted.assert_not_called()
+        service.finalize_linked_push.assert_not_called()
+        self.assertEqual(DeliveryAttempt.objects.count(), 0)
+
+    # テストケース: preview後にrecipientが隠れた状態または配信不可状態へ変わってからlinked sendする
+    # 期待値: 404 target_not_availableまたは409 target_not_deliverableへ固定しattempt受付とpushを開始しない
+    def test_linked_send_maps_hidden_and_stale_targets_before_service(self):
+        hidden_payload = self._linked_send_payload(uuid4())
+        hidden_payload["recipientId"] = str(uuid4())
+        stale_payload = self._linked_send_payload(uuid4())
+        self.recipient.friendship_state = DeliveryRecipient.FriendshipState.NOT_FRIEND
+        self.recipient.save(update_fields=("friendship_state", "updated_at"))
+        service = Mock()
+
+        with patch(
+            "delivery.views.DeliveryService",
+            return_value=service,
+        ) as service_factory:
+            hidden = self.client.post(
+                "/api/deliveries/",
+                hidden_payload,
+                format="json",
+            )
+            stale = self.client.post(
+                "/api/deliveries/",
+                stale_payload,
+                format="json",
+            )
+
+        self.assertEqual(hidden.status_code, 404)
+        self.assertEqual(hidden.data["error"]["code"], "target_not_available")
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.data["error"]["code"], "target_not_deliverable")
+        service_factory.assert_not_called()
+        service.accept_confirmed.assert_not_called()
+        service.push_accepted.assert_not_called()
+        service.finalize_linked_push.assert_not_called()
+        self.assertEqual(DeliveryAttempt.objects.count(), 0)
+
+    # テストケース: linked sendのoperation IDが別requestで使用済みとserviceが分類する
+    # 期待値: 固定409 operation_id_reusedを返しpush・finalizeを一度も開始しない
+    def test_linked_send_maps_operation_conflict_without_push(self):
+        payload = self._linked_send_payload(uuid4())
+        service = Mock()
+        service.accept_confirmed.return_value = AttemptConflict()
+
+        with patch("delivery.views.DeliveryService", return_value=service):
+            response = self.client.post(
+                "/api/deliveries/",
+                payload,
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.data,
+            {
+                "error": {
+                    "code": "operation_id_reused",
+                    "summary": "この送信操作IDは別の内容に使用済みです。",
+                }
+            },
+        )
+        service.accept_confirmed.assert_called_once()
+        service.push_accepted.assert_not_called()
+        service.finalize_linked_push.assert_not_called()
+
+    # テストケース: linked sendが保存済みprocessing・succeeded・failed・unknown分類へ収束する
+    # 期待値: 状態ごとのHTTP codeと固定envelopeを返し、外部生応答・PIIを含めず再pushしない
+    def test_linked_send_maps_all_stored_delivery_classifications_safely(self):
+        now = timezone.now()
+        cases = (
+            ("processing", None, None, 202, None),
+            ("succeeded", now, None, 200, None),
+            ("failed", now, "configuration", 200, "Backendの配信設定を確認してください。"),
+            ("failed", now, "invalid_request", 200, "入力または配信設定を確認してください。"),
+            ("failed", now, "authentication", 200, "LINEの認証設定を確認してください。"),
+            ("failed", now, "permission", 200, "LINEチャネルの権限を確認してください。"),
+            ("failed", now, "conflict", 200, "LINE側で送信が競合しました。"),
+            ("failed", now, "rate_limited", 200, "時間をおいて利用上限を確認してください。"),
+            ("failed", now, "target_changed", 200, "配信結果を確定できませんでした。"),
+            ("unknown", now, "service_unknown", 200, "配信結果を確定できませんでした。"),
+            ("unknown", now, "timeout_unknown", 200, "送信結果を確認できませんでした。"),
+            ("unknown", now, "response_unknown", 200, "配信結果を確定できませんでした。"),
+            ("unknown", now, "processing_expired", 200, "処理結果を確認できませんでした。"),
+        )
+        for status_value, completed_at, failure, http_status, summary in cases:
+            with self.subTest(status=status_value, failure=failure):
+                operation_id = uuid4()
+                payload = self._linked_send_payload(operation_id)
+                snapshot = self._linked_snapshot(
+                    operation_id=operation_id,
+                    status_value=status_value,
+                    completed_at=completed_at,
+                    failure=failure,
+                )
+                service = Mock()
+                service.accept_confirmed.return_value = ExistingAttempt(snapshot)
+
+                with patch("delivery.views.DeliveryService", return_value=service):
+                    response = self.client.post(
+                        "/api/deliveries/",
+                        payload,
+                        format="json",
+                    )
+
+                self.assertEqual(response.status_code, http_status)
+                self.assertEqual(response.data["status"], status_value)
+                if failure is None:
+                    self.assertNotIn("error", response.data)
+                else:
+                    self.assertEqual(response.data["error"]["code"], failure)
+                    self.assertEqual(response.data["error"]["summary"], summary)
+                rendered = str(response.data)
+                for forbidden in (
+                    "Usubject-secret-canary",
+                    "Owner display",
+                    "line-accepted-internal",
+                    "件名",
+                    "本文",
+                ):
+                    self.assertNotIn(forbidden, rendered)
+                service.push_accepted.assert_not_called()
+                service.finalize_linked_push.assert_not_called()
+
+    # テストケース: linked confirmationがinvalid・expired・mismatchへ分類される
+    # 期待値: 固定400/409の再preview envelopeを返しattempt受付とpushを開始しない
+    def test_linked_send_maps_all_confirmation_rejections_before_service(self):
+        cases = (
+            ("invalid", 400, "confirmation_required", "送信内容をもう一度確認してください。"),
+            ("expired", 409, "confirmation_expired", "確認期限が切れています。もう一度確認してください。"),
+            ("mismatch", 409, "confirmation_stale", "内容が変更されています。もう一度確認してください。"),
+        )
+        for reason, http_status, code, summary in cases:
+            with self.subTest(reason=reason):
+                payload = self._linked_send_payload(uuid4())
+                service = Mock()
+                with (
+                    patch(
+                        "delivery.views.ConfirmationService.verify_request",
+                        return_value=ConfirmationRejected(reason),
+                    ),
+                    patch(
+                        "delivery.views.DeliveryService",
+                        return_value=service,
+                    ) as service_factory,
+                ):
+                    response = self.client.post(
+                        "/api/deliveries/",
+                        payload,
+                        format="json",
+                    )
+
+                self.assertEqual(response.status_code, http_status)
+                self.assertEqual(
+                    response.data,
+                    {"error": {"code": code, "summary": summary}},
+                )
+                service_factory.assert_not_called()
+                service.accept_confirmed.assert_not_called()
+                service.push_accepted.assert_not_called()
+                service.finalize_linked_push.assert_not_called()
+
+    # テストケース: linked sendのrepository異常または未定義service結果を受け取る
+    # 期待値: 生例外を反射せず固定503へ縮約しpush・finalizeを開始しない
+    def test_linked_send_maps_internal_failures_to_safe_503_without_push(self):
+        cases = (
+            (
+                DatabaseError("database-secret-canary"),
+                "storage_unavailable",
+                "処理を完了できませんでした。",
+            ),
+            (
+                object(),
+                "unexpected",
+                "配信処理を完了できませんでした。",
+            ),
+        )
+        for accepted_result, code, summary in cases:
+            with self.subTest(code=code):
+                payload = self._linked_send_payload(uuid4())
+                service = Mock()
+                if isinstance(accepted_result, Exception):
+                    service.accept_confirmed.side_effect = accepted_result
+                else:
+                    service.accept_confirmed.return_value = accepted_result
+
+                with patch("delivery.views.DeliveryService", return_value=service):
+                    response = self.client.post(
+                        "/api/deliveries/",
+                        payload,
+                        format="json",
+                    )
+
+                self.assertEqual(response.status_code, 503)
+                self.assertEqual(
+                    response.data,
+                    {"error": {"code": code, "summary": summary}},
+                )
+                self.assertNotIn("database-secret-canary", str(response.data))
+                service.push_accepted.assert_not_called()
+                service.finalize_linked_push.assert_not_called()
+
+    # テストケース: status APIがdelivery状態とnot_requested・pending・confirmed・expired receipt状態を返す
+    # 期待値: 二つの状態軸を独立した固定DTOへ写し、event ID・display name・capabilityを公開しない
+    def test_linked_status_maps_terminal_and_receipt_states_orthogonally(self):
+        now = timezone.now()
+        delivery_cases = (
+            ("processing", None, None, 202),
+            ("succeeded", now, None, 200),
+            ("failed", now, "permission", 200),
+            ("unknown", now, "response_unknown", 200),
+        )
+        receipt_cases = (
+            ("not_requested", None, None, None),
+            ("pending", now + timedelta(hours=1), None, None),
+            (
+                "confirmed",
+                now + timedelta(hours=1),
+                now,
+                "event-secret-canary",
+            ),
+            ("expired", now - timedelta(seconds=1), None, None),
+        )
+        observed_pairs = set()
+        for delivery_status, completed_at, failure, expected_http_status in (
+            delivery_cases
+        ):
+            for (
+                receipt_status,
+                receipt_expires_at,
+                receipt_confirmed_at,
+                receipt_event_id,
+            ) in receipt_cases:
+                with self.subTest(
+                    delivery_status=delivery_status,
+                    receipt_status=receipt_status,
+                ):
+                    operation_id = uuid4()
+                    snapshot = self._linked_snapshot(
+                        operation_id=operation_id,
+                        status_value=delivery_status,
+                        completed_at=completed_at,
+                        failure=failure,
+                        receipt_status=receipt_status,
+                        receipt_expires_at=receipt_expires_at,
+                        receipt_confirmed_at=receipt_confirmed_at,
+                        receipt_webhook_event_id=receipt_event_id,
+                    )
+                    service = Mock()
+                    service.check_linked_status.return_value = snapshot
+
+                    with patch(
+                        "delivery.views.DeliveryService",
+                        return_value=service,
+                    ):
+                        response = self.client.post(
+                            f"/api/deliveries/{operation_id}/status/",
+                            {},
+                            format="json",
+                        )
+
+                    self.assertEqual(response.status_code, expected_http_status)
+                    self.assertEqual(response.data["status"], delivery_status)
+                    self.assertEqual(
+                        response.data["receipt"]["requested"],
+                        receipt_status != "not_requested",
+                    )
+                    self.assertEqual(
+                        response.data["receipt"]["status"],
+                        receipt_status,
+                    )
+                    self.assertEqual(
+                        set(response.data["receipt"]),
+                        {"requested", "status", "expiresAt", "confirmedAt"},
+                    )
+                    observed_pairs.add(
+                        (
+                            response.data["status"],
+                            response.data["receipt"]["status"],
+                        )
+                    )
+                    rendered = str(response.data)
+                    for forbidden in (
+                        "event-secret-canary",
+                        "Owner display",
+                        "Usubject-secret-canary",
+                        "receipt-capability-canary",
+                        "line-accepted-internal",
+                    ):
+                        self.assertNotIn(forbidden, rendered)
+        self.assertEqual(
+            observed_pairs,
+            {
+                (delivery_status, receipt_status)
+                for delivery_status, *_ in delivery_cases
+                for receipt_status, *_ in receipt_cases
+            },
+        )
+
+    # テストケース: 既存fixed配信を送信後に同じowner scoped status endpointで照会する
+    # 期待値: legacy応答形と確定結果を維持しlinked snapshot・receiptを黙示追加しない
+    def test_legacy_fixed_status_keeps_existing_response_contract(self):
+        operation_id = uuid4()
+        message = format_message("legacy件名", "legacy本文")
+        gateway = FakeGateway()
+        with patch("delivery.views.LINEGateway", return_value=gateway):
+            sent = self.client.post(
+                "/api/deliveries/",
+                {
+                    "subject": message.subject,
+                    "body": message.body,
+                    "operationId": str(operation_id),
+                    "confirmationToken": ConfirmationTokenService().issue(message),
+                },
+                format="json",
+            )
+            DeliveryAttempt.objects.filter(operation_id=operation_id).update(
+                owner_principal_slot=self.owner_session.owner_slot
+            )
+            checked = self.client.post(
+                f"/api/deliveries/{operation_id}/status/",
+                {},
+                format="json",
+            )
+
+        self.assertEqual(sent.status_code, 201)
+        self.assertEqual(checked.status_code, 200)
+        self.assertEqual(
+            set(checked.data),
+            {
+                "status",
+                "operationId",
+                "acceptedAt",
+                "completedAt",
+                "lineRequestId",
+            },
+        )
+        self.assertEqual(checked.data["operationId"], str(operation_id))
+        self.assertEqual(checked.data["status"], "succeeded")
+        self.assertEqual(checked.data["lineRequestId"], "request-1")
+        self.assertNotIn("snapshot", checked.data)
+        self.assertNotIn("receipt", checked.data)
+        self.assertEqual(len(gateway.commands), 1)
