@@ -52,7 +52,7 @@
   - _Requirements: 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.6, 2.7, 2.8_
 
 - [ ] 3. 対象と内容に結び付く期限付き確認を実装する
-- [ ] 3.1 (P) owner principal・identity・target・message・receipt optionを一つの確認snapshotへ結ぶ
+- [x] 3.1 (P) owner principal・identity・target・message・receipt optionを一つの確認snapshotへ結ぶ
   - PII-free payloadへversion、target revision、message fingerprint、receipt requested／expiryを含める
   - 10分max ageと24時間receipt expiryを注入可能なclockで扱う
   - 完了時、previewで発行したtokenだけが同じowner／target／message／optionのsendで検証成功する
