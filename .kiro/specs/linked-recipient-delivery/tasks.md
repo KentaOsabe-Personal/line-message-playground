@@ -116,7 +116,7 @@
   - body、token、subject、生exceptionをresult／logへ出さない
   - 完了時、各応答fixtureは一意のsafe分類とLINE request ID有無へ変換される
   - _Requirements: 7.3, 7.4, 7.5, 7.9, 9.1, 9.2, 9.5, 9.6_
-- [ ] 5.3 (P) 確認済み期限へ結び付く受取確認capability候補を生成する
+- [x] 5.3 (P) 確認済み期限へ結び付く受取確認capability候補を生成する
   - ConfirmationServiceがpreview時に確定しtokenへ結び付けたreceipt expiryを入力として受け取り、送信時に新しい期限を生成しない
   - 256-bit random生値とSHA-256 digestを生成し、そのdigestと確認済みexpiryを同じcommitmentへ入れる
   - raw値は新規attemptのgateway commandだけに渡せる境界値とし、repr／serialize／logを禁止する
