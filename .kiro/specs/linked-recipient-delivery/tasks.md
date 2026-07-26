@@ -166,7 +166,7 @@
   - _Requirements: 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 9.1, 9.5, 9.6_
 
 - [ ] 7. owner向けtarget・preview・send・status APIを公開する
-- [ ] 7.1 channel／recipient選択APIをowner sessionで保護して公開する
+- [x] 7.1 channel／recipient選択APIをowner sessionで保護して公開する
   - active ownerだけにsafe summaryを返し、未認証／unlink pendingをadapterより先に拒否する
   - recipient routeのcanonical UUIDとhidden target errorを統一する
   - 完了時、正しいownerだけが理由付き選択肢を取得し秘密／固定env値は応答にない

@@ -1,21 +1,34 @@
 from uuid import UUID
 
-from rest_framework.exceptions import ParseError, UnsupportedMediaType
+from django.db import DatabaseError
 from rest_framework import status
+from rest_framework.exceptions import (
+    ParseError,
+    UnsupportedMediaType,
+    ValidationError,
+)
 from rest_framework.response import Response
 
+from lineaccounts.authentication import OwnerPrincipal
 from lineaccounts.views import OwnerProtectedAPIView
 
 from .confirmation import ConfirmationError, ConfirmationTokenService
 from .formatters import MessageValidationError, format_message
 from .gateway import LINEGateway
-from .serializers import PreviewRequestSerializer, SendDeliveryRequestSerializer
+from .serializers import (
+    CanonicalUUIDField,
+    DeliveryChannelChoiceResponseSerializer,
+    DeliveryRecipientChoiceResponseSerializer,
+    PreviewRequestSerializer,
+    SendDeliveryRequestSerializer,
+)
 from .services import (
     DeliveryInProgressError,
     DeliveryService,
     OperationIdReusedError,
     SubmitDeliveryCommand,
 )
+from .types import TargetUnavailable
 
 
 SAFE_SUMMARIES = {
@@ -25,6 +38,8 @@ SAFE_SUMMARIES = {
     "operation_id_reused": "この送信操作IDは別の内容に使用済みです。",
     "delivery_in_progress": "同じ内容の送信を処理中です。",
     "operation_not_found": "送信操作を確認できませんでした。",
+    "target_not_available": "対象を確認できませんでした。",
+    "storage_unavailable": "処理を完了できませんでした。",
     "unexpected": "配信処理を完了できませんでした。",
 }
 
@@ -94,6 +109,72 @@ class LocalDeliveryAPIView(OwnerProtectedAPIView):
         if isinstance(exc, (ParseError, UnsupportedMediaType)):
             return error_response("validation_error", status.HTTP_400_BAD_REQUEST)
         return super().handle_exception(exc)
+
+
+class DeliveryTargetChannelListAPIView(LocalDeliveryAPIView):
+    def get(self, request):
+        principal = request.user
+        assert isinstance(principal, OwnerPrincipal)
+        try:
+            from lineaccounts.delivery_repositories import DeliveryTargetDirectory
+
+            choices = DeliveryTargetDirectory().list_channels(
+                principal.identity_public_id
+            )
+        except DatabaseError:
+            return error_response(
+                "storage_unavailable",
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(
+            {
+                "items": DeliveryChannelChoiceResponseSerializer(
+                    choices,
+                    many=True,
+                ).data
+            }
+        )
+
+
+class DeliveryTargetRecipientListAPIView(LocalDeliveryAPIView):
+    def get(self, request, channel_id):
+        try:
+            parsed_channel_id = CanonicalUUIDField().run_validation(channel_id)
+        except ValidationError:
+            return error_response(
+                "validation_error",
+                status.HTTP_400_BAD_REQUEST,
+                fields={"channelId": ["入力値が不正です。"]},
+            )
+        principal = request.user
+        assert isinstance(principal, OwnerPrincipal)
+        try:
+            from lineaccounts.delivery_repositories import DeliveryTargetDirectory
+
+            choices = DeliveryTargetDirectory().list_recipients(
+                principal.identity_public_id,
+                parsed_channel_id,
+            )
+        except DatabaseError:
+            return error_response(
+                "storage_unavailable",
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        if isinstance(choices, TargetUnavailable):
+            if choices.reason == "no_deliverable_recipient":
+                return Response({"items": []})
+            return error_response(
+                "target_not_available",
+                status.HTTP_404_NOT_FOUND,
+            )
+        return Response(
+            {
+                "items": DeliveryRecipientChoiceResponseSerializer(
+                    choices,
+                    many=True,
+                ).data
+            }
+        )
 
 
 class PreviewAPIView(LocalDeliveryAPIView):

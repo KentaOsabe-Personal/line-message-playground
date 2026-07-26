@@ -83,3 +83,51 @@ class LinkedSendDeliveryRequestSerializer(LinkedPreviewRequestSerializer):
         trim_whitespace=False,
         write_only=True,
     )
+
+
+class DeliveryChannelChoiceResponseSerializer(serializers.Serializer):
+    channelId = serializers.UUIDField(
+        source="channel_public_id",
+        read_only=True,
+    )
+    label = serializers.CharField(read_only=True)
+    active = serializers.BooleanField(read_only=True)
+    deliveryAvailable = serializers.BooleanField(
+        source="available",
+        read_only=True,
+    )
+    unavailableReason = serializers.ChoiceField(
+        source="unavailable_reason",
+        choices=("channel_inactive",),
+        allow_null=True,
+        read_only=True,
+    )
+
+
+class DeliveryRecipientChoiceResponseSerializer(serializers.Serializer):
+    recipientId = serializers.UUIDField(
+        source="recipient_public_id",
+        read_only=True,
+    )
+    displayName = serializers.CharField(source="display_name", read_only=True)
+    enabled = serializers.BooleanField(read_only=True)
+    friendshipState = serializers.ChoiceField(
+        source="friendship_state",
+        choices=("friend", "not_friend", "unknown"),
+        read_only=True,
+    )
+    deliveryAvailable = serializers.BooleanField(
+        source="available",
+        read_only=True,
+    )
+    unavailableReason = serializers.ChoiceField(
+        source="unavailable_reason",
+        choices=(
+            "channel_inactive",
+            "recipient_disabled",
+            "not_friend",
+            "friendship_unknown",
+        ),
+        allow_null=True,
+        read_only=True,
+    )
