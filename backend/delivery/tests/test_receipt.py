@@ -4,12 +4,34 @@ import logging
 import pickle
 from base64 import urlsafe_b64encode
 from dataclasses import asdict, fields
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import StringIO
+from uuid import uuid4
 
 from django.test import SimpleTestCase
 
-from delivery.receipt import ReceiptCapabilityFactory
+from delivery.receipt import ReceiptCapabilityFactory, ReceiptHandler
+from delivery.types import (
+    DeliverySnapshot,
+    LinkedTargetSnapshot,
+    MessageSnapshot,
+    OwnerIdentitySnapshot,
+    OwnerPrincipal,
+    ReceiptRecorded,
+    ReceiptRejected,
+    ReceiptUnchanged,
+)
+from lineinteractions.types import (
+    ActionFailed,
+    ActionNoChange,
+    ActionRejected,
+    ActionSucceeded,
+    OpaqueActionPayload,
+    PostbackActionCommand,
+    VerifiedInteractionChannel,
+    VerifiedInteractionUser,
+)
+from linewebhooks.types import HandlerExecutionContext
 
 
 RECEIPT_EXPIRY = datetime(
@@ -128,3 +150,155 @@ class ReceiptCapabilityFactoryTests(SimpleTestCase):
     @staticmethod
     def _raise_secret_error(size: int) -> bytes:
         raise RuntimeError("generator-secret-canary")
+
+
+class _ReceiptRepository:
+    def __init__(self, result):
+        self.result = result
+        self.commands = []
+
+    def confirm_receipt(self, command):
+        self.commands.append(command)
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
+
+
+class ReceiptHandlerTests(SimpleTestCase):
+    def setUp(self):
+        self.channel_id = uuid4()
+        self.recipient_id = uuid4()
+        self.now = RECEIPT_EXPIRY - timedelta(hours=1)
+
+    # テストケース: 検証済みdelivery.received actionのopaque payloadを処理する
+    # 期待値: 生値を保存せずdigest・target・event・現在時刻だけをrepositoryへ渡す
+    def test_hashes_opaque_payload_and_records_verified_target(self):
+        snapshot = self._snapshot()
+        repository = _ReceiptRepository(ReceiptRecorded(snapshot))
+        handler = ReceiptHandler(
+            attempt_repository=repository,
+            clock=lambda: self.now,
+        )
+
+        result = handler.handle(self._command("receipt-capability-canary"))
+
+        self.assertIsInstance(result, ActionSucceeded)
+        self.assertEqual(len(repository.commands), 1)
+        stored = repository.commands[0]
+        self.assertEqual(
+            stored.capability_digest,
+            hashlib.sha256(
+                b"receipt-capability-canary"
+            ).hexdigest(),
+        )
+        self.assertEqual(stored.channel_public_id, self.channel_id)
+        self.assertEqual(stored.recipient_public_id, self.recipient_id)
+        self.assertEqual(stored.occurred_at, self.now)
+        self.assertEqual(
+            stored.webhook_event_id,
+            "01J00000000000000000000000",
+        )
+        self.assertNotIn(
+            "receipt-capability-canary",
+            repr(repository.commands),
+        )
+
+    # テストケース: repositoryの記録済み・既確認・拒否結果を受け取る
+    # 期待値: action成功・変更なし・拒否へ安全に一対一で縮約する
+    def test_maps_repository_results_to_action_outcomes(self):
+        cases = (
+            (ReceiptRecorded(self._snapshot()), ActionSucceeded),
+            (ReceiptUnchanged(self._snapshot()), ActionNoChange),
+            (ReceiptRejected("expired"), ActionRejected),
+        )
+
+        for repository_result, expected_type in cases:
+            with self.subTest(expected_type=expected_type):
+                result = ReceiptHandler(
+                    attempt_repository=_ReceiptRepository(repository_result),
+                    clock=lambda: self.now,
+                ).handle(self._command("opaque"))
+                self.assertIsInstance(result, expected_type)
+
+    # テストケース: 別action名、不正依存結果、clock・repository例外を処理する
+    # 期待値: mutationを増やさず拒否または失敗へ縮約し秘密を結果へ露出しない
+    def test_rejects_wrong_action_and_contains_processing_failures(self):
+        wrong_repository = _ReceiptRepository(
+            RuntimeError("repository-secret-canary")
+        )
+        wrong = self._command("payload-secret-canary", action_name="other")
+        wrong_result = ReceiptHandler(
+            attempt_repository=wrong_repository,
+            clock=lambda: self.now,
+        ).handle(wrong)
+        self.assertIsInstance(wrong_result, ActionRejected)
+        self.assertEqual(wrong_repository.commands, [])
+
+        for repository, clock in (
+            (
+                _ReceiptRepository(
+                    RuntimeError("repository-secret-canary")
+                ),
+                lambda: self.now,
+            ),
+            (
+                _ReceiptRepository(ReceiptRecorded(self._snapshot())),
+                self._raise_clock_error,
+            ),
+            (_ReceiptRepository(object()), lambda: self.now),
+        ):
+            with self.subTest(repository=repository):
+                result = ReceiptHandler(
+                    attempt_repository=repository,
+                    clock=clock,
+                ).handle(self._command("payload-secret-canary"))
+                self.assertIsInstance(result, ActionFailed)
+                self.assertNotIn("secret-canary", repr(result))
+
+    def _command(self, payload, *, action_name="delivery.received"):
+        return PostbackActionCommand(
+            action_name=action_name,
+            payload=OpaqueActionPayload(payload),
+            channel=VerifiedInteractionChannel(
+                self.channel_id,
+                "provider",
+            ),
+            webhook_event_id="01J00000000000000000000000",
+            user=VerifiedInteractionUser(uuid4(), self.recipient_id),
+            execution=HandlerExecutionContext(10.0, 0, 0, 9.0),
+        )
+
+    def _snapshot(self):
+        return DeliverySnapshot(
+            operation_id=uuid4(),
+            owner=OwnerPrincipal(1),
+            owner_identity=OwnerIdentitySnapshot(uuid4()),
+            target=LinkedTargetSnapshot(
+                channel_public_id=self.channel_id,
+                channel_label="main",
+                recipient_public_id=self.recipient_id,
+                channel_active=True,
+                recipient_enabled=True,
+                friendship_state="friend",
+            ),
+            message=MessageSnapshot(
+                subject="件名",
+                body="本文",
+                formatted_text="【件名】\n\n本文",
+                fingerprint="a" * 64,
+            ),
+            status="succeeded",
+            accepted_at=self.now - timedelta(seconds=1),
+            completed_at=self.now,
+            line_request_id="line-request",
+            line_accepted_request_id="accepted-request",
+            failure=None,
+            receipt_status="confirmed",
+            receipt_expires_at=RECEIPT_EXPIRY,
+            receipt_confirmed_at=self.now,
+            receipt_webhook_event_id="01J00000000000000000000000",
+        )
+
+    @staticmethod
+    def _raise_clock_error():
+        raise RuntimeError("clock-secret-canary")

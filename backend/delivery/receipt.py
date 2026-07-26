@@ -6,10 +6,24 @@ from base64 import urlsafe_b64encode
 from datetime import datetime
 from typing import Callable
 
+from lineinteractions.types import (
+    ActionFailed,
+    ActionNoChange,
+    ActionOutcome,
+    ActionRejected,
+    ActionSucceeded,
+    PostbackActionCommand,
+)
+
+from .repositories import AttemptRepository
 from .types import (
+    ConfirmReceiptCommand,
     ReceiptCapability,
     ReceiptCapabilityCandidate,
     ReceiptCommitment,
+    ReceiptRecorded,
+    ReceiptRejected,
+    ReceiptUnchanged,
 )
 
 
@@ -55,3 +69,46 @@ class ReceiptCapabilityFactory:
                 expires_at=confirmed_expires_at,
             ),
         )
+
+
+class ReceiptHandler:
+    """検証済みpostbackを一件の受取確認へ縮約する。"""
+
+    def __init__(
+        self,
+        *,
+        attempt_repository: AttemptRepository,
+        clock: Callable[[], datetime],
+    ) -> None:
+        self._attempt_repository = attempt_repository
+        self._clock = clock
+
+    def handle(self, command: PostbackActionCommand) -> ActionOutcome:
+        if (
+            not isinstance(command, PostbackActionCommand)
+            or command.action_name != "delivery.received"
+        ):
+            return ActionRejected()
+
+        try:
+            raw_payload = command.payload.reveal_for_action()
+            digest = hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
+            result = self._attempt_repository.confirm_receipt(
+                ConfirmReceiptCommand(
+                    capability_digest=digest,
+                    channel_public_id=command.channel.channel_public_id,
+                    recipient_public_id=command.user.recipient_public_id,
+                    occurred_at=self._clock(),
+                    webhook_event_id=command.webhook_event_id,
+                )
+            )
+        except Exception:
+            return ActionFailed()
+
+        if isinstance(result, ReceiptRecorded):
+            return ActionSucceeded()
+        if isinstance(result, ReceiptUnchanged):
+            return ActionNoChange()
+        if isinstance(result, ReceiptRejected):
+            return ActionRejected()
+        return ActionFailed()

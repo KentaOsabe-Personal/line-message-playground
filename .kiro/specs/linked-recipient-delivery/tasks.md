@@ -148,7 +148,7 @@
   - _Requirements: 3.7, 5.2, 5.5, 5.6, 5.7, 5.8, 6.2, 6.4, 6.5, 6.6, 9.5, 9.6_
 
 - [ ] 6. 明示的受取確認を検証済みpostbackへ統合する
-- [ ] 6.1 検証済みdelivery.received actionを一件のattemptへ収束させる
+- [x] 6.1 検証済みdelivery.received actionを一件のattemptへ収束させる
   - opaque payloadをhash化しchannel／recipient／expiry／requested／statusを照合する
   - processing／succeeded／unknownは記録、failed／unmatched／expired／deletedは変更なしで分類する
   - 完了時、有効actionだけがreceiptをconfirmedにし、配信statusとLINE IDを維持する
