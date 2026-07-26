@@ -1,14 +1,19 @@
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 from uuid import uuid4
 
 from django.db import connection
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
 from delivery.receipt import ReceiptCapabilityFactory
+from delivery.repositories import (
+    DjangoAttemptRepository,
+    build_request_fingerprint,
+)
 from delivery.services import DeliveryService
 from delivery.types import (
+    AcceptedDeliveryCommand,
     AttemptAccepted,
     AttemptConflict,
     ConfirmationSnapshot,
@@ -19,6 +24,8 @@ from delivery.types import (
     LinkedPushStored,
     LinkedTargetSnapshot,
     LinePushAccepted,
+    LinePushRejected,
+    LinePushUnknown,
     LiveDeliveryTarget,
     MessageSnapshot,
     OwnerIdentitySnapshot,
@@ -119,6 +126,11 @@ class FakeFinalizingAttemptRepository(FakeAttemptRepository):
             completed_at=completed_at,
             failure=result.failure_type,
         )
+
+    def get_for_owner(self, owner_principal_slot, operation_id):
+        self.status_lookups = getattr(self, "status_lookups", [])
+        self.status_lookups.append((owner_principal_slot, operation_id))
+        return self.final_snapshot
 
 
 class LinkedDeliveryAcceptTests(SimpleTestCase):
@@ -711,4 +723,329 @@ class LinkedDeliveryPushTests(LinkedDeliveryAcceptTests):
             ),
             credential_repository=credentials,
             channel_push_gateway=gateway,
+        )
+
+
+class LinkedDeliveryFinalizationTests(LinkedDeliveryAcceptTests):
+    def setUp(self):
+        super().setUp()
+        self.processing = self._snapshot(self.operation_id)
+
+    def test_gateway_results_converge_to_the_repository_snapshot(self):
+        cases = (
+            (
+                LinePushAccepted("request-id", "accepted-request-id"),
+                replace(
+                    self.processing,
+                    status="succeeded",
+                    completed_at=NOW,
+                    line_request_id="request-id",
+                    line_accepted_request_id="accepted-request-id",
+                ),
+            ),
+            (
+                LinePushRejected("authentication"),
+                replace(
+                    self.processing,
+                    status="failed",
+                    completed_at=NOW,
+                    failure="authentication",
+                ),
+            ),
+            (
+                LinePushUnknown("timeout_unknown"),
+                replace(
+                    self.processing,
+                    status="unknown",
+                    completed_at=NOW,
+                    failure="timeout_unknown",
+                ),
+            ),
+        )
+        for gateway_result, stored in cases:
+            with self.subTest(status=gateway_result.status):
+                repository = FakeFinalizingAttemptRepository(
+                    AttemptAccepted(9, self.processing),
+                    final_snapshot=stored,
+                )
+                service = DeliveryService(
+                    clock=lambda: NOW,
+                    attempt_repository=repository,
+                )
+
+                result = service.finalize_linked_push(
+                    LinkedPushExecuted(9, gateway_result)
+                )
+
+                self.assertIsInstance(result, LinkedPushStored)
+                self.assertIs(result.snapshot, stored)
+                self.assertEqual(
+                    repository.finalizations,
+                    [(9, gateway_result, NOW)],
+                )
+                self.assertEqual(result.snapshot.receipt_status, "pending")
+                self.assertEqual(
+                    result.snapshot.receipt_expires_at,
+                    self.expiry,
+                )
+
+    def test_finalize_race_returns_first_stored_terminal_result(self):
+        first_terminal = replace(
+            self.processing,
+            status="unknown",
+            completed_at=NOW,
+            failure="service_unknown",
+        )
+        repository = FakeFinalizingAttemptRepository(
+            AttemptAccepted(9, self.processing),
+            final_snapshot=first_terminal,
+        )
+        service = DeliveryService(
+            clock=lambda: NOW,
+            attempt_repository=repository,
+        )
+
+        result = service.finalize_linked_push(
+            LinkedPushExecuted(
+                9,
+                LinePushAccepted("late-request", None),
+            )
+        )
+
+        self.assertIs(result.snapshot, first_terminal)
+        self.assertEqual(result.snapshot.status, "unknown")
+        self.assertEqual(result.snapshot.failure, "service_unknown")
+        self.assertIsNone(result.snapshot.line_request_id)
+
+    def test_repeated_unknown_completion_only_reuses_repository_result(self):
+        unknown = replace(
+            self.processing,
+            status="unknown",
+            completed_at=NOW,
+            failure="response_unknown",
+        )
+        repository = FakeFinalizingAttemptRepository(
+            AttemptAccepted(9, self.processing),
+            final_snapshot=unknown,
+        )
+        forbidden = patch(
+            "delivery.services.LINEGateway",
+            side_effect=AssertionError("must not construct a gateway"),
+        )
+        with forbidden as gateway_constructor:
+            service = DeliveryService(
+                clock=lambda: NOW,
+                attempt_repository=repository,
+            )
+            for _ in range(2):
+                result = service.finalize_linked_push(
+                    LinkedPushExecuted(
+                        9,
+                        LinePushUnknown("response_unknown"),
+                    )
+                )
+                self.assertIs(result.snapshot, unknown)
+
+        self.assertEqual(len(repository.finalizations), 2)
+        gateway_constructor.assert_not_called()
+
+    def test_already_stored_results_cannot_be_finalized_as_gateway_work(self):
+        failed = replace(
+            self.processing,
+            status="failed",
+            completed_at=NOW,
+            failure="configuration",
+        )
+        repository = FakeFinalizingAttemptRepository(
+            AttemptAccepted(9, self.processing),
+            final_snapshot=failed,
+        )
+        service = DeliveryService(attempt_repository=repository)
+
+        for result in (
+            ExistingAttempt(failed),
+            LinkedPushStored(failed),
+            LinkedPushPrevented(failed, "configuration"),
+        ):
+            with self.subTest(result=type(result).__name__):
+                with self.assertRaisesMessage(
+                    ValueError,
+                    "invalid linked push execution result",
+                ):
+                    service.finalize_linked_push(result)
+
+        self.assertEqual(repository.finalizations, [])
+
+
+class LinkedDeliveryOwnerStatusTests(LinkedDeliveryAcceptTests):
+    def test_status_delegates_owner_scope_and_expiry_to_repository_only(self):
+        processing = self._snapshot(self.operation_id)
+        expired = replace(
+            processing,
+            status="unknown",
+            completed_at=NOW,
+            failure="processing_expired",
+        )
+        repository = FakeFinalizingAttemptRepository(
+            AttemptAccepted(9, processing),
+            final_snapshot=expired,
+        )
+        service = DeliveryService(
+            attempt_repository=repository,
+            target_directory=object(),
+            receipt_capability_factory=object(),
+            credential_repository=object(),
+            channel_push_gateway=object(),
+        )
+
+        first = service.check_linked_status(
+            self.owner.slot,
+            self.operation_id,
+        )
+        second = service.check_linked_status(
+            self.owner.slot,
+            self.operation_id,
+        )
+
+        self.assertIs(first, expired)
+        self.assertIs(second, expired)
+        self.assertEqual(
+            repository.status_lookups,
+            [
+                (self.owner.slot, self.operation_id),
+                (self.owner.slot, self.operation_id),
+            ],
+        )
+        self.assertEqual(repository.finalizations, [])
+
+    def test_other_owner_and_missing_operation_are_hidden(self):
+        repository = FakeFinalizingAttemptRepository(
+            AttemptAccepted(9, self._snapshot(self.operation_id)),
+            final_snapshot=None,
+        )
+        service = DeliveryService(attempt_repository=repository)
+
+        self.assertIsNone(
+            service.check_linked_status(999, self.operation_id)
+        )
+        self.assertEqual(
+            repository.status_lookups,
+            [(999, self.operation_id)],
+        )
+
+
+class LinkedDeliveryStoredResultIntegrationTests(TestCase):
+    def setUp(self):
+        self.now = NOW
+        self.owner = OwnerPrincipal(42)
+        self.owner_identity = OwnerIdentitySnapshot(uuid4())
+        self.target = LinkedTargetSnapshot(
+            channel_public_id=uuid4(),
+            channel_label="通知用",
+            recipient_public_id=uuid4(),
+            channel_active=True,
+            recipient_enabled=True,
+            friendship_state="friend",
+        )
+        self.message = MessageSnapshot(
+            subject="件名",
+            body="本文",
+            formatted_text="件名\n\n本文",
+            fingerprint=DIGEST_B,
+        )
+        self.repository = DjangoAttemptRepository(clock=lambda: self.now)
+        self.service = DeliveryService(
+            clock=lambda: self.now,
+            attempt_repository=self.repository,
+        )
+
+    def test_finalize_and_owner_status_preserve_first_terminal_and_receipt(self):
+        accepted = self.repository.accept(self._command(receipt=True))
+        self.now = NOW + timedelta(seconds=1)
+
+        first = self.service.finalize_linked_push(
+            LinkedPushExecuted(
+                accepted.attempt_id,
+                LinePushAccepted("request-id", "accepted-request-id"),
+            )
+        )
+        self.now = NOW + timedelta(seconds=2)
+        later = self.service.finalize_linked_push(
+            LinkedPushExecuted(
+                accepted.attempt_id,
+                LinePushUnknown("timeout_unknown"),
+            )
+        )
+        visible = self.service.check_linked_status(
+            self.owner.slot,
+            accepted.snapshot.operation_id,
+        )
+
+        self.assertEqual(first.snapshot.status, "succeeded")
+        self.assertEqual(later.snapshot.status, "succeeded")
+        self.assertEqual(visible.status, "succeeded")
+        self.assertEqual(visible.completed_at, NOW + timedelta(seconds=1))
+        self.assertEqual(visible.line_request_id, "request-id")
+        self.assertEqual(
+            visible.line_accepted_request_id,
+            "accepted-request-id",
+        )
+        self.assertEqual(visible.receipt_status, "pending")
+        self.assertEqual(
+            visible.receipt_expires_at,
+            NOW + timedelta(hours=1),
+        )
+        self.assertIsNone(
+            self.service.check_linked_status(
+                self.owner.slot + 1,
+                accepted.snapshot.operation_id,
+            )
+        )
+
+    def test_status_expires_processing_at_exact_deadline_without_push(self):
+        accepted = self.repository.accept(self._command(receipt=False))
+        before = self.service.check_linked_status(
+            self.owner.slot,
+            accepted.snapshot.operation_id,
+        )
+        self.now = NOW + timedelta(seconds=30)
+
+        expired = self.service.check_linked_status(
+            self.owner.slot,
+            accepted.snapshot.operation_id,
+        )
+        repeated = self.service.check_linked_status(
+            self.owner.slot,
+            accepted.snapshot.operation_id,
+        )
+
+        self.assertEqual(before.status, "processing")
+        self.assertEqual(expired.status, "unknown")
+        self.assertEqual(expired.failure, "processing_expired")
+        self.assertEqual(expired.completed_at, self.now)
+        self.assertEqual(repeated, expired)
+        self.assertEqual(repeated.receipt_status, "not_requested")
+
+    def _command(self, *, receipt):
+        operation_id = uuid4()
+        commitment = (
+            ReceiptCommitment(DIGEST_A, NOW + timedelta(hours=1))
+            if receipt
+            else None
+        )
+        return AcceptedDeliveryCommand(
+            operation_id=operation_id,
+            owner=self.owner,
+            owner_identity=self.owner_identity,
+            target=self.target,
+            message=self.message,
+            request_fingerprint=build_request_fingerprint(
+                owner=self.owner,
+                owner_identity=self.owner_identity,
+                channel_public_id=self.target.channel_public_id,
+                recipient_public_id=self.target.recipient_public_id,
+                message_fingerprint=self.message.fingerprint,
+                receipt_requested=receipt,
+            ),
+            receipt_commitment=commitment,
         )

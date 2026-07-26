@@ -253,6 +253,34 @@ class DeliveryService:
             result=result,
         )
 
+    def finalize_linked_push(self, performed):
+        """gateway実行結果をfirst-terminal CASで保存結果へ収束させる。
+
+        この境界は外部依存を再解決せず、実行済み結果を一度repositoryへ
+        渡すだけに限定する。競合時もrepositoryが返す先行終端状態を採用する。
+        """
+
+        if not isinstance(performed, LinkedPushExecuted):
+            raise ValueError("invalid linked push execution result")
+        snapshot = self._linked_attempt_repository().finalize(
+            performed.attempt_id,
+            performed.result,
+            self.clock(),
+        )
+        return LinkedPushStored(snapshot=snapshot)
+
+    def check_linked_status(
+        self,
+        owner_principal_slot,
+        operation_id,
+    ):
+        """owner scopeで保存済み状態を取得し、期限判定をrepositoryへ委譲する。"""
+
+        return self._linked_attempt_repository().get_for_owner(
+            owner_principal_slot,
+            operation_id,
+        )
+
     def check_status(self, operation_id):
         attempt = DeliveryAttempt.objects.filter(operation_id=operation_id).first()
         if attempt is None:

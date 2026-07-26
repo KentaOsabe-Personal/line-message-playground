@@ -135,7 +135,7 @@
   - push直前revisionが変わればtarget failureへ確定しLINEを呼ばない
   - 完了時、有効targetだけが選択channelから一件へ最大一回送信される
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6_
-- [ ] 5.6 push結果とprocessing expiryを保存済みstatusへ収束させる
+- [x] 5.6 push結果とprocessing expiryを保存済みstatusへ収束させる
   - accepted／rejected／unknownをrepositoryのfirst-terminal CASで確定する
   - status確認時はrepositoryのprocessing expiry判定を呼び、自動再送しない
   - 完了時、再試行・競合・結果不明は追加pushなしで同じ保存結果を返す
