@@ -23,7 +23,7 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.7_
 
 - [ ] 2. owner scoped target projectionを実装する
-- [ ] 2.1 (P) owner・channel・recipient状態から共通target revisionを生成する
+- [x] 2.1 (P) owner・channel・recipient状態から共通target revisionを生成する
   - preview、accept前、push直前で同じcanonical revision builderを使う
   - 状態が変化して戻った場合もupdated revisionで古い確認を識別する
   - 完了時、同じlive targetは同じdigest、配信可否へ影響する変更は異なるdigestになる
