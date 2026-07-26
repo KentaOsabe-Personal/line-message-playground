@@ -8,9 +8,20 @@ from rest_framework.test import APIClient, APITestCase
 from django.utils import timezone
 
 from delivery.confirmation import ConfirmationService, ConfirmationTokenService
-from delivery.formatters import format_message
+from delivery.formatters import format_message, format_message_snapshot
 from delivery.gateway import LINEGateway, LinePushAccepted, LinePushRejected, LinePushUnknown
 from delivery.models import DeliveryAttempt
+from delivery.types import (
+    AcceptedLinkedAttempt,
+    DeliverySnapshot,
+    ExistingAttempt,
+    LinkedPushExecuted,
+    LinkedPushPreparation,
+    LinkedPushStored,
+    LinePushAccepted as LinkedLinePushAccepted,
+    OwnerIdentitySnapshot,
+    OwnerPrincipal as DeliveryOwnerPrincipal,
+)
 from lineaccounts.authentication import OWNER_SESSION_KEY
 from lineaccounts.delivery_repositories import DeliveryTargetDirectory
 from lineaccounts.gateway import VerifiedLineIdentity
@@ -78,6 +89,7 @@ class DeliveryApiTests(APITestCase):
         now = timezone.now()
         return DeliveryAttempt.objects.create(
             operation_id=uuid4(),
+            owner_principal_slot=self.owner_session.owner_slot,
             subject=message.subject,
             body=message.body,
             formatted_text=message.formatted_text,
@@ -674,3 +686,266 @@ class DeliveryApiTests(APITestCase):
             "配信結果を確定できませんでした。",
         )
         api.push_message_with_http_info.assert_called_once()
+
+    def _linked_snapshot(
+        self,
+        *,
+        operation_id,
+        status_value,
+        completed_at=None,
+        failure=None,
+        receipt_status="not_requested",
+    ):
+        target = DeliveryTargetDirectory().resolve(
+            self.identity.public_id,
+            self.channel.public_id,
+            self.recipient.public_id,
+        )
+        now = timezone.now()
+        return DeliverySnapshot(
+            operation_id=operation_id,
+            owner=DeliveryOwnerPrincipal(self.owner_session.owner_slot),
+            owner_identity=OwnerIdentitySnapshot(self.identity.public_id),
+            target=target.snapshot,
+            message=format_message_snapshot("件名", "本文"),
+            status=status_value,
+            accepted_at=now,
+            completed_at=completed_at,
+            line_request_id=(
+                "line-request-safe"
+                if status_value == "succeeded"
+                else None
+            ),
+            line_accepted_request_id=(
+                "line-accepted-internal"
+                if status_value == "succeeded"
+                else None
+            ),
+            failure=failure,
+            receipt_status=receipt_status,
+            receipt_expires_at=None,
+            receipt_confirmed_at=None,
+            receipt_webhook_event_id=None,
+        )
+
+    def _linked_send_payload(self, operation_id):
+        preview = self.client.post(
+            "/api/deliveries/preview/",
+            {
+                "channelId": str(self.channel.public_id),
+                "recipientId": str(self.recipient.public_id),
+                "subject": "件名",
+                "body": "本文",
+                "receiptRequested": False,
+            },
+            format="json",
+        )
+        self.assertEqual(preview.status_code, 200)
+        return {
+            "channelId": str(self.channel.public_id),
+            "recipientId": str(self.recipient.public_id),
+            "subject": "件名",
+            "body": "本文",
+            "receiptRequested": False,
+            "operationId": str(operation_id),
+            "confirmationToken": preview.data["confirmationToken"],
+        }
+
+    # テストケース: 確認済みlinked requestを新規attemptとして送信する
+    # 期待値: accept、push、finalizeを各一回だけ実行し、保存済みsnapshotをsafe DTOで返す
+    def test_linked_send_orchestrates_once_and_returns_stored_snapshot(self):
+        operation_id = uuid4()
+        payload = self._linked_send_payload(operation_id)
+        target = DeliveryTargetDirectory().resolve(
+            self.identity.public_id,
+            self.channel.public_id,
+            self.recipient.public_id,
+        )
+        processing = self._linked_snapshot(
+            operation_id=operation_id,
+            status_value="processing",
+        )
+        accepted = AcceptedLinkedAttempt(
+            attempt_id=1,
+            snapshot=processing,
+            push_preparation=LinkedPushPreparation(
+                target=target,
+                message=format_message_snapshot("件名", "本文"),
+                receipt_capability=None,
+            ),
+        )
+        executed = LinkedPushExecuted(
+            attempt_id=1,
+            result=LinkedLinePushAccepted("line-request-safe", None),
+        )
+        terminal = self._linked_snapshot(
+            operation_id=operation_id,
+            status_value="succeeded",
+            completed_at=timezone.now(),
+        )
+        service = Mock()
+        service.accept_confirmed.return_value = accepted
+        service.push_accepted.return_value = executed
+        service.finalize_linked_push.return_value = LinkedPushStored(terminal)
+
+        with patch("delivery.views.DeliveryService", return_value=service):
+            response = self.client.post(
+                "/api/deliveries/",
+                payload,
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], "succeeded")
+        self.assertEqual(
+            response.data["snapshot"]["channelLabel"],
+            "通知チャネル",
+        )
+        self.assertEqual(response.data["receipt"]["status"], "not_requested")
+        service.accept_confirmed.assert_called_once()
+        service.push_accepted.assert_called_once_with(accepted)
+        service.finalize_linked_push.assert_called_once_with(executed)
+        rendered = str(response.data)
+        for secret in (
+            "Usubject-secret-canary",
+            "channel-id-secret-canary",
+            "line-accepted-internal",
+            "件名",
+            "本文",
+        ):
+            self.assertNotIn(secret, rendered)
+
+    # テストケース: 同一operationの確認済みlinked requestを再送する
+    # 期待値: 既存保存状態を返し、pushとfinalizeを呼ばず自動再送しない
+    def test_linked_send_existing_attempt_never_pushes_again(self):
+        operation_id = uuid4()
+        payload = self._linked_send_payload(operation_id)
+        terminal = self._linked_snapshot(
+            operation_id=operation_id,
+            status_value="succeeded",
+            completed_at=timezone.now(),
+        )
+        service = Mock()
+        service.accept_confirmed.return_value = ExistingAttempt(terminal)
+
+        with patch("delivery.views.DeliveryService", return_value=service):
+            response = self.client.post(
+                "/api/deliveries/",
+                payload,
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["operationId"], str(operation_id))
+        service.push_accepted.assert_not_called()
+        service.finalize_linked_push.assert_not_called()
+
+    # テストケース: preview後にmessageまたはreceipt optionを変更してsendする
+    # 期待値: signed snapshot不一致を409へ縮約し、attempt受付とpushを開始しない
+    def test_linked_send_rejects_changed_confirmation_axes_before_service(self):
+        operation_id = uuid4()
+        payload = self._linked_send_payload(operation_id)
+        service = Mock()
+        with patch("delivery.views.DeliveryService", return_value=service):
+            payload["body"] = "変更後本文"
+            message_changed = self.client.post(
+                "/api/deliveries/",
+                payload,
+                format="json",
+            )
+            payload = self._linked_send_payload(uuid4())
+            payload["receiptRequested"] = True
+            option_changed = self.client.post(
+                "/api/deliveries/",
+                payload,
+                format="json",
+            )
+
+        self.assertEqual(message_changed.status_code, 409)
+        self.assertEqual(
+            message_changed.data["error"]["code"],
+            "confirmation_stale",
+        )
+        self.assertEqual(option_changed.status_code, 409)
+        self.assertEqual(
+            option_changed.data["error"]["code"],
+            "confirmation_stale",
+        )
+        service.accept_confirmed.assert_not_called()
+        service.push_accepted.assert_not_called()
+
+    # テストケース: ownerがcanonical operation UUIDでlinked状態を確認する
+    # 期待値: session由来owner slotで照会し、snapshotと直交receiptだけをsafe DTOで返す
+    def test_linked_status_uses_owner_scope_and_hides_internal_values(self):
+        operation_id = uuid4()
+        terminal = self._linked_snapshot(
+            operation_id=operation_id,
+            status_value="succeeded",
+            completed_at=timezone.now(),
+        )
+        service = Mock()
+        service.check_linked_status.return_value = terminal
+
+        with patch("delivery.views.DeliveryService", return_value=service):
+            response = self.client.post(
+                f"/api/deliveries/{operation_id}/status/",
+                {},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        service.check_linked_status.assert_called_once_with(
+            self.owner_session.owner_slot,
+            operation_id,
+        )
+        self.assertEqual(
+            response.data["snapshot"]["recipientId"],
+            str(self.recipient.public_id),
+        )
+        rendered = str(response.data)
+        self.assertNotIn(str(self.identity.public_id), rendered)
+        self.assertNotIn("line-accepted-internal", rendered)
+
+    # テストケース: 非canonical UUIDまたはowner範囲外operationの状態を確認する
+    # 期待値: adapterへ曖昧なIDを渡さず、存在を開示しない固定400/404へ縮約する
+    def test_linked_status_rejects_noncanonical_and_hides_unknown_operation(self):
+        service = Mock()
+        service.check_linked_status.return_value = None
+        operation_id = uuid4()
+        with patch("delivery.views.DeliveryService", return_value=service):
+            noncanonical = self.client.post(
+                f"/api/deliveries/{str(operation_id).upper()}/status/",
+                {},
+                format="json",
+            )
+            missing = self.client.post(
+                f"/api/deliveries/{operation_id}/status/",
+                {},
+                format="json",
+            )
+
+        self.assertEqual(noncanonical.status_code, 400)
+        self.assertEqual(noncanonical.data["error"]["code"], "validation_error")
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(missing.data["error"]["code"], "operation_not_found")
+        service.check_linked_status.assert_called_once_with(
+            self.owner_session.owner_slot,
+            operation_id,
+        )
+
+    # テストケース: status POSTへ余剰fieldを含むbodyを送る
+    # 期待値: owner scope照会前に固定validation errorへ縮約し入力値を反射しない
+    def test_linked_status_rejects_nonempty_body_before_lookup(self):
+        operation_id = uuid4()
+        service = Mock()
+        with patch("delivery.views.DeliveryService", return_value=service):
+            response = self.client.post(
+                f"/api/deliveries/{operation_id}/status/",
+                {"capability": "receipt-secret-canary"},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertNotIn("receipt-secret-canary", str(response.data))
+        service.check_linked_status.assert_not_called()

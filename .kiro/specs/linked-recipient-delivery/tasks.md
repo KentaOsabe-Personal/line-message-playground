@@ -178,7 +178,7 @@
   - 完了時、有効requestは送信前summaryを返し、不正／不可targetはattemptやLINE callを作らない
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 4.1, 4.2, 4.3, 4.4, 8.1_
   - _Depends: 2.4, 3.1, 3.2, 3.3_
-- [ ] 7.3 send／status APIをowner scopeとsafe error envelopeへ統合する
+- [x] 7.3 send／status APIをowner scopeとsafe error envelopeへ統合する
   - sendはconfirmation検証後だけserviceへ渡し、statusはowner principal scopeで取得する
   - snapshot、delivery state、LINE受付ID／時刻、receipt stateを返し、PII／secret／capabilityを返さない
   - 完了時、送信と状態確認は保存済み結果へ収束し、別owner／unknown operationは存在を開示しない

@@ -85,6 +85,10 @@ class LinkedSendDeliveryRequestSerializer(LinkedPreviewRequestSerializer):
     )
 
 
+class EmptyRequestSerializer(StrictRequestSerializer):
+    pass
+
+
 class DeliveryChannelChoiceResponseSerializer(serializers.Serializer):
     channelId = serializers.UUIDField(
         source="channel_public_id",

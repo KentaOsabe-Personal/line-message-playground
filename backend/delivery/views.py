@@ -27,7 +27,9 @@ from .serializers import (
     CanonicalUUIDField,
     DeliveryChannelChoiceResponseSerializer,
     DeliveryRecipientChoiceResponseSerializer,
+    EmptyRequestSerializer,
     LinkedPreviewRequestSerializer,
+    LinkedSendDeliveryRequestSerializer,
     SendDeliveryRequestSerializer,
 )
 from .services import (
@@ -37,17 +39,26 @@ from .services import (
     SubmitDeliveryCommand,
 )
 from .types import (
+    AcceptedLinkedAttempt,
+    AttemptConflict,
     ConfirmationSnapshot,
+    ExistingAttempt,
+    FixedTargetSnapshot,
+    LinkedPushExecuted,
+    LinkedPushPrevented,
+    LinkedPushStored,
+    LinkedTargetSnapshot,
     OwnerIdentitySnapshot,
     OwnerPrincipal as DeliveryOwnerPrincipal,
+    SubmitLinkedDelivery,
     TargetUnavailable,
 )
-
 
 SAFE_SUMMARIES = {
     "validation_error": "入力内容を確認してください。",
     "confirmation_required": "送信内容をもう一度確認してください。",
     "confirmation_stale": "内容が変更されています。もう一度確認してください。",
+    "confirmation_expired": "確認期限が切れています。もう一度確認してください。",
     "operation_id_reused": "この送信操作IDは別の内容に使用済みです。",
     "delivery_in_progress": "同じ内容の送信を処理中です。",
     "operation_not_found": "送信操作を確認できませんでした。",
@@ -116,6 +127,51 @@ def safe_delivery_summary(failure_type):
         "unexpected": "配信結果を確定できませんでした。",
     }
     return summaries.get(failure_type, summaries["unexpected"])
+
+
+def linked_submission_response(snapshot, http_status):
+    target = snapshot.target
+    if not isinstance(target, LinkedTargetSnapshot):
+        return error_response("unexpected", status.HTTP_503_SERVICE_UNAVAILABLE)
+    data = {
+        "operationId": str(snapshot.operation_id),
+        "snapshot": {
+            "channelId": str(target.channel_public_id),
+            "channelLabel": target.channel_label,
+            "recipientId": str(target.recipient_public_id),
+            "channelActive": target.channel_active,
+            "recipientEnabled": target.recipient_enabled,
+            "friendshipState": target.friendship_state,
+        },
+        "status": snapshot.status,
+        "acceptedAt": snapshot.accepted_at.isoformat(),
+        "completedAt": (
+            snapshot.completed_at.isoformat()
+            if snapshot.completed_at is not None
+            else None
+        ),
+        "lineRequestId": snapshot.line_request_id,
+        "receipt": {
+            "requested": snapshot.receipt_status != "not_requested",
+            "status": snapshot.receipt_status,
+            "expiresAt": (
+                snapshot.receipt_expires_at.isoformat()
+                if snapshot.receipt_expires_at is not None
+                else None
+            ),
+            "confirmedAt": (
+                snapshot.receipt_confirmed_at.isoformat()
+                if snapshot.receipt_confirmed_at is not None
+                else None
+            ),
+        },
+    }
+    if snapshot.status in ("failed", "unknown"):
+        data["error"] = {
+            "code": snapshot.failure,
+            "summary": safe_delivery_summary(snapshot.failure),
+        }
+    return Response(data, status=http_status)
 
 
 class LocalDeliveryAPIView(OwnerProtectedAPIView):
@@ -272,6 +328,11 @@ class PreviewAPIView(LocalDeliveryAPIView):
 
 class DeliveryAPIView(LocalDeliveryAPIView):
     def post(self, request):
+        if any(
+            key in request.data
+            for key in ("channelId", "recipientId", "receiptRequested")
+        ):
+            return self._post_linked(request)
         serializer = SendDeliveryRequestSerializer(data=request.data)
         if not serializer.is_valid():
             return serializer_error_response(serializer)
@@ -306,16 +367,173 @@ class DeliveryAPIView(LocalDeliveryAPIView):
         )
         return submission_response(submission, http_status)
 
+    def _post_linked(self, request):
+        serializer = LinkedSendDeliveryRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return serializer_error_response(serializer)
+        values = serializer.validated_data
+        try:
+            message = format_message_snapshot(
+                values["subject"],
+                values["body"],
+            )
+        except MessageValidationError as error:
+            return message_error_response(error)
+
+        principal = request.user
+        context = request.auth
+        assert isinstance(principal, OwnerPrincipal)
+        assert isinstance(context, OwnerSessionContext)
+        try:
+            from lineaccounts.delivery_repositories import DeliveryTargetDirectory
+
+            target = DeliveryTargetDirectory().resolve(
+                principal.identity_public_id,
+                values["channelId"],
+                values["recipientId"],
+            )
+        except DatabaseError:
+            return error_response(
+                "storage_unavailable",
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        if isinstance(target, TargetUnavailable):
+            return error_response(
+                "target_not_available",
+                status.HTTP_404_NOT_FOUND,
+            )
+        if not target.delivery_available:
+            return error_response(
+                "target_not_deliverable",
+                status.HTTP_409_CONFLICT,
+            )
+
+        verification = ConfirmationService().verify_request(
+            values["confirmationToken"],
+            owner=DeliveryOwnerPrincipal(context.session.owner_slot),
+            owner_identity=OwnerIdentitySnapshot(principal.identity_public_id),
+            channel_public_id=target.snapshot.channel_public_id,
+            recipient_public_id=target.snapshot.recipient_public_id,
+            target_revision=target.revision,
+            message_fingerprint=message.fingerprint,
+            receipt_requested=values["receiptRequested"],
+        )
+        from .confirmation import ConfirmationRejected, ConfirmationVerified
+
+        if isinstance(verification, ConfirmationRejected):
+            code = (
+                "confirmation_expired"
+                if verification.reason == "expired"
+                else "confirmation_stale"
+                if verification.reason == "mismatch"
+                else "confirmation_required"
+            )
+            http_status = (
+                status.HTTP_409_CONFLICT
+                if verification.reason in ("expired", "mismatch")
+                else status.HTTP_400_BAD_REQUEST
+            )
+            return error_response(code, http_status)
+        if not isinstance(verification, ConfirmationVerified):
+            return error_response("unexpected", status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        service = DeliveryService()
+        try:
+            accepted = service.accept_confirmed(
+                SubmitLinkedDelivery(
+                    operation_id=values["operationId"],
+                    confirmation=verification.snapshot,
+                    message=message,
+                )
+            )
+            if isinstance(accepted, TargetUnavailable):
+                code = (
+                    "target_not_available"
+                    if accepted.reason == "target_not_available"
+                    else "target_not_deliverable"
+                )
+                return error_response(
+                    code,
+                    status.HTTP_404_NOT_FOUND
+                    if code == "target_not_available"
+                    else status.HTTP_409_CONFLICT,
+                )
+            if isinstance(accepted, AttemptConflict):
+                return error_response(
+                    "operation_id_reused",
+                    status.HTTP_409_CONFLICT,
+                )
+            if isinstance(accepted, ExistingAttempt):
+                snapshot = accepted.snapshot
+                http_status = (
+                    status.HTTP_202_ACCEPTED
+                    if snapshot.status == "processing"
+                    else status.HTTP_200_OK
+                )
+                return linked_submission_response(snapshot, http_status)
+            if not isinstance(accepted, AcceptedLinkedAttempt):
+                return error_response(
+                    "unexpected",
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+
+            pushed = service.push_accepted(accepted)
+            if isinstance(pushed, LinkedPushExecuted):
+                stored = service.finalize_linked_push(pushed)
+                snapshot = stored.snapshot
+            elif isinstance(pushed, (LinkedPushPrevented, LinkedPushStored)):
+                snapshot = pushed.snapshot
+            else:
+                return error_response(
+                    "unexpected",
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            return linked_submission_response(snapshot, status.HTTP_201_CREATED)
+        except DatabaseError:
+            return error_response(
+                "storage_unavailable",
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
 
 class DeliveryStatusAPIView(LocalDeliveryAPIView):
     def post(self, request, operation_id):
+        serializer = EmptyRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return serializer_error_response(serializer)
         try:
             parsed_operation_id = UUID(operation_id)
         except (TypeError, ValueError, AttributeError):
             return error_response("validation_error", status.HTTP_400_BAD_REQUEST)
-        submission = DeliveryService(gateway=LINEGateway()).check_status(
-            parsed_operation_id
-        )
+        if str(parsed_operation_id) != operation_id:
+            return error_response("validation_error", status.HTTP_400_BAD_REQUEST)
+        context = request.auth
+        assert isinstance(context, OwnerSessionContext)
+        service = DeliveryService()
+        try:
+            snapshot = service.check_linked_status(
+                context.session.owner_slot,
+                parsed_operation_id,
+            )
+        except DatabaseError:
+            return error_response(
+                "storage_unavailable",
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        if snapshot is None:
+            return error_response(
+                "operation_not_found",
+                status.HTTP_404_NOT_FOUND,
+            )
+        if not isinstance(snapshot.target, FixedTargetSnapshot):
+            http_status = (
+                status.HTTP_202_ACCEPTED
+                if snapshot.status == "processing"
+                else status.HTTP_200_OK
+            )
+            return linked_submission_response(snapshot, http_status)
+        # legacy fixed recordもowner scope確認後に既存DTOへ変換する。
+        submission = service.check_status(parsed_operation_id)
         if submission is None:
             return error_response("operation_not_found", status.HTTP_404_NOT_FOUND)
         http_status = (

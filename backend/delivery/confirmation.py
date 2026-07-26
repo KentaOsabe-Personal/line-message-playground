@@ -1,12 +1,18 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Literal, TypeAlias
+from uuid import UUID
 
 from django.core import signing
 from django.utils import timezone as django_timezone
 
 from .formatters import FORMATTER_VERSION
-from .types import ConfirmationSnapshot
+from .types import (
+    ConfirmationSnapshot,
+    OwnerIdentitySnapshot,
+    OwnerPrincipal,
+    TargetRevision,
+)
 
 
 CONFIRMATION_SALT = "delivery.confirmation.v1"
@@ -196,6 +202,73 @@ class ConfirmationService:
         if payload != _payload_from_snapshot(expected):
             return ConfirmationRejected("mismatch")
         return ConfirmationVerified(expected)
+
+    def verify_request(
+        self,
+        token: str,
+        *,
+        owner: OwnerPrincipal,
+        owner_identity: OwnerIdentitySnapshot,
+        channel_public_id: UUID,
+        recipient_public_id: UUID,
+        target_revision: TargetRevision,
+        message_fingerprint: str,
+        receipt_requested: bool,
+    ) -> ConfirmationVerification:
+        """send DTOの軸をsigned snapshotへ完全一致させる。
+
+        receipt expiryはclient入力にせず、検証済みtokenからのみ復元する。
+        """
+
+        if not isinstance(token, str):
+            return ConfirmationRejected("invalid")
+        try:
+            payload = self._signer.unsign_object(
+                token,
+                max_age=CONFIRMATION_MAX_AGE,
+            )
+        except signing.SignatureExpired:
+            return ConfirmationRejected("expired")
+        except (signing.BadSignature, TypeError, ValueError):
+            return ConfirmationRejected("invalid")
+        expected_without_expiry = {
+            "v": 1,
+            "owner": owner.slot,
+            "identity": str(owner_identity.public_id),
+            "channel": str(channel_public_id),
+            "recipient": str(recipient_public_id),
+            "target_revision": target_revision.digest,
+            "message_fingerprint": message_fingerprint,
+            "receipt_requested": receipt_requested,
+        }
+        if not isinstance(payload, dict) or {
+            key: payload.get(key) for key in expected_without_expiry
+        } != expected_without_expiry or set(payload) != {
+            *expected_without_expiry,
+            "receipt_expires_at",
+        }:
+            return ConfirmationRejected("mismatch")
+        try:
+            raw_expiry = payload["receipt_expires_at"]
+            expires_at = (
+                datetime.fromisoformat(raw_expiry.replace("Z", "+00:00"))
+                if isinstance(raw_expiry, str)
+                else None
+            )
+            snapshot = ConfirmationSnapshot(
+                owner=owner,
+                owner_identity=owner_identity,
+                channel_public_id=channel_public_id,
+                recipient_public_id=recipient_public_id,
+                target_revision=target_revision,
+                message_fingerprint=message_fingerprint,
+                receipt_requested=receipt_requested,
+                receipt_expires_at=expires_at,
+            )
+            self._validate_receipt_window(snapshot)
+        except (AttributeError, TypeError, ValueError):
+            return ConfirmationRejected("mismatch")
+        return ConfirmationVerified(snapshot)
 
     def decode_for_test(self, token: str) -> object:
         return self._signer.unsign_object(token)
