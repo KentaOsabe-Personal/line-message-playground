@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -8,6 +9,7 @@ from delivery.confirmation import (
     ConfirmationService,
     ConfirmationVerified,
 )
+from delivery.formatters import format_message
 from delivery.types import (
     ConfirmationSnapshot,
     OwnerIdentitySnapshot,
@@ -116,6 +118,134 @@ class ConfirmationServiceTests(SimpleTestCase):
 
         self.assertIsInstance(rejected, ConfirmationRejected)
         self.assertEqual(rejected.reason, "expired")
+
+    # テストケース: preview後に確認snapshotの各入力軸を一つずつ変更する
+    # 期待値: channel・recipient・件名・本文・owner・identity・revision・期限の差を全て拒否する
+    def test_rejects_each_changed_confirmation_axis(self):
+        subject = "確認済み件名"
+        body = "確認済み本文"
+        snapshot = replace(
+            self._snapshot(receipt_requested=True),
+            message_fingerprint=format_message(subject, body).fingerprint,
+        )
+        issued = self.service.issue(snapshot)
+        changed_snapshots = {
+            "別owner": replace(snapshot, owner=OwnerPrincipal(8)),
+            "再連携後identity": replace(
+                snapshot,
+                owner_identity=OwnerIdentitySnapshot(
+                    UUID("44444444-4444-4444-8444-444444444444")
+                ),
+            ),
+            "channel": replace(
+                snapshot,
+                channel_public_id=UUID(
+                    "55555555-5555-4555-8555-555555555555"
+                ),
+            ),
+            "recipient": replace(
+                snapshot,
+                recipient_public_id=UUID(
+                    "66666666-6666-4666-8666-666666666666"
+                ),
+            ),
+            "target revision": replace(
+                snapshot,
+                target_revision=TargetRevision("c" * 64),
+            ),
+            "件名": replace(
+                snapshot,
+                message_fingerprint=format_message(
+                    "変更後件名", body
+                ).fingerprint,
+            ),
+            "本文": replace(
+                snapshot,
+                message_fingerprint=format_message(
+                    subject, "変更後本文"
+                ).fingerprint,
+            ),
+            "receipt expiry": replace(
+                snapshot,
+                receipt_expires_at=NOW
+                + timedelta(hours=24, seconds=1),
+            ),
+        }
+
+        for axis, changed in changed_snapshots.items():
+            with self.subTest(axis=axis):
+                rejected = self.service.verify(issued.token, changed)
+
+                self.assertEqual(
+                    rejected,
+                    ConfirmationRejected("mismatch"),
+                )
+
+    # テストケース: preview後に受取確認オプションだけを切り替える
+    # 期待値: optionとそれに従属する期限の組を完全一致で比較し、再previewを要求する
+    def test_rejects_changed_receipt_option(self):
+        without_receipt = self._snapshot(receipt_requested=False)
+        issued = self.service.issue(without_receipt)
+        with_receipt = replace(
+            without_receipt,
+            receipt_requested=True,
+            receipt_expires_at=self.service.receipt_expires_at(True),
+        )
+
+        rejected = self.service.verify(issued.token, with_receipt)
+
+        self.assertEqual(rejected, ConfirmationRejected("mismatch"))
+
+    # テストケース: unlink/relinkまたは状態往復後に古い確認を再利用する
+    # 期待値: identity UUIDまたは更新済みrevisionの差で古い確認を拒否する
+    def test_rejects_old_confirmation_after_relink_or_state_round_trip(self):
+        snapshot = self._snapshot(receipt_requested=False)
+        issued = self.service.issue(snapshot)
+        current_snapshots = {
+            "unlink/relink": replace(
+                snapshot,
+                owner_identity=OwnerIdentitySnapshot(
+                    UUID("77777777-7777-4777-8777-777777777777")
+                ),
+            ),
+            "状態往復": replace(
+                snapshot,
+                target_revision=TargetRevision("d" * 64),
+            ),
+        }
+
+        for transition, current in current_snapshots.items():
+            with self.subTest(transition=transition):
+                self.assertEqual(
+                    self.service.verify(issued.token, current),
+                    ConfirmationRejected("mismatch"),
+                )
+
+    # テストケース: token改変と10分超過を同じ公開verify契約へ入力する
+    # 期待値: signing例外・署名時刻・tokenを露出せずsafeなtyped理由だけを返す
+    def test_tamper_and_expiry_return_only_safe_rejection_codes(self):
+        snapshot = self._snapshot(receipt_requested=True)
+        issued = self.service.issue(snapshot)
+        separator = issued.token.rfind(":")
+        signature = issued.token[separator + 1 :]
+        tampered_character = "A" if signature[0] != "A" else "B"
+        tampered = (
+            issued.token[: separator + 1]
+            + tampered_character
+            + signature[1:]
+        )
+
+        invalid = self.service.verify(tampered, snapshot)
+        self.clock.current = NOW + timedelta(minutes=10, microseconds=1)
+        expired = self.service.verify(issued.token, snapshot)
+
+        self.assertEqual(invalid, ConfirmationRejected("invalid"))
+        self.assertEqual(expired, ConfirmationRejected("expired"))
+        for rejected in (invalid, expired):
+            serialized = repr(rejected)
+            self.assertNotIn(issued.token, serialized)
+            self.assertNotIn("Signature", serialized)
+            self.assertNotIn(NOW.isoformat(), serialized)
 
     def _snapshot(self, *, receipt_requested: bool) -> ConfirmationSnapshot:
         return ConfirmationSnapshot(

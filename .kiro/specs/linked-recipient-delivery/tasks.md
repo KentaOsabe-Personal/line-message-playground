@@ -59,7 +59,7 @@
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.8, 8.1, 9.5_
   - _Boundary: ConfirmationService_
   - _Depends: 1.1_
-- [ ] 3.2 入力軸やtarget revisionの変更で古い確認を安全に拒否する
+- [x] 3.2 入力軸やtarget revisionの変更で古い確認を安全に拒否する
   - channel、recipient、subject、body、receipt option、owner identity、revisionの一軸変更を完全一致で判定する
   - tamper、期限切れ、別ownerをsafe rejectionへ縮約する
   - 完了時、確認後の変更・unlink／relink・状態往復はいずれもLINE送信前に再previewを要求する
