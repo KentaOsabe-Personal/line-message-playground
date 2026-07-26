@@ -237,6 +237,23 @@ class DeliveryTargetDirectoryChannelTests(TestCase):
         ):
             self.assertNotIn(secret, projection)
 
+    # テストケース: 少数・多数のchannel fixtureからowner scoped選択肢を一覧する
+    # 期待値: fixture件数が増えてもlist_channelsは常に一回のqueryで完結する
+    def test_list_channels_query_budget_is_independent_of_fixture_count(self):
+        self._channel("少数fixture")
+
+        with self.assertNumQueries(1):
+            few_choices = self.directory.list_channels(self.identity.public_id)
+
+        for index in range(20):
+            self._channel(f"多数fixture-{index}")
+
+        with self.assertNumQueries(1):
+            many_choices = self.directory.list_channels(self.identity.public_id)
+
+        self.assertEqual(len(few_choices), 1)
+        self.assertEqual(len(many_choices), 21)
+
     # テストケース: inactiveまたは別identityのowner identity IDから一覧する
     # 期待値: channelの存在やproviderを開示せず空の選択肢へ縮約する
     def test_requires_exact_active_owner_identity(self):
@@ -522,6 +539,37 @@ class DeliveryTargetDirectoryRecipientTests(TestCase):
         ):
             self.assertNotIn(secret, projection)
 
+    # テストケース: 少数・多数のrecipient fixtureから選択channel配下を一覧する
+    # 期待値: fixture件数が増えてもlist_recipientsは常に三回のqueryで完結する
+    def test_list_recipients_query_budget_is_independent_of_fixture_count(self):
+        self._recipient()
+
+        with self.assertNumQueries(3):
+            few_choices = self.directory.list_recipients(
+                self.identity.public_id,
+                self.channel.public_id,
+            )
+
+        for _ in range(20):
+            other_identity = LineIdentity.objects.create(
+                provider_id=self.provider_id,
+                subject=f"U{uuid4().hex}",
+                display_name="Other",
+            )
+            self._recipient(
+                identity=other_identity,
+                channel=self._channel(),
+            )
+
+        with self.assertNumQueries(3):
+            many_choices = self.directory.list_recipients(
+                self.identity.public_id,
+                self.channel.public_id,
+            )
+
+        self.assertEqual(len(few_choices), 1)
+        self.assertEqual(len(many_choices), 1)
+
 
 class DeliveryTargetDirectoryResolveTests(TestCase):
     provider_id = "0012345678"
@@ -591,6 +639,46 @@ class DeliveryTargetDirectoryResolveTests(TestCase):
             friendship_state=DeliveryRecipient.FriendshipState.FRIEND,
             recipient_updated_at=self.recipient.updated_at,
         )
+
+    # テストケース: 少数・多数の無関係target fixtureが存在する状態で完全一致targetを解決する
+    # 期待値: fixture件数が増えてもresolveは常に一回のqueryで完結する
+    def test_resolve_query_budget_is_independent_of_fixture_count(self):
+        with self.assertNumQueries(1):
+            few_result = self.directory.resolve(
+                self.identity.public_id,
+                self.channel.public_id,
+                self.recipient.public_id,
+            )
+
+        for _ in range(20):
+            other_identity = LineIdentity.objects.create(
+                provider_id=self.provider_id,
+                subject=f"U{uuid4().hex}",
+                display_name="Other",
+            )
+            other_channel = LineChannel.objects.create(
+                messaging_api_channel_id=str(uuid4().int)[:20],
+                bot_user_id=f"U{uuid4().hex}",
+                label="Other channel",
+                provider_id=self.provider_id,
+                is_active=True,
+            )
+            DeliveryRecipient.objects.create(
+                identity=other_identity,
+                line_channel=other_channel,
+                enabled=True,
+                friendship_state=DeliveryRecipient.FriendshipState.FRIEND,
+            )
+
+        with self.assertNumQueries(1):
+            many_result = self.directory.resolve(
+                self.identity.public_id,
+                self.channel.public_id,
+                self.recipient.public_id,
+            )
+
+        self.assertEqual(few_result.snapshot, many_result.snapshot)
+        self.assertEqual(few_result.revision, many_result.revision)
 
     # テストケース: channelまたはrecipientの配信可否状態が変化した対象を解決する
     # 期待値: 完全一致関係を維持したlive targetとして返し、現在状態から配信不可と判定する

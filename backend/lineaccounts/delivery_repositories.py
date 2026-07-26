@@ -93,6 +93,7 @@ class DeliveryTargetDirectory:
                 "enabled",
                 "friendship_state",
                 "identity__display_name",
+                "line_channel__public_id",
                 "line_channel__is_active",
             )
             .order_by("public_id")

@@ -22,7 +22,7 @@
   - 完了時、有効入力は同じformatted textへ収束し、不正入力ではconfirmationも外部送信も作られない
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.7_
 
-- [ ] 2. owner scoped target projectionを実装する
+- [x] 2. owner scoped target projectionを実装する
 - [x] 2.1 (P) owner・channel・recipient状態から共通target revisionを生成する
   - preview、accept前、push直前で同じcanonical revision builderを使う
   - 状態が変化して戻った場合もupdated revisionで古い確認を識別する
@@ -45,7 +45,7 @@
   - send用resultだけにredacted subjectを保持し、live availabilityとrevisionを返す
   - 完了時、完全一致する対象だけが解決され、それ以外は存在や所有関係を開示しない
   - _Requirements: 1.4, 1.5, 4.6, 5.1, 5.3, 5.4_
-- [ ] 2.5 target projectionの所有関係・理由分類・query budgetを検証する
+- [x] 2.5 target projectionの所有関係・理由分類・query budgetを検証する
   - inactive／disabled／not_friend／unknown、別owner／provider／channel、一覧外IDを網羅する
   - fixture件数に依存しないquery上限とsecret／subject非露出を固定する
   - 完了時、account adapterのテストが全target状態とN+1不在を再現可能に証明する
