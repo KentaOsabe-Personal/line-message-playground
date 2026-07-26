@@ -9,6 +9,17 @@ from django.utils import timezone
 from .gateway import LINEGateway, LinePushAccepted, LinePushRejected, LinePushUnknown
 from .formatters import FormattedMessage
 from .models import DeliveryAttempt
+from .types import (
+    AcceptedDeliveryCommand,
+    AcceptedLinkedAttempt,
+    AttemptAccepted,
+    AttemptConflict,
+    ExistingAttempt,
+    LinkedPushPreparation,
+    LiveDeliveryTarget,
+    SubmitLinkedDelivery,
+    TargetUnavailable,
+)
 
 
 PROCESSING_TIMEOUT = timedelta(seconds=30)
@@ -76,11 +87,24 @@ DeliverySubmission = (
 
 
 class DeliveryService:
-    def __init__(self, gateway=None, *, clock=timezone.now):
-        self.gateway = gateway or LINEGateway()
+    def __init__(
+        self,
+        gateway=None,
+        *,
+        clock=timezone.now,
+        target_directory=None,
+        attempt_repository=None,
+        receipt_capability_factory=None,
+    ):
+        self.gateway = gateway
         self.clock = clock
+        self._target_directory = target_directory
+        self._attempt_repository = attempt_repository
+        self._receipt_capability_factory = receipt_capability_factory
 
     def submit(self, command):
+        if self.gateway is None:
+            self.gateway = LINEGateway()
         attempt, created = self._accept(command)
         if not created:
             return self._submission(attempt, created=False)
@@ -91,6 +115,77 @@ class DeliveryService:
         self._finalize(attempt.pk, gateway_result)
         attempt.refresh_from_db()
         return self._submission(attempt, created=True)
+
+    def accept_confirmed(self, command):
+        """確認済みlinked commandをlive targetへ再検証してacceptする。
+
+        この段階ではcredential取得もLINE呼出しも行わない。raw receipt
+        capabilityは、新規attemptを作成できた場合だけ次段へ返す。
+        """
+
+        if not isinstance(command, SubmitLinkedDelivery):
+            raise ValueError("invalid linked delivery command")
+
+        directory = self._linked_target_directory()
+        confirmed = command.confirmation
+        target = directory.resolve(
+            confirmed.owner_identity.public_id,
+            confirmed.channel_public_id,
+            confirmed.recipient_public_id,
+        )
+        unavailable = self._validate_confirmed_target(target, confirmed)
+        if unavailable is not None:
+            return unavailable
+
+        candidate = None
+        if confirmed.receipt_requested:
+            candidate = self._receipt_factory().create(
+                confirmed.receipt_expires_at
+            )
+
+        from .repositories import build_request_fingerprint
+
+        accepted_command = AcceptedDeliveryCommand(
+            operation_id=command.operation_id,
+            owner=confirmed.owner,
+            owner_identity=confirmed.owner_identity,
+            target=target.snapshot,
+            message=command.message,
+            request_fingerprint=build_request_fingerprint(
+                owner=confirmed.owner,
+                owner_identity=confirmed.owner_identity,
+                channel_public_id=confirmed.channel_public_id,
+                recipient_public_id=confirmed.recipient_public_id,
+                message_fingerprint=command.message.fingerprint,
+                receipt_requested=confirmed.receipt_requested,
+            ),
+            receipt_commitment=(
+                candidate.commitment if candidate is not None else None
+            ),
+        )
+        accept_result = self._linked_attempt_repository().accept(
+            accepted_command
+        )
+        if isinstance(accept_result, AttemptAccepted):
+            capability = (
+                candidate.capability if candidate is not None else None
+            )
+            return AcceptedLinkedAttempt(
+                attempt_id=accept_result.attempt_id,
+                snapshot=accept_result.snapshot,
+                push_preparation=LinkedPushPreparation(
+                    target=target,
+                    message=command.message,
+                    receipt_capability=capability,
+                ),
+            )
+
+        # 既存operation、active request競合、operation conflictでは、
+        # candidateのraw値をどのresultにも含めず、このscopeで破棄する。
+        candidate = None
+        if isinstance(accept_result, (ExistingAttempt, AttemptConflict)):
+            return accept_result
+        raise ValueError("invalid attempt accept result")
 
     def check_status(self, operation_id):
         attempt = DeliveryAttempt.objects.filter(operation_id=operation_id).first()
@@ -114,6 +209,58 @@ class DeliveryService:
                 )
             attempt.refresh_from_db()
         return self._submission(attempt, created=False)
+
+    def _linked_target_directory(self):
+        if self._target_directory is None:
+            from lineaccounts.delivery_repositories import (
+                DeliveryTargetDirectory,
+            )
+
+            self._target_directory = DeliveryTargetDirectory()
+        return self._target_directory
+
+    def _linked_attempt_repository(self):
+        if self._attempt_repository is None:
+            from .repositories import DjangoAttemptRepository
+
+            self._attempt_repository = DjangoAttemptRepository(
+                clock=self.clock
+            )
+        return self._attempt_repository
+
+    def _receipt_factory(self):
+        if self._receipt_capability_factory is None:
+            from .receipt import ReceiptCapabilityFactory
+
+            self._receipt_capability_factory = ReceiptCapabilityFactory()
+        return self._receipt_capability_factory
+
+    @staticmethod
+    def _validate_confirmed_target(target, confirmed):
+        if isinstance(target, TargetUnavailable):
+            return target
+        if not isinstance(target, LiveDeliveryTarget):
+            return TargetUnavailable()
+        if (
+            target.owner_identity != confirmed.owner_identity
+            or target.snapshot.channel_public_id
+            != confirmed.channel_public_id
+            or target.snapshot.recipient_public_id
+            != confirmed.recipient_public_id
+            or target.revision != confirmed.target_revision
+        ):
+            return TargetUnavailable()
+        if target.delivery_available:
+            return None
+        if not target.snapshot.channel_active:
+            return TargetUnavailable("channel_inactive")
+        if not target.snapshot.recipient_enabled:
+            return TargetUnavailable("recipient_disabled")
+        if target.snapshot.friendship_state == "not_friend":
+            return TargetUnavailable("not_friend")
+        if target.snapshot.friendship_state == "unknown":
+            return TargetUnavailable("friendship_unknown")
+        return TargetUnavailable()
 
     @staticmethod
     def _line_command(command):

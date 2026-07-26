@@ -124,7 +124,7 @@
   - _Requirements: 5.7, 8.1, 8.4, 9.5_
   - _Boundary: ReceiptCapabilityFactory_
   - _Depends: 1.1, 3.1_
-- [ ] 5.4 確認済みcommandをlive targetへ再解決し冪等acceptする
+- [x] 5.4 確認済みcommandをlive targetへ再解決し冪等acceptする
   - accept前にowner／target／revision／deliverabilityを検証し、request fingerprintを生成する
   - 5.3のfactoryから候補を受け、新規acceptだけでgateway用raw値を保持し、既存／競合attemptでは直ちに破棄する
   - 完了時、既存operation／active requestは保存状態だけを返しLINEを呼ばず、候補も外部へ渡さない

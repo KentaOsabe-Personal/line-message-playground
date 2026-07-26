@@ -437,6 +437,36 @@ class ConfirmationSnapshot:
         )
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class SubmitLinkedDelivery(_SerializationDisabled):
+    """確認済みsnapshotと送信内容をaccept境界へ渡すcommand。"""
+
+    operation_id: UUID
+    confirmation: ConfirmationSnapshot
+    message: MessageSnapshot
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.operation_id, UUID):
+            raise ValueError("invalid operation ID")
+        if not isinstance(self.confirmation, ConfirmationSnapshot):
+            raise ValueError("invalid confirmation snapshot")
+        if not isinstance(self.message, MessageSnapshot):
+            raise ValueError("invalid message snapshot")
+        if (
+            self.message.fingerprint
+            != self.confirmation.message_fingerprint
+        ):
+            raise ValueError("message does not match confirmation")
+
+    def __repr__(self) -> str:
+        return (
+            "<SubmitLinkedDelivery "
+            f"operation_id={self.operation_id} "
+            f"receipt_requested={self.confirmation.receipt_requested} "
+            "message=redacted>"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class ReceiptCommitment:
     digest: str
@@ -686,6 +716,71 @@ class AttemptConflict:
 
 AttemptAcceptResult: TypeAlias = (
     AttemptAccepted | ExistingAttempt | AttemptConflict
+)
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class LinkedPushPreparation(_SerializationDisabled):
+    """新規acceptの後だけ次段へ渡せる一時的なpush準備値。"""
+
+    target: LiveDeliveryTarget
+    message: MessageSnapshot
+    receipt_capability: ReceiptCapability | None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.target, LiveDeliveryTarget):
+            raise ValueError("invalid live delivery target")
+        if not isinstance(self.message, MessageSnapshot):
+            raise ValueError("invalid message snapshot")
+        if self.receipt_capability is not None and not isinstance(
+            self.receipt_capability,
+            ReceiptCapability,
+        ):
+            raise ValueError("invalid receipt capability")
+
+    def __repr__(self) -> str:
+        return (
+            "<LinkedPushPreparation "
+            f"channel_public_id={self.target.snapshot.channel_public_id} "
+            f"recipient_public_id={self.target.snapshot.recipient_public_id} "
+            f"receipt_requested={self.receipt_capability is not None} "
+            "subject=redacted message=redacted capability=redacted>"
+        )
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class AcceptedLinkedAttempt(_SerializationDisabled):
+    """永続化に勝った新規attemptと、次段専用のmemory上の準備値。"""
+
+    attempt_id: int
+    snapshot: DeliverySnapshot
+    push_preparation: LinkedPushPreparation
+    status: Literal["accepted"] = "accepted"
+
+    def __post_init__(self) -> None:
+        if type(self.attempt_id) is not int or self.attempt_id <= 0:
+            raise ValueError("invalid attempt ID")
+        if not isinstance(self.snapshot, DeliverySnapshot):
+            raise ValueError("invalid delivery snapshot")
+        if not isinstance(self.push_preparation, LinkedPushPreparation):
+            raise ValueError("invalid push preparation")
+        if self.status != "accepted":
+            raise ValueError("invalid linked attempt status")
+
+    def __repr__(self) -> str:
+        return (
+            "<AcceptedLinkedAttempt "
+            f"attempt_id={self.attempt_id} "
+            f"operation_id={self.snapshot.operation_id} "
+            "push_preparation=redacted>"
+        )
+
+
+LinkedDeliveryAcceptResult: TypeAlias = (
+    AcceptedLinkedAttempt
+    | ExistingAttempt
+    | AttemptConflict
+    | TargetUnavailable
 )
 
 
