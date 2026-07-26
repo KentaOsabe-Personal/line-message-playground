@@ -207,7 +207,7 @@
   - backは入力を保持し、submitting／processingは操作を無効にする
   - 完了時、reducer testから各入力変更・戻る・結果開始が決定的に観測できる
   - _Requirements: 2.4, 2.5, 3.1, 3.2, 3.6, 4.2, 4.4, 4.5, 4.7, 9.3, 9.4_
-- [ ] 8.4 channel／recipient選択と配信不可理由を画面へ表示する
+- [x] 8.4 channel／recipient選択と配信不可理由を画面へ表示する
   - active／inactive、enabled／disabled、friend／not_friend／unknownを選択可否と理由で区別する
   - 任意ID入力と固定env既定値を設けず、deliverable recipientなしではpreview／sendへ進めない
   - 完了時、ownerはsafe labelだけで一件のtargetを選び、channel変更後にrecipient再選択を求められる
