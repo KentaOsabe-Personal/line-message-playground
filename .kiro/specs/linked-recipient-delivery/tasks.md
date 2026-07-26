@@ -64,7 +64,7 @@
   - tamper、期限切れ、別ownerをsafe rejectionへ縮約する
   - 完了時、確認後の変更・unlink／relink・状態往復はいずれもLINE送信前に再previewを要求する
   - _Requirements: 4.5, 4.6, 4.8, 5.1, 9.1_
-- [ ] 3.3 preview／send入力をcanonicalかつ余剰fieldなしで検証する
+- [x] 3.3 preview／send入力をcanonicalかつ余剰fieldなしで検証する
   - UUID、string、strict boolean、required field、unknown fieldをHTTP境界でfail fastする
   - 任意LINE user IDやclient supplied owner scopeを入力契約へ持ち込まない
   - 完了時、不正入力はfield別safe errorとなりconfirmation・attempt・LINE callを作らない
