@@ -197,7 +197,7 @@
   - 完了時、画面stateへ入る境界データは公開DTO契約を満たすものだけになる
   - _Requirements: 2.6, 7.6, 7.9, 8.1, 9.5, 9.6_
   - _Boundary: DeliveryDTO_
-- [ ] 8.2 target取得・preview・send・status通信をprotected relative APIへ追加する
+- [x] 8.2 target取得・preview・send・status通信をprotected relative APIへ追加する
   - relative `/api`、cookie／CSRF、safe error変換を既存adapterから再利用する
   - network ambiguity時はsend再実行でなく既存operation status確認結果を返す
   - 完了時、各通信はrequest／response契約と認証境界を一箇所で満たす
