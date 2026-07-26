@@ -14,6 +14,7 @@ from .types import (
     AttemptAcceptResult,
     AttemptAccepted,
     AttemptConflict,
+    ConfirmReceiptCommand,
     DeliverySnapshot,
     ExistingAttempt,
     FixedTargetSnapshot,
@@ -25,6 +26,10 @@ from .types import (
     MessageSnapshot,
     OwnerIdentitySnapshot,
     OwnerPrincipal,
+    ReceiptRecorded,
+    ReceiptRejected,
+    ReceiptResult,
+    ReceiptUnchanged,
     RequestFingerprint,
 )
 
@@ -51,6 +56,11 @@ class AttemptRepository(Protocol):
         owner_principal_slot: int,
         operation_id: UUID,
     ) -> DeliverySnapshot | None: ...
+
+    def confirm_receipt(
+        self,
+        command: ConfirmReceiptCommand,
+    ) -> ReceiptResult: ...
 
 
 def build_request_fingerprint(
@@ -292,6 +302,61 @@ class DjangoAttemptRepository:
             attempt = DeliveryAttempt.objects.get(pk=attempt.pk)
         return self._snapshot(attempt, now=now)
 
+    def confirm_receipt(
+        self,
+        command: ConfirmReceiptCommand,
+    ) -> ReceiptResult:
+        if not isinstance(command, ConfirmReceiptCommand):
+            raise ValueError("invalid confirm receipt command")
+        if len(command.webhook_event_id) > 26:
+            return ReceiptRejected("invalid")
+
+        attempt = DeliveryAttempt.objects.filter(
+            receipt_token_digest=command.capability_digest,
+        ).first()
+        if attempt is None:
+            return ReceiptRejected("unmatched")
+
+        classified = self._classify_receipt(attempt, command)
+        if classified is not None:
+            return classified
+
+        # digest、target、期限、状態、未確認を一つの条件にして初回だけ記録する。
+        updated = DeliveryAttempt.objects.filter(
+            pk=attempt.pk,
+            receipt_token_digest=command.capability_digest,
+            channel_public_id=command.channel_public_id,
+            recipient_public_id=command.recipient_public_id,
+            receipt_requested=True,
+            receipt_expires_at__gt=command.occurred_at,
+            status__in=(
+                DeliveryAttempt.Status.PROCESSING,
+                DeliveryAttempt.Status.SUCCEEDED,
+                DeliveryAttempt.Status.UNKNOWN,
+            ),
+            receipt_confirmed_at__isnull=True,
+            receipt_webhook_event_id__isnull=True,
+        ).update(
+            receipt_confirmed_at=command.occurred_at,
+            receipt_webhook_event_id=command.webhook_event_id,
+        )
+        current = DeliveryAttempt.objects.filter(pk=attempt.pk).first()
+        if current is None:
+            return ReceiptRejected("unmatched")
+        if updated == 1:
+            return ReceiptRecorded(
+                self._snapshot(
+                    current,
+                    now=_aware_datetime(self._clock()),
+                )
+            )
+
+        # CAS競合の敗者は再読込し、先行eventが保存済みなら同じ状態へ収束する。
+        classified = self._classify_receipt(current, command)
+        if classified is not None:
+            return classified
+        return ReceiptRejected("invalid")
+
     def _classify_operation(
         self,
         attempt: DeliveryAttempt,
@@ -305,6 +370,42 @@ class DjangoAttemptRepository:
                 now=_aware_datetime(self._clock()),
             )
         )
+
+    def _classify_receipt(
+        self,
+        attempt: DeliveryAttempt,
+        command: ConfirmReceiptCommand,
+    ) -> ReceiptResult | None:
+        if (
+            attempt.target_mode
+            != DeliveryAttempt.TargetMode.LINKED_RECIPIENT
+            or attempt.channel_public_id != command.channel_public_id
+            or attempt.recipient_public_id != command.recipient_public_id
+        ):
+            return ReceiptRejected("target_mismatch")
+        if not attempt.receipt_requested:
+            return ReceiptRejected("not_requested")
+        if attempt.receipt_confirmed_at is not None:
+            return ReceiptUnchanged(
+                self._snapshot(
+                    attempt,
+                    now=_aware_datetime(self._clock()),
+                )
+            )
+        if (
+            attempt.receipt_expires_at is None
+            or command.occurred_at >= attempt.receipt_expires_at
+        ):
+            return ReceiptRejected("expired")
+        if attempt.status == DeliveryAttempt.Status.FAILED:
+            return ReceiptRejected("delivery_failed")
+        if attempt.status not in (
+            DeliveryAttempt.Status.PROCESSING,
+            DeliveryAttempt.Status.SUCCEEDED,
+            DeliveryAttempt.Status.UNKNOWN,
+        ):
+            return ReceiptRejected("invalid")
+        return None
 
     @staticmethod
     def _snapshot(

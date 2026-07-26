@@ -87,7 +87,7 @@
   - 30秒を超えたprocessingをstatus lookupから一度だけunknownへ条件付き更新するrepository契約を提供する
   - 完了時、別ownerは存在を知れず、期限切れ／競合finalizeでも最初の終端結果が維持される
   - _Requirements: 6.6, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 9.2_
-- [ ] 4.3 receipt commitmentの原子的保存とreceipt CASを実装する
+- [x] 4.3 receipt commitmentの原子的保存とreceipt CASを実装する
   - 新規attempt作成transactionでdigest／expiryを保存し、既存／競合attemptにはcandidateを保存しない
   - digest、target、expiry、requested、delivery status、confirmed nullを照合して初回だけ記録する
   - 完了時、receipt更新は初回日時／event IDへ収束し、delivery statusとLINE IDを変更しない

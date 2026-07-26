@@ -12,6 +12,7 @@ from delivery.types import (
     AcceptedDeliveryCommand,
     AttemptAccepted,
     AttemptConflict,
+    ConfirmReceiptCommand,
     ExistingAttempt,
     LinkedTargetSnapshot,
     LinePushAccepted,
@@ -21,6 +22,9 @@ from delivery.types import (
     OwnerIdentitySnapshot,
     OwnerPrincipal,
     ReceiptCommitment,
+    ReceiptRecorded,
+    ReceiptRejected,
+    ReceiptUnchanged,
 )
 
 
@@ -554,3 +558,258 @@ class DjangoAttemptRepositoryFinalizeAndLookupTests(TestCase):
         self.assertIsNone(snapshot.owner_identity)
         self.assertEqual(snapshot.status, "failed")
         self.assertEqual(snapshot.failure, "service_unavailable")
+
+
+class DjangoAttemptRepositoryReceiptTests(TestCase):
+    def setUp(self):
+        self.repository = DjangoAttemptRepository(clock=lambda: NOW)
+        self.channel_public_id = UUID(
+            "22222222-2222-4222-8222-222222222222"
+        )
+        self.recipient_public_id = UUID(
+            "33333333-3333-4333-8333-333333333333"
+        )
+        self.digest = "6" * 64
+        self.expiry = NOW + timedelta(hours=24)
+
+    def accept(self, *, receipt=True):
+        owner = OwnerPrincipal(1)
+        identity = OwnerIdentitySnapshot(uuid4())
+        target = LinkedTargetSnapshot(
+            channel_public_id=self.channel_public_id,
+            channel_label="通知チャネル",
+            recipient_public_id=self.recipient_public_id,
+            channel_active=True,
+            recipient_enabled=True,
+            friendship_state="friend",
+        )
+        message = MessageSnapshot(
+            subject="件名",
+            body="本文",
+            formatted_text="【件名】\n\n本文",
+            fingerprint="4" * 64,
+        )
+        command = AcceptedDeliveryCommand(
+            operation_id=uuid4(),
+            owner=owner,
+            owner_identity=identity,
+            target=target,
+            message=message,
+            request_fingerprint=build_request_fingerprint(
+                owner=owner,
+                owner_identity=identity,
+                channel_public_id=target.channel_public_id,
+                recipient_public_id=target.recipient_public_id,
+                message_fingerprint=message.fingerprint,
+                receipt_requested=receipt,
+            ),
+            receipt_commitment=(
+                ReceiptCommitment(
+                    digest=self.digest,
+                    expires_at=self.expiry,
+                )
+                if receipt
+                else None
+            ),
+        )
+        result = self.repository.accept(command)
+        self.assertIsInstance(result, AttemptAccepted)
+        return result
+
+    def command(
+        self,
+        *,
+        digest=None,
+        channel_public_id=None,
+        recipient_public_id=None,
+        occurred_at=None,
+        webhook_event_id="01J00000000000000000000000",
+    ):
+        return ConfirmReceiptCommand(
+            capability_digest=digest or self.digest,
+            channel_public_id=(
+                channel_public_id or self.channel_public_id
+            ),
+            recipient_public_id=(
+                recipient_public_id or self.recipient_public_id
+            ),
+            occurred_at=occurred_at or NOW,
+            webhook_event_id=webhook_event_id,
+        )
+
+    # テストケース: processing配信へ有効な初回受取確認を記録する。
+    # 期待値: 初回日時とevent IDだけを保存し、配信状態とLINE IDを変更しない。
+    def test_confirm_receipt_records_first_event_without_changing_delivery(self):
+        accepted = self.accept()
+        DeliveryAttempt.objects.filter(pk=accepted.attempt_id).update(
+            line_request_id="line-request",
+            line_accepted_request_id="accepted-request",
+        )
+
+        result = self.repository.confirm_receipt(self.command())
+
+        self.assertIsInstance(result, ReceiptRecorded)
+        self.assertEqual(result.snapshot.receipt_status, "confirmed")
+        attempt = DeliveryAttempt.objects.get(pk=accepted.attempt_id)
+        self.assertEqual(attempt.receipt_confirmed_at, NOW)
+        self.assertEqual(
+            attempt.receipt_webhook_event_id,
+            "01J00000000000000000000000",
+        )
+        self.assertEqual(attempt.status, "processing")
+        self.assertEqual(attempt.line_request_id, "line-request")
+        self.assertEqual(
+            attempt.line_accepted_request_id,
+            "accepted-request",
+        )
+
+    # テストケース: succeededとunknownの配信へ有効な受取確認を記録する。
+    # 期待値: processing以外の許可状態でも配信結果を維持してconfirmedになる。
+    def test_confirm_receipt_accepts_succeeded_and_unknown_delivery(self):
+        for index, result in enumerate(
+            (
+                LinePushAccepted(
+                    "line-request",
+                    "accepted-request",
+                ),
+                LinePushUnknown("timeout_unknown"),
+            ),
+            start=6,
+        ):
+            with self.subTest(result=result.status):
+                self.digest = format(index, "x") * 64
+                accepted = self.accept()
+                self.repository.finalize(
+                    accepted.attempt_id,
+                    result,
+                    NOW + timedelta(seconds=1),
+                )
+
+                receipt = self.repository.confirm_receipt(
+                    self.command(digest=self.digest)
+                )
+
+                self.assertIsInstance(receipt, ReceiptRecorded)
+                attempt = DeliveryAttempt.objects.get(
+                    pk=accepted.attempt_id
+                )
+                self.assertEqual(attempt.status, receipt.snapshot.status)
+                if result.status == "accepted":
+                    self.assertEqual(
+                        attempt.line_request_id,
+                        "line-request",
+                    )
+                    self.assertEqual(
+                        attempt.line_accepted_request_id,
+                        "accepted-request",
+                    )
+    # テストケース: 同じ配信へ同一または別event IDで再確認する。
+    # 期待値: unchangedへ収束し、初回日時と初回event IDを上書きしない。
+    def test_confirm_receipt_repeated_events_keep_first_confirmation(self):
+        self.accept()
+        first_at = NOW + timedelta(minutes=1)
+        first = self.repository.confirm_receipt(
+            self.command(occurred_at=first_at)
+        )
+
+        same = self.repository.confirm_receipt(
+            self.command(
+                occurred_at=first_at + timedelta(minutes=1),
+            )
+        )
+        different = self.repository.confirm_receipt(
+            self.command(
+                occurred_at=self.expiry,
+                webhook_event_id="01J11111111111111111111111",
+            )
+        )
+
+        self.assertIsInstance(first, ReceiptRecorded)
+        self.assertIsInstance(same, ReceiptUnchanged)
+        self.assertIsInstance(different, ReceiptUnchanged)
+        attempt = DeliveryAttempt.objects.get()
+        self.assertEqual(attempt.receipt_confirmed_at, first_at)
+        self.assertEqual(
+            attempt.receipt_webhook_event_id,
+            "01J00000000000000000000000",
+        )
+
+    # テストケース: digest、対象、期限、要求有無、failed状態の不正入力を処理する。
+    # 期待値: 安全な拒否分類を返し、どのattemptも変更しない。
+    def test_confirm_receipt_rejects_ineligible_commands_without_mutation(self):
+        cases = (
+            (
+                "unmatched",
+                lambda: self.command(digest="a" * 64),
+                None,
+            ),
+            (
+                "target_mismatch",
+                lambda: self.command(channel_public_id=uuid4()),
+                None,
+            ),
+            (
+                "target_mismatch",
+                lambda: self.command(recipient_public_id=uuid4()),
+                None,
+            ),
+            (
+                "expired",
+                lambda: self.command(occurred_at=self.expiry),
+                None,
+            ),
+            (
+                "delivery_failed",
+                self.command,
+                LinePushRejected("permission"),
+            ),
+        )
+        for index, (reason, command_factory, terminal) in enumerate(cases):
+            with self.subTest(reason=reason, index=index):
+                self.digest = format(index + 6, "x") * 64
+                accepted = self.accept()
+                if terminal is not None:
+                    self.repository.finalize(
+                        accepted.attempt_id,
+                        terminal,
+                        NOW + timedelta(seconds=1),
+                    )
+                before = DeliveryAttempt.objects.values().get(
+                    pk=accepted.attempt_id
+                )
+
+                result = self.repository.confirm_receipt(
+                    command_factory()
+                )
+
+                self.assertIsInstance(result, ReceiptRejected)
+                self.assertEqual(result.reason, reason)
+                after = DeliveryAttempt.objects.values().get(
+                    pk=accepted.attempt_id
+                )
+                self.assertEqual(after, before)
+
+    # テストケース: DB列へ保存できない長さのevent IDで確認する。
+    # 期待値: DB例外を公開せずinvalidとして拒否し、attemptを変更しない。
+    def test_confirm_receipt_rejects_oversized_event_id_safely(self):
+        self.accept()
+
+        result = self.repository.confirm_receipt(
+            self.command(webhook_event_id="x" * 27)
+        )
+
+        self.assertEqual(result, ReceiptRejected("invalid"))
+        attempt = DeliveryAttempt.objects.get()
+        self.assertIsNone(attempt.receipt_confirmed_at)
+
+    # テストケース: receipt未要求の配信に任意のcapability digestを提示する。
+    # 期待値: 対応するcommitmentがないためunmatchedとなり、配信を変更しない。
+    def test_confirm_receipt_rejects_delivery_without_commitment(self):
+        accepted = self.accept(receipt=False)
+
+        result = self.repository.confirm_receipt(self.command())
+
+        self.assertEqual(result, ReceiptRejected("unmatched"))
+        attempt = DeliveryAttempt.objects.get(pk=accepted.attempt_id)
+        self.assertFalse(attempt.receipt_requested)
+        self.assertIsNone(attempt.receipt_confirmed_at)
