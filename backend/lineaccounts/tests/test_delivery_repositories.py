@@ -1,10 +1,15 @@
 import hashlib
 from datetime import UTC, datetime, timedelta, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
-from lineaccounts.delivery_repositories import build_target_revision
+from lineaccounts.delivery_repositories import (
+    DeliveryTargetDirectory,
+    build_target_revision,
+)
+from lineaccounts.models import LineIdentity, OwnerAccount
+from linechannels.models import LineChannel, LineChannelCredential
 
 
 class TargetRevisionBuilderTests(SimpleTestCase):
@@ -129,3 +134,140 @@ class TargetRevisionBuilderTests(SimpleTestCase):
             with self.subTest(change=change):
                 with self.assertRaises(ValueError):
                     self._build(**change)
+
+
+class DeliveryTargetDirectoryChannelTests(TestCase):
+    provider_id = "0012345678"
+
+    def setUp(self):
+        self.identity = LineIdentity.objects.create(
+            provider_id=self.provider_id,
+            subject=f"U{uuid4().hex}",
+            display_name="Owner",
+        )
+        OwnerAccount.objects.get_or_create(slot=1)
+        OwnerAccount.objects.filter(slot=1).update(
+            state=OwnerAccount.State.ACTIVE,
+            identity=self.identity,
+        )
+        self.directory = DeliveryTargetDirectory()
+
+    def _channel(
+        self,
+        label,
+        *,
+        provider_id=None,
+        active=True,
+        with_credentials=False,
+    ):
+        channel = LineChannel.objects.create(
+            messaging_api_channel_id=str(uuid4().int)[:20],
+            bot_user_id=f"U{uuid4().hex}",
+            label=label,
+            provider_id=provider_id or self.provider_id,
+            is_active=active,
+        )
+        if with_credentials:
+            LineChannelCredential.objects.create(
+                line_channel=channel,
+                access_token_ciphertext=b"encrypted-token-canary",
+                channel_secret_ciphertext=b"encrypted-secret-canary",
+            )
+        return channel
+
+    # テストケース: active ownerと同providerに登録された有効・無効channelを一覧する
+    # 期待値: 他providerを除外し、有効性と安全な理由をopaque UUID順で投影する
+    def test_lists_same_provider_channels_with_safe_availability(self):
+        active = self._channel("配信チャネル")
+        inactive = self._channel("停止チャネル", active=False)
+        self._channel("別provider", provider_id="0099999999")
+
+        choices = self.directory.list_channels(self.identity.public_id)
+
+        self.assertEqual(
+            choices,
+            tuple(
+                sorted(
+                    (
+                        self._expected_choice(active, available=True, reason=None),
+                        self._expected_choice(
+                            inactive,
+                            available=False,
+                            reason="channel_inactive",
+                        ),
+                    ),
+                    key=lambda choice: str(choice.channel_public_id),
+                )
+            ),
+        )
+
+    # テストケース: credentialを持つchannelと秘密のowner identityから選択肢を作る
+    # 期待値: summaryにはlabel・opaque ID・active・availability・理由以外を含めない
+    def test_projection_excludes_credentials_subject_and_fixed_targets(self):
+        channel = self._channel(
+            "秘密非露出",
+            with_credentials=True,
+        )
+
+        choice = self.directory.list_channels(self.identity.public_id)[0]
+
+        self.assertEqual(
+            set(choice.__dataclass_fields__),
+            {
+                "channel_public_id",
+                "label",
+                "active",
+                "available",
+                "unavailable_reason",
+            },
+        )
+        projection = repr(choice)
+        for secret in (
+            self.identity.subject,
+            "encrypted-token-canary",
+            "encrypted-secret-canary",
+            channel.messaging_api_channel_id,
+            channel.bot_user_id,
+        ):
+            self.assertNotIn(secret, projection)
+
+    # テストケース: inactiveまたは別identityのowner identity IDから一覧する
+    # 期待値: channelの存在やproviderを開示せず空の選択肢へ縮約する
+    def test_requires_exact_active_owner_identity(self):
+        self._channel("存在を隠す")
+        other_identity = LineIdentity.objects.create(
+            provider_id=self.provider_id,
+            subject=f"U{uuid4().hex}",
+            display_name="Other",
+        )
+
+        for owner_identity_id in (
+            other_identity.public_id,
+            uuid4(),
+        ):
+            with self.subTest(owner_identity_id=owner_identity_id):
+                self.assertEqual(
+                    self.directory.list_channels(owner_identity_id),
+                    (),
+                )
+
+        owner = OwnerAccount.objects.get(slot=1)
+        owner.state = OwnerAccount.State.DEAUTHORIZATION_PENDING
+        owner.unlink_generation = uuid4()
+        owner.save(update_fields=("state", "unlink_generation", "updated_at"))
+        self.assertEqual(
+            self.directory.list_channels(self.identity.public_id),
+            (),
+        )
+
+    @staticmethod
+    def _expected_choice(channel, *, available, reason):
+        from delivery.types import DeliveryChannelChoice
+
+        return DeliveryChannelChoice(
+            channel_public_id=channel.public_id,
+            label=channel.label,
+            active=channel.is_active,
+            available=available,
+            unavailable_reason=reason,
+        )

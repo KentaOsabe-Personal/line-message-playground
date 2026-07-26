@@ -2,10 +2,43 @@ import hashlib
 from datetime import UTC, datetime
 from uuid import UUID
 
-from delivery.types import TargetRevision
+from django.db import models
+
+from delivery.types import DeliveryChannelChoice, TargetRevision
+from lineaccounts.models import LineIdentity, OwnerAccount
+from linechannels.models import LineChannel
 
 
 _FRIENDSHIP_STATES = frozenset(("friend", "not_friend", "unknown"))
+
+
+class DeliveryTargetDirectory:
+    def list_channels(
+        self,
+        owner_identity_id: UUID,
+    ) -> tuple[DeliveryChannelChoice, ...]:
+        owner_provider = LineIdentity.objects.filter(
+            public_id=owner_identity_id,
+            owner_account__state=OwnerAccount.State.ACTIVE,
+            owner_account__identity_id=models.F("pk"),
+        ).values("provider_id")[:1]
+        channels = (
+            LineChannel.objects.filter(provider_id=models.Subquery(owner_provider))
+            .only("public_id", "label", "is_active")
+            .order_by("public_id")
+        )
+        return tuple(
+            DeliveryChannelChoice(
+                channel_public_id=channel.public_id,
+                label=channel.label,
+                active=channel.is_active,
+                available=channel.is_active,
+                unavailable_reason=(
+                    None if channel.is_active else "channel_inactive"
+                ),
+            )
+            for channel in channels
+        )
 
 
 def build_target_revision(

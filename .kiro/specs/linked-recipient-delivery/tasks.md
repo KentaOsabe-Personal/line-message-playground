@@ -30,7 +30,7 @@
   - _Requirements: 4.3, 4.6, 5.1_
   - _Boundary: DeliveryTargetDirectory_
   - _Depends: 1.1_
-- [ ] 2.2 ownerに属するchannel選択肢を安全なsummaryで返す
+- [x] 2.2 ownerに属するchannel選択肢を安全なsummaryで返す
   - provider／ownerを絞り、label、opaque ID、active、availabilityと理由だけを投影する
   - fixed env targetやcredential／subjectをprojectionへ含めない
   - 完了時、ownerは有効・無効channelを理由付きで区別でき、秘密値は選択肢に現れない
