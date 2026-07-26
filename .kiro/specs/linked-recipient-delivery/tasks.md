@@ -154,7 +154,7 @@
   - 完了時、有効actionだけがreceiptをconfirmedにし、配信statusとLINE IDを維持する
   - _Requirements: 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11_
   - _Depends: 4.3, 5.3_
-- [ ] 6.2 receipt handlerを静的postback registryへ明示登録する
+- [x] 6.2 receipt handlerを静的postback registryへ明示登録する
   - 既存verified command／event dedup／linked recipient保証を再利用する
   - production action名を一件追加し、replyを開始しない
   - 完了時、検証済みdelivery.receivedだけがhandlerへ届き、unknown actionと他event contractは変わらない

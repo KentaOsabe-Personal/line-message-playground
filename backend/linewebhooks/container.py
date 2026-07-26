@@ -3,6 +3,8 @@ from time import monotonic
 
 from django.utils import timezone
 
+from delivery.receipt import ReceiptHandler
+from delivery.repositories import DjangoAttemptRepository
 from linechannels.container import build_webhook_credential_repository
 from linefriendships.container import build_friendship_sync_handler
 from lineinteractions.container import build_interaction_handler
@@ -27,8 +29,18 @@ def build_webhook_ingress_service(
     monotonic_clock: Callable[[], float] = monotonic,
 ) -> WebhookIngressService:
     friendship_handler = build_friendship_sync_handler()
+    production_action_registrations = (
+        (
+            "delivery.received",
+            ReceiptHandler(
+                attempt_repository=DjangoAttemptRepository(),
+                clock=timezone.now,
+            ),
+        ),
+        *action_registrations,
+    )
     interaction_handler = build_interaction_handler(
-        action_registrations=action_registrations,
+        action_registrations=production_action_registrations,
         monotonic_clock=monotonic_clock,
     )
     return WebhookIngressService(
