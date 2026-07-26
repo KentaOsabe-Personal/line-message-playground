@@ -51,7 +51,7 @@
   - 完了時、account adapterのテストが全target状態とN+1不在を再現可能に証明する
   - _Requirements: 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.6, 2.7, 2.8_
 
-- [ ] 3. 対象と内容に結び付く期限付き確認を実装する
+- [x] 3. 対象と内容に結び付く期限付き確認を実装する
 - [x] 3.1 (P) owner principal・identity・target・message・receipt optionを一つの確認snapshotへ結ぶ
   - PII-free payloadへversion、target revision、message fingerprint、receipt requested／expiryを含める
   - 10分max ageと24時間receipt expiryを注入可能なclockで扱う
@@ -69,7 +69,7 @@
   - 任意LINE user IDやclient supplied owner scopeを入力契約へ持ち込まない
   - 完了時、不正入力はfield別safe errorとなりconfirmation・attempt・LINE callを作らない
   - _Requirements: 2.7, 3.1, 3.2, 3.6, 3.7, 4.4, 9.1, 9.5_
-- [ ] 3.4 confirmationの全軸変更・改変・期限・秘密非露出を単体検証する
+- [x] 3.4 confirmationの全軸変更・改変・期限・秘密非露出を単体検証する
   - clock境界、message fingerprint、target revision、receipt expiryを固定する
   - token payload、例外、公開resultに本文・display name・subject・capabilityが出ないことを確認する
   - 完了時、confirmation test suiteが有効系と全拒否系を観測可能に再現する

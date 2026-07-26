@@ -1,7 +1,10 @@
-from dataclasses import replace
+import json
+from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 from uuid import UUID
 
+from django.core import signing
 from django.test import SimpleTestCase
 
 from delivery.confirmation import (
@@ -102,8 +105,8 @@ class ConfirmationServiceTests(SimpleTestCase):
             ConfirmationVerified,
         )
 
-    # テストケース: 発行後に注入clockを10分境界の外へ進める
-    # 期待値: 10分ちょうどは有効、1秒超過はtyped expired rejectionになる
+    # テストケース: 発行後に注入clockを10分境界の両側へ進める
+    # 期待値: 10分ちょうどは有効、1マイクロ秒超過でtyped expired rejectionになる
     def test_confirmation_max_age_uses_injected_clock(self):
         snapshot = self._snapshot(receipt_requested=True)
         issued = self.service.issue(snapshot)
@@ -113,11 +116,45 @@ class ConfirmationServiceTests(SimpleTestCase):
             self.service.verify(issued.token, snapshot),
             ConfirmationVerified,
         )
-        self.clock.current = NOW + timedelta(minutes=10, seconds=1)
+        self.clock.current = NOW + timedelta(
+            minutes=10,
+            microseconds=1,
+        )
         rejected = self.service.verify(issued.token, snapshot)
 
         self.assertIsInstance(rejected, ConfirmationRejected)
         self.assertEqual(rejected.reason, "expired")
+
+    # テストケース: preview時点のreceipt期限を許容範囲の境界値で発行する
+    # 期待値: 24時間ちょうどだけを許可し、現在時刻以下と1マイクロ秒超過を拒否する
+    def test_issue_enforces_receipt_expiry_contract_at_microsecond_boundary(
+        self,
+    ):
+        valid = replace(
+            self._snapshot(receipt_requested=True),
+            receipt_expires_at=NOW + timedelta(hours=24),
+        )
+
+        issued = self.service.issue(valid)
+
+        self.assertEqual(
+            issued.receipt_expires_at,
+            NOW + timedelta(hours=24),
+        )
+        invalid_expiries = (
+            NOW,
+            NOW - timedelta(microseconds=1),
+            NOW + timedelta(hours=24, microseconds=1),
+        )
+        for expiry in invalid_expiries:
+            with self.subTest(expiry=expiry):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "^invalid receipt expiry$",
+                ):
+                    self.service.issue(
+                        replace(valid, receipt_expires_at=expiry)
+                    )
 
     # テストケース: preview後に確認snapshotの各入力軸を一つずつ変更する
     # 期待値: channel・recipient・件名・本文・owner・identity・revision・期限の差を全て拒否する
@@ -246,6 +283,162 @@ class ConfirmationServiceTests(SimpleTestCase):
             self.assertNotIn(issued.token, serialized)
             self.assertNotIn("Signature", serialized)
             self.assertNotIn(NOW.isoformat(), serialized)
+
+    # テストケース: signing層が秘密canary入りの署名例外を返す
+    # 期待値: cause chainやlogへ転送せず、公開resultをinvalidだけへ縮約する
+    def test_signing_error_details_are_not_exposed_or_logged(self):
+        snapshot = self._snapshot(receipt_requested=True)
+        secret_error = signing.BadSignature(
+            "本文canary 表示名canary U0123456789abcdef "
+            "receipt-capability-canary"
+        )
+
+        with patch.object(
+            self.service._signer,
+            "unsign_object",
+            side_effect=secret_error,
+        ):
+            with self.assertNoLogs("delivery.confirmation", level="DEBUG"):
+                rejected = self.service.verify(
+                    "confirmation-token-canary",
+                    snapshot,
+                )
+
+        self.assertEqual(rejected, ConfirmationRejected("invalid"))
+        self.assertFalse(hasattr(rejected, "__cause__"))
+        serialized = repr(rejected)
+        for canary in (
+            "本文canary",
+            "表示名canary",
+            "U0123456789abcdef",
+            "receipt-capability-canary",
+            "confirmation-token-canary",
+        ):
+            self.assertNotIn(canary, serialized)
+
+    # テストケース: 実際のverify経路でverifiedと全拒否理由を生成する
+    # 期待値: nested fieldまで公開契約と完全一致し、入力canaryや余剰fieldを含めない
+    def test_public_results_serialize_without_sensitive_values(self):
+        message = format_message("件名canary", "本文canary")
+        snapshot = replace(
+            self._snapshot(receipt_requested=True),
+            message_fingerprint=message.fingerprint,
+        )
+        issued = self.service.issue(snapshot)
+        verified = self.service.verify(issued.token, snapshot)
+        invalid = self.service.verify(
+            f"{issued.token}tampered",
+            snapshot,
+        )
+        mismatch = self.service.verify(
+            issued.token,
+            replace(
+                snapshot,
+                target_revision=TargetRevision("e" * 64),
+            ),
+        )
+        self.clock.current = NOW + timedelta(
+            minutes=10,
+            microseconds=1,
+        )
+        expired = self.service.verify(issued.token, snapshot)
+
+        self.assertEqual(
+            asdict(verified),
+            {
+                "snapshot": {
+                    "owner": {"slot": 7},
+                    "owner_identity": {
+                        "public_id": UUID(
+                            "11111111-1111-4111-8111-111111111111"
+                        ),
+                    },
+                    "channel_public_id": UUID(
+                        "22222222-2222-4222-8222-222222222222"
+                    ),
+                    "recipient_public_id": UUID(
+                        "33333333-3333-4333-8333-333333333333"
+                    ),
+                    "target_revision": {"digest": "a" * 64},
+                    "message_fingerprint": message.fingerprint,
+                    "receipt_requested": True,
+                    "receipt_expires_at": NOW + timedelta(hours=24),
+                },
+                "status": "verified",
+            },
+        )
+        actual_rejections = {
+            "invalid": invalid,
+            "expired": expired,
+            "mismatch": mismatch,
+        }
+        for reason, rejected in actual_rejections.items():
+            with self.subTest(reason=reason):
+                self.assertEqual(
+                    asdict(rejected),
+                    {
+                        "reason": reason,
+                        "status": "rejected",
+                    },
+                )
+
+        for result in (verified, *actual_rejections.values()):
+            with self.subTest(result=result):
+                serialized = json.dumps(
+                    asdict(result),
+                    default=str,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                for canary in (
+                    "本文canary",
+                    "件名canary",
+                    "表示名canary",
+                    "U0123456789abcdef",
+                    "receipt-capability-canary",
+                ):
+                    self.assertNotIn(canary, serialized)
+
+    # テストケース: PII・subject・capabilityを余剰fieldとして持つ署名済みpayloadを検証する
+    # 期待値: actual verify経路はpayload内容を公開せずexactなmismatch resultだけを返す
+    def test_verify_does_not_echo_sensitive_extra_payload_fields(self):
+        snapshot = self._snapshot(receipt_requested=True)
+        sensitive_values = (
+            "件名canary",
+            "本文canary",
+            "表示名canary",
+            "U0123456789abcdef",
+            "receipt-capability-canary",
+        )
+        sensitive_payload = self.service.decode_for_test(
+            self.service.issue(snapshot).token
+        )
+        sensitive_payload.update(
+            {
+                "subject": sensitive_values[0],
+                "body": sensitive_values[1],
+                "recipient_display_name": sensitive_values[2],
+                "line_subject": sensitive_values[3],
+                "receipt_capability": sensitive_values[4],
+            }
+        )
+        token = self.service._signer.sign_object(
+            sensitive_payload,
+            compress=True,
+        )
+
+        rejected = self.service.verify(token, snapshot)
+
+        self.assertEqual(
+            asdict(rejected),
+            {
+                "reason": "mismatch",
+                "status": "rejected",
+            },
+        )
+        serialized = repr(rejected)
+        for canary in sensitive_values:
+            self.assertNotIn(canary, serialized)
 
     def _snapshot(self, *, receipt_requested: bool) -> ConfirmationSnapshot:
         return ConfirmationSnapshot(
