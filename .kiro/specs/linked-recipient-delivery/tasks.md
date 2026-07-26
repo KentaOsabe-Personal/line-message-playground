@@ -1,22 +1,22 @@
 # 実装計画
 
-- [ ] 1. 配信ドメインと互換migrationの基盤を整える
+- [x] 1. 配信ドメインと互換migrationの基盤を整える
 - [x] 1.1 配信対象・確認・結果・受取確認を表す不変なドメイン値を定義する
   - linked／fixedを区別し、owner principal、送信時identity、target snapshot、結果、receiptを型付きで扱う
   - secret／PIIの生値が表示・直列化されない境界型を維持する
   - 完了時、後続service／repository／gatewayがModelや外部SDK型へ直接依存せず同じ契約を利用できる
   - _Requirements: 4.3, 5.2, 6.1, 7.1, 8.10, 9.5, 9.6, 9.7_
-- [ ] 1.2 linked recipient配信と受取確認を保持するschemaを追加する
+- [x] 1.2 linked recipient配信と受取確認を保持するschemaを追加する
   - legacy列を保持し、owner／target snapshot、request identity、receipt commitment、status制約、indexを追加する
   - processingだけがactive fingerprintを持ち、receipt列の組合せがDB制約で保証される
   - 完了時、新規linked rowと既存fixed rowの両方が同じtableで有効な状態として保存できる
   - _Requirements: 6.1, 6.4, 6.6, 7.1, 7.2, 7.8, 7.10, 8.3, 8.9, 8.10_
-- [ ] 1.3 既存fixed配信を破壊せずowner scopeと新制約へ移行する
+- [x] 1.3 既存fixed配信を破壊せずowner scopeと新制約へ移行する
   - fingerprint値、operation ID、terminal結果、LINE ID、時刻を同値で保持する
   - singleton owner slotをbackfillし、identity解決不能rowも削除しない
   - 完了時、forward migration後も全legacy recordをowner scoped statusで参照でき、linked runtimeがfixed fallbackを作らない
   - _Requirements: 7.6, 7.8, 7.10, 9.7_
-- [ ] 1.4 件名・本文の既存整形とLINE上限検証を新しい配信経路で再利用する
+- [x] 1.4 件名・本文の既存整形とLINE上限検証を新しい配信経路で再利用する
   - blankをfield別に拒否し、件名・空行・本文と本文改行を維持する
   - 5000 UTF-16 code unit境界を判定し、receipt template文言をtext長へ混入しない
   - 完了時、有効入力は同じformatted textへ収束し、不正入力ではconfirmationも外部送信も作られない

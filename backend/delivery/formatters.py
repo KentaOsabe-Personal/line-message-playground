@@ -2,6 +2,8 @@ import hashlib
 import json
 from dataclasses import dataclass
 
+from delivery.types import MessageSnapshot
+
 
 FORMATTER_VERSION = 1
 MAX_UTF16_CODE_UNITS = 5_000
@@ -52,4 +54,16 @@ def format_message(subject, body):
         formatted_text=formatted_text,
         fingerprint=fingerprint,
         formatter_version=FORMATTER_VERSION,
+    )
+
+
+def format_message_snapshot(subject: str, body: str) -> MessageSnapshot:
+    """既存のcanonical formatterで新しい配信経路のsnapshotを生成する。"""
+
+    message = format_message(subject, body)
+    return MessageSnapshot(
+        subject=message.subject,
+        body=message.body,
+        formatted_text=message.formatted_text,
+        fingerprint=message.fingerprint,
     )
