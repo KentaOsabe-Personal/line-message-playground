@@ -1,15 +1,32 @@
 import socket
 from dataclasses import dataclass
+from typing import Protocol
 
 from django.conf import settings
 from linebot.v3.messaging import (
     ApiClient,
+    ButtonsTemplate,
     Configuration,
     MessagingApi,
+    PostbackAction,
     PushMessageRequest,
+    TemplateMessage,
     TextMessage,
 )
 from linebot.v3.messaging.exceptions import ApiException
+
+from .types import (
+    LinePushAccepted as LinkedLinePushAccepted,
+    LinePushRejected as LinkedLinePushRejected,
+    LinePushUnknown as LinkedLinePushUnknown,
+    PushLinkedRecipientCommand,
+)
+
+
+_RECEIPT_ALT_TEXT = "受取確認"
+_RECEIPT_TEMPLATE_TEXT = "受け取り後にボタンを押してください。"
+_RECEIPT_ACTION_LABEL = "受け取りました"
+_RECEIPT_ACTION_PREFIX = "v1:delivery.received:"
 
 
 @dataclass(frozen=True)
@@ -32,6 +49,17 @@ class LinePushRejected:
 @dataclass(frozen=True)
 class LinePushUnknown:
     failure_type: str
+
+
+class ChannelPushGateway(Protocol):
+    def push(
+        self,
+        command: PushLinkedRecipientCommand,
+    ) -> (
+        LinkedLinePushAccepted
+        | LinkedLinePushRejected
+        | LinkedLinePushUnknown
+    ): ...
 
 
 def _header(headers, name):
@@ -107,3 +135,57 @@ class LINEGateway:
         if is_timeout_error(error):
             return LinePushUnknown("timeout_unknown")
         return LinePushRejected("unexpected")
+
+
+class LINEChannelPushGateway:
+    """選択済みchannelとrecipientだけへ一回のpushを行うgateway。"""
+
+    def __init__(self, api_client_factory=None):
+        self.api_client_factory = api_client_factory or self._build_api
+
+    @staticmethod
+    def _build_api(access_token):
+        configuration = Configuration(access_token=access_token)
+        configuration.retries = 0
+        return MessagingApi(ApiClient(configuration))
+
+    def push(self, command: PushLinkedRecipientCommand):
+        access_token = command.access_token.reveal_for_use()
+        subject = command.subject.reveal_for_identity_binding()
+        messages = [TextMessage(text=command.text)]
+        if command.receipt_capability is not None:
+            capability = (
+                command.receipt_capability.reveal_for_push_action()
+            )
+            messages.append(
+                TemplateMessage(
+                    altText=_RECEIPT_ALT_TEXT,
+                    template=ButtonsTemplate(
+                        text=_RECEIPT_TEMPLATE_TEXT,
+                        actions=[
+                            PostbackAction(
+                                label=_RECEIPT_ACTION_LABEL,
+                                data=f"{_RECEIPT_ACTION_PREFIX}{capability}",
+                            )
+                        ],
+                    ),
+                )
+            )
+
+        api = self.api_client_factory(access_token)
+        request = PushMessageRequest(to=subject, messages=messages)
+        try:
+            response = api.push_message_with_http_info(
+                push_message_request=request,
+                x_line_retry_key=str(command.operation_id),
+                _request_timeout=(3, 10),
+            )
+            headers = getattr(response, "headers", None)
+            if headers is None and isinstance(response, tuple) and len(response) >= 3:
+                headers = response[2]
+            return LinkedLinePushAccepted(
+                _header(headers, "X-Line-Request-Id"),
+                None,
+            )
+        except Exception:
+            return LinkedLinePushUnknown("response_unknown")

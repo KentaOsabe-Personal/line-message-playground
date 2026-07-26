@@ -104,7 +104,7 @@
   - _Requirements: 6.4, 6.6, 8.9, 8.10_
 
 - [ ] 5. 選択channelから一件だけ送るgatewayとserviceを実装する
-- [ ] 5.1 (P) 選択token・subject・operationから単一push requestを構築する
+- [x] 5.1 (P) 選択token・subject・operationから単一push requestを構築する
   - text一件、receipt要求時だけButtons template一件を同じrequestへ追加する
   - operation UUIDをretry keyとし、client retryを0にする
   - 完了時、receiptなし／ありで1 recipient・1 HTTP call・期待message数が観測できる
