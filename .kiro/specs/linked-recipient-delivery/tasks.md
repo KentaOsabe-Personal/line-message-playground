@@ -147,7 +147,7 @@
   - 完了時、fake gatewayのcall countが全経路で0または1になり、秘密canaryが観測面に残らない
   - _Requirements: 3.7, 5.2, 5.5, 5.6, 5.7, 5.8, 6.2, 6.4, 6.5, 6.6, 9.5, 9.6_
 
-- [ ] 6. 明示的受取確認を検証済みpostbackへ統合する
+- [x] 6. 明示的受取確認を検証済みpostbackへ統合する
 - [x] 6.1 検証済みdelivery.received actionを一件のattemptへ収束させる
   - opaque payloadをhash化しchannel／recipient／expiry／requested／statusを照合する
   - processing／succeeded／unknownは記録、failed／unmatched／expired／deletedは変更なしで分類する
@@ -159,7 +159,7 @@
   - production action名を一件追加し、replyを開始しない
   - 完了時、検証済みdelivery.receivedだけがhandlerへ届き、unknown actionと他event contractは変わらない
   - _Requirements: 8.2, 8.4, 8.8, 8.11_
-- [ ] 6.3 receiptの期限・target・status・再操作・replyなしを統合検証する
+- [x] 6.3 receiptの期限・target・status・再操作・replyなしを統合検証する
   - disabled／not_friend関係は許可し、unlink／delete、failed、token／channel／recipient不一致を拒否する
   - 同event dedupと別event並行CAS、PII-free outcome／auditを検証する
   - 完了時、receipt test suiteが初回確認への収束と外部reply 0件を証明する
