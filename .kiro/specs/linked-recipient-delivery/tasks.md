@@ -225,7 +225,7 @@
   - 完了時、Frontend test suiteとproduction buildが新しい配信journeyを通過する
   - _Requirements: 2.3, 2.4, 2.5, 3.2, 3.7, 4.5, 4.7, 7.9, 8.1, 9.2, 9.3, 9.4, 9.5_
 
-- [ ] 9. migration・境界横断・安全性を最終検証する
+- [x] 9. migration・境界横断・安全性を最終検証する
 - [x] 9.1 0001からのmigrationとfixed配信回帰を実DB契約で検証する
   - record count、operation／message／fingerprint／terminal／LINE ID／timestampsの同値を比較する
   - mode／receipt／status constraint、owner slot backfill、linked row存在時rollback停止を確認する
@@ -244,7 +244,7 @@
   - 外部LINEを負荷testせず、transaction外callとtimeout分類をfakeで確認する
   - 完了時、performance／safety suiteがN+1不在、CAS収束、call count上限を数値で検証する
   - _Requirements: 6.4, 6.5, 6.6, 7.2, 7.5, 8.9, 9.2_
-- [ ] 9.4 DB・API・UI・log・例外の秘密／PII非露出と全回帰を検証する
+- [x] 9.4 DB・API・UI・log・例外の秘密／PII非露出と全回帰を検証する
   - live target API／UIでは現在のrecipient display nameを表示し、永続監査snapshot、通常log、例外、delivery status APIにはdisplay name canaryを残さない
   - LINE subject／token／secret／receipt capabilityはDB、API、UI、log、例外の全観測面へ出さない
   - Backend全test、Frontend全test、production buildを実行し、既存fixed記録と隣接Webhook／account機能の回帰を確認する

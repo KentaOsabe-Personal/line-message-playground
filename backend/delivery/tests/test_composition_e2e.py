@@ -6,7 +6,8 @@ from datetime import timedelta
 from unittest.mock import patch
 from uuid import uuid4
 
-from django.db import transaction
+from django.db import DatabaseError, transaction
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
@@ -408,3 +409,118 @@ class LinkedDeliveryCompositionE2ETests(APITestCase):
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, public_and_audit_surfaces)
+
+    # テストケース: status取得の下位DB例外が表示名・LINE subject・secret canaryを含む
+    # 期待値: owner向け応答と通常logをsafe分類へ縮約し、生例外の秘密／PIIを観測面へ出さない
+    def test_status_storage_exception_is_safely_collapsed_without_logging_canaries(
+        self,
+    ) -> None:
+        operation_id = uuid4()
+        poisoned_exception = DatabaseError(
+            ":".join(
+                (
+                    _DISPLAY_NAME_PII_CANARY,
+                    _LINE_SUBJECT_CANARY,
+                    _ACCESS_TOKEN_CANARY,
+                    _CHANNEL_SECRET_CANARY,
+                    "receipt-capability-exception-canary",
+                )
+            )
+        )
+
+        with (
+            patch(
+                "delivery.views.DeliveryService.check_linked_status",
+                side_effect=poisoned_exception,
+            ),
+            patch("logging.Logger._log") as log_call,
+        ):
+            response = self.client.post(
+                f"/api/deliveries/{operation_id}/status/",
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.data,
+            {
+                "error": {
+                    "code": "storage_unavailable",
+                    "summary": "処理を完了できませんでした。",
+                }
+            },
+        )
+        observed = repr((response.data, response.content, log_call.call_args_list))
+        for forbidden in (
+            _DISPLAY_NAME_PII_CANARY,
+            _LINE_SUBJECT_CANARY,
+            _ACCESS_TOKEN_CANARY,
+            _CHANNEL_SECRET_CANARY,
+            "receipt-capability-exception-canary",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, observed)
+
+    # テストケース: 選択channelのcredentialが消失した状態でfixed環境値を設定し、同じlinked送信を再要求する
+    # 期待値: fixed fallbackも自動再送も行わず、単一attemptのconfiguration失敗へ安全に収束する
+    @override_settings(
+        LINE_CHANNEL_ACCESS_TOKEN="fixed-fallback-token-canary",
+        LINE_USER_ID="fixed-fallback-subject-canary",
+    )
+    def test_missing_selected_credential_never_uses_fixed_fallback_or_resends(
+        self,
+    ) -> None:
+        operation_id = uuid4()
+        preview = self.client.post(
+            "/api/deliveries/preview/",
+            {
+                "channelId": str(self.channel.public_id),
+                "recipientId": str(self.recipient.public_id),
+                "subject": "fallback禁止",
+                "body": "本文",
+                "receiptRequested": False,
+            },
+            format="json",
+        )
+        self.assertEqual(preview.status_code, 200)
+        LineChannelCredential.objects.filter(line_channel=self.channel).delete()
+        payload = {
+            "channelId": str(self.channel.public_id),
+            "recipientId": str(self.recipient.public_id),
+            "subject": "fallback禁止",
+            "body": "本文",
+            "receiptRequested": False,
+            "operationId": str(operation_id),
+            "confirmationToken": preview.data["confirmationToken"],
+        }
+
+        with (
+            patch(
+                "delivery.gateway.LINEChannelPushGateway._build_api",
+                side_effect=AssertionError("linked gateway must not start"),
+            ) as linked_api_factory,
+            patch(
+                "delivery.gateway.LINEGateway.push_text",
+                side_effect=AssertionError("fixed gateway must not run"),
+            ) as fixed_push,
+        ):
+            first = self.client.post("/api/deliveries/", payload, format="json")
+            repeated = self.client.post("/api/deliveries/", payload, format="json")
+
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(repeated.status_code, 200)
+        self.assertEqual(repeated.data, first.data)
+        self.assertEqual(first.data["status"], "failed")
+        self.assertEqual(first.data["error"]["code"], "configuration")
+        self.assertEqual(DeliveryAttempt.objects.count(), 1)
+        linked_api_factory.assert_not_called()
+        fixed_push.assert_not_called()
+        observed = repr(
+            (
+                first.data,
+                repeated.data,
+                list(DeliveryAttempt.objects.values()),
+            )
+        )
+        self.assertNotIn("fixed-fallback-token-canary", observed)
+        self.assertNotIn("fixed-fallback-subject-canary", observed)

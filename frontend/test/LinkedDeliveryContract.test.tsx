@@ -23,6 +23,7 @@ const receiptExpiry = '2026-07-29T10:00:00+09:00'
 const receiptConfirmedAt = '2026-07-28T10:05:00+09:00'
 const secretCanary = 'secret-token-canary'
 const piiCanary = 'U-sensitive-line-subject'
+const liveDisplayNameCanary = 'live-recipient-display-name-canary'
 
 const channels: DeliveryChannelChoice[] = [
   {
@@ -285,6 +286,47 @@ describe('linked delivery frontend contract', () => {
     expect(container.querySelector('[name="accessToken"]')).toBeNull()
     expect((container.querySelector('button[type="submit"]') as HTMLButtonElement).disabled)
       .toBe(true)
+  })
+
+  // テストケース: live targetとpreviewに現在の表示名を返し、送信後はdisplay nameを持たないstatusへ遷移する。
+  // 期待値: 選択・確認中だけ表示名canaryを表示し、永続監査相当の結果UIとconfirmation値には残さない。
+  test('shows the live display name only before the delivery status result', async () => {
+    const client: LinkedDeliveryApiClient = {
+      listChannels: vi.fn().mockResolvedValue([channels[0]]),
+      listRecipients: vi.fn().mockResolvedValue([{
+        ...recipients[0],
+        displayName: liveDisplayNameCanary,
+      }]),
+      preview: vi.fn().mockResolvedValue({
+        ...preview,
+        recipientDisplayName: liveDisplayNameCanary,
+      }),
+      send: vi.fn().mockResolvedValue(statusFor('succeeded', 'pending')),
+      checkStatus: vi.fn(),
+    }
+
+    await act(async () => root.render(
+      <DeliveryForm
+        linkedClient={client}
+        createOperationId={() => operationId}
+      />,
+    ))
+    await clickInput('channelId', channelId)
+    expect(container.textContent).toContain(liveDisplayNameCanary)
+    await clickInput('recipientId', recipientId)
+    await enterText('subject', '障害通知')
+    await enterText('body', '復旧しました。')
+    await clickInput('receiptRequested')
+    await clickButton('送信内容を確認')
+    expect(container.textContent).toContain(liveDisplayNameCanary)
+    expect(container.textContent).not.toContain(preview.confirmationToken)
+
+    await clickButton('確認した内容を送信')
+
+    expect(container.textContent).toContain('LINEに受け付けられました')
+    expect(container.textContent).not.toContain(liveDisplayNameCanary)
+    expect(container.textContent).not.toContain(preview.confirmationToken)
+    expect(client.send).toHaveBeenCalledTimes(1)
   })
 
   // テストケース: delivery四状態とreceipt四状態の全組合せを配信画面へ適用する。
