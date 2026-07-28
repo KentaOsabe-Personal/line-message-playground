@@ -486,6 +486,7 @@ class DjangoAttemptRepository:
             receipt_expires_at=attempt.receipt_expires_at,
             receipt_confirmed_at=attempt.receipt_confirmed_at,
             receipt_webhook_event_id=attempt.receipt_webhook_event_id,
+            processing_expires_at=attempt.processing_expires_at,
         )
 
 

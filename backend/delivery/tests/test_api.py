@@ -262,7 +262,7 @@ class DeliveryApiTests(APITestCase):
                 "lineaccounts.delivery_repositories.DeliveryTargetDirectory.resolve",
                 side_effect=DatabaseError("database-secret-canary"),
             ),
-            patch("delivery.views.ConfirmationService.issue") as issue,
+            patch("delivery.views.build_confirmation_service") as issue,
         ):
             response = self.client.post(
                 "/api/deliveries/preview/",
@@ -411,7 +411,7 @@ class DeliveryApiTests(APITestCase):
                 "lineaccounts.delivery_repositories.DeliveryTargetDirectory.resolve",
                 side_effect=AssertionError("target adapter must not run"),
             ),
-            patch("delivery.views.DeliveryService") as service_factory,
+            patch("delivery.views.build_delivery_service") as service_factory,
         ):
             responses = (
                 self.client.post(
@@ -606,7 +606,7 @@ class DeliveryApiTests(APITestCase):
         service.finalize_linked_push.return_value = LinkedPushStored(terminal)
 
         with patch(
-            "delivery.views.DeliveryService",
+            "delivery.views.build_delivery_service",
             return_value=service,
         ):
             response = self.client.post(
@@ -648,7 +648,7 @@ class DeliveryApiTests(APITestCase):
         service = Mock()
         service.accept_confirmed.return_value = ExistingAttempt(terminal)
 
-        with patch("delivery.views.DeliveryService", return_value=service):
+        with patch("delivery.views.build_delivery_service", return_value=service):
             response = self.client.post(
                 "/api/deliveries/",
                 payload,
@@ -666,7 +666,7 @@ class DeliveryApiTests(APITestCase):
         operation_id = uuid4()
         payload = self._linked_send_payload(operation_id)
         service = Mock()
-        with patch("delivery.views.DeliveryService", return_value=service):
+        with patch("delivery.views.build_delivery_service", return_value=service):
             payload["body"] = "変更後本文"
             message_changed = self.client.post(
                 "/api/deliveries/",
@@ -706,7 +706,7 @@ class DeliveryApiTests(APITestCase):
         service = Mock()
         service.check_linked_status.return_value = terminal
 
-        with patch("delivery.views.DeliveryService", return_value=service):
+        with patch("delivery.views.build_status_service", return_value=service):
             response = self.client.post(
                 f"/api/deliveries/{operation_id}/status/",
                 {},
@@ -732,7 +732,7 @@ class DeliveryApiTests(APITestCase):
         service = Mock()
         service.check_linked_status.return_value = None
         operation_id = uuid4()
-        with patch("delivery.views.DeliveryService", return_value=service):
+        with patch("delivery.views.build_status_service", return_value=service):
             noncanonical = self.client.post(
                 f"/api/deliveries/{str(operation_id).upper()}/status/",
                 {},
@@ -759,7 +759,7 @@ class DeliveryApiTests(APITestCase):
         operation_id = uuid4()
         service = Mock()
         with patch(
-            "delivery.views.DeliveryService",
+            "delivery.views.build_status_service",
             return_value=service,
         ) as service_factory:
             response = self.client.post(
@@ -796,7 +796,7 @@ class DeliveryApiTests(APITestCase):
                 "lineaccounts.delivery_repositories.DeliveryTargetDirectory.resolve",
                 side_effect=AssertionError("target adapter must not run"),
             ),
-            patch("delivery.views.DeliveryService") as service_factory,
+            patch("delivery.views.build_delivery_service") as service_factory,
         ):
             responses = (
                 self.client.post(
@@ -852,9 +852,9 @@ class DeliveryApiTests(APITestCase):
         )
         service = Mock()
         with (
-            patch("delivery.views.ConfirmationService.issue") as issue,
+            patch("delivery.views.build_confirmation_service") as issue,
             patch(
-                "delivery.views.DeliveryService",
+                "delivery.views.build_delivery_service",
                 return_value=service,
             ) as service_factory,
         ):
@@ -923,7 +923,7 @@ class DeliveryApiTests(APITestCase):
         service = Mock()
 
         with patch(
-            "delivery.views.DeliveryService",
+            "delivery.views.build_delivery_service",
             return_value=service,
         ) as service_factory:
             hidden = self.client.post(
@@ -954,7 +954,7 @@ class DeliveryApiTests(APITestCase):
         service = Mock()
         service.accept_confirmed.return_value = AttemptConflict()
 
-        with patch("delivery.views.DeliveryService", return_value=service):
+        with patch("delivery.views.build_delivery_service", return_value=service):
             response = self.client.post(
                 "/api/deliveries/",
                 payload,
@@ -1007,7 +1007,7 @@ class DeliveryApiTests(APITestCase):
                 service = Mock()
                 service.accept_confirmed.return_value = ExistingAttempt(snapshot)
 
-                with patch("delivery.views.DeliveryService", return_value=service):
+                with patch("delivery.views.build_delivery_service", return_value=service):
                     response = self.client.post(
                         "/api/deliveries/",
                         payload,
@@ -1047,14 +1047,16 @@ class DeliveryApiTests(APITestCase):
                 service = Mock()
                 with (
                     patch(
-                        "delivery.views.ConfirmationService.verify_request",
-                        return_value=ConfirmationRejected(reason),
-                    ),
+                        "delivery.views.build_confirmation_service",
+                    ) as confirmation_factory,
                     patch(
-                        "delivery.views.DeliveryService",
+                        "delivery.views.build_delivery_service",
                         return_value=service,
                     ) as service_factory,
                 ):
+                    confirmation_factory.return_value.verify_request.return_value = (
+                        ConfirmationRejected(reason)
+                    )
                     response = self.client.post(
                         "/api/deliveries/",
                         payload,
@@ -1095,7 +1097,10 @@ class DeliveryApiTests(APITestCase):
                 else:
                     service.accept_confirmed.return_value = accepted_result
 
-                with patch("delivery.views.DeliveryService", return_value=service):
+                with patch(
+                    "delivery.views.build_delivery_service",
+                    return_value=service,
+                ):
                     response = self.client.post(
                         "/api/deliveries/",
                         payload,
@@ -1161,7 +1166,7 @@ class DeliveryApiTests(APITestCase):
                     service.check_linked_status.return_value = snapshot
 
                     with patch(
-                        "delivery.views.DeliveryService",
+                        "delivery.views.build_status_service",
                         return_value=service,
                     ):
                         response = self.client.post(

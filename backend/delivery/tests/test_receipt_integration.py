@@ -138,8 +138,13 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
                 return_value=gateway,
             ),
             patch(
-                "linewebhooks.container.ReceiptHandler",
-                side_effect=build_spy,
+                "linewebhooks.container.build_receipt_handler",
+                side_effect=lambda **kwargs: build_spy(
+                    attempt_repository=DjangoAttemptRepository(
+                        clock=kwargs["clock"]
+                    ),
+                    clock=kwargs["clock"],
+                ),
             ),
             patch(
                 "linewebhooks.container.timezone.now",

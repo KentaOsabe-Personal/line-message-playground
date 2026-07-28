@@ -641,6 +641,7 @@ class DeliverySnapshot(_SerializationDisabled):
     receipt_expires_at: datetime | None
     receipt_confirmed_at: datetime | None
     receipt_webhook_event_id: str | None
+    processing_expires_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.operation_id, UUID):
@@ -662,6 +663,11 @@ class DeliverySnapshot(_SerializationDisabled):
         if self.status not in _DELIVERY_STATUSES:
             raise ValueError("invalid delivery status")
         _validate_aware_datetime(self.accepted_at, "accepted at")
+        if self.processing_expires_at is not None:
+            _validate_aware_datetime(
+                self.processing_expires_at,
+                "processing expires at",
+            )
         if self.status == "processing":
             if self.completed_at is not None or self.failure is not None:
                 raise ValueError("processing delivery cannot be completed")

@@ -430,11 +430,13 @@ class LinkedDeliveryCompositionE2ETests(APITestCase):
 
         with (
             patch(
-                "delivery.views.DeliveryService.check_linked_status",
-                side_effect=poisoned_exception,
-            ),
+                "delivery.views.build_status_service"
+            ) as service_factory,
             patch("logging.Logger._log") as log_call,
         ):
+            service_factory.return_value.check_linked_status.side_effect = (
+                poisoned_exception
+            )
             response = self.client.post(
                 f"/api/deliveries/{operation_id}/status/",
                 format="json",

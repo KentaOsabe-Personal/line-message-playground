@@ -1,12 +1,16 @@
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Callable, Protocol
 from uuid import UUID
 
-from django.db import transaction
 from django.utils import timezone
 
-from .models import DeliveryAttempt
+from linechannels.types import (
+    AccessToken,
+    CredentialAvailable,
+    CredentialUnavailable,
+)
+
+from .repositories import AttemptRepository, build_request_fingerprint
 from .types import (
     AcceptedDeliveryCommand,
     AcceptedLinkedAttempt,
@@ -18,70 +22,57 @@ from .types import (
     LinkedPushPrevented,
     LinkedPushStored,
     LinkedPushPreparation,
+    LinePushAccepted,
+    LinePushRejected,
+    LinePushUnknown,
     LiveDeliveryTarget,
     PushLinkedRecipientCommand,
+    ReceiptCapabilityCandidate,
     SubmitLinkedDelivery,
     TargetUnavailable,
 )
 
 
-@dataclass(frozen=True)
-class ProcessingSubmission:
-    operation_id: UUID
-    status: Literal["processing"]
-    accepted_at: datetime
-    processing_expires_at: datetime
-    created: bool
+class TargetDirectory(Protocol):
+    def resolve(
+        self,
+        owner_identity_id: UUID,
+        channel_id: UUID,
+        recipient_id: UUID,
+    ) -> LiveDeliveryTarget | TargetUnavailable: ...
 
 
-@dataclass(frozen=True)
-class SucceededSubmission:
-    operation_id: UUID
-    status: Literal["succeeded"]
-    accepted_at: datetime
-    completed_at: datetime
-    line_request_id: str | None
-    line_accepted_request_id: str | None
-    created: bool
+class ReceiptCapabilityFactoryPort(Protocol):
+    def create(
+        self,
+        confirmed_expires_at: datetime,
+    ) -> ReceiptCapabilityCandidate: ...
 
 
-@dataclass(frozen=True)
-class FailedSubmission:
-    operation_id: UUID
-    status: Literal["failed"]
-    accepted_at: datetime
-    completed_at: datetime
-    failure_type: str
-    line_request_id: str | None
-    created: bool
+class CredentialRepositoryPort(Protocol):
+    def get_access_token(
+        self,
+        channel_public_id: UUID,
+    ) -> CredentialAvailable[AccessToken] | CredentialUnavailable: ...
 
 
-@dataclass(frozen=True)
-class UnknownSubmission:
-    operation_id: UUID
-    status: Literal["unknown"]
-    accepted_at: datetime
-    completed_at: datetime
-    failure_type: str
-    line_request_id: str | None
-    created: bool
-
-
-DeliverySubmission = (
-    ProcessingSubmission | SucceededSubmission | FailedSubmission | UnknownSubmission
-)
+class ChannelPushGatewayPort(Protocol):
+    def push(
+        self,
+        command: PushLinkedRecipientCommand,
+    ) -> LinePushAccepted | LinePushRejected | LinePushUnknown: ...
 
 
 class DeliveryService:
     def __init__(
         self,
         *,
-        clock=timezone.now,
-        target_directory=None,
-        attempt_repository=None,
-        receipt_capability_factory=None,
-        credential_repository=None,
-        channel_push_gateway=None,
+        clock: Callable[[], datetime] = timezone.now,
+        target_directory: TargetDirectory | None = None,
+        attempt_repository: AttemptRepository | None = None,
+        receipt_capability_factory: ReceiptCapabilityFactoryPort | None = None,
+        credential_repository: CredentialRepositoryPort | None = None,
+        channel_push_gateway: ChannelPushGatewayPort | None = None,
     ):
         self.clock = clock
         self._target_directory = target_directory
@@ -116,8 +107,6 @@ class DeliveryService:
             candidate = self._receipt_factory().create(
                 confirmed.receipt_expires_at
             )
-
-        from .repositories import build_request_fingerprint
 
         accepted_command = AcceptedDeliveryCommand(
             operation_id=command.operation_id,
@@ -175,12 +164,6 @@ class DeliveryService:
             selected_channel_id
         )
 
-        from linechannels.types import (
-            AccessToken,
-            CredentialAvailable,
-            CredentialUnavailable,
-        )
-
         if isinstance(credential, CredentialUnavailable):
             return self._prevent_linked_push(
                 accepted.attempt_id,
@@ -236,8 +219,8 @@ class DeliveryService:
 
     def check_linked_status(
         self,
-        owner_principal_slot,
-        operation_id,
+        owner_principal_slot: int,
+        operation_id: UUID,
     ):
         """owner scopeで保存済み状態を取得し、期限判定をrepositoryへ委譲する。"""
 
@@ -246,66 +229,39 @@ class DeliveryService:
             operation_id,
         )
 
-    def check_status(self, operation_id):
-        attempt = DeliveryAttempt.objects.filter(operation_id=operation_id).first()
-        if attempt is None:
-            return None
-        now = self.clock()
-        if (
-            attempt.status == DeliveryAttempt.Status.PROCESSING
-            and attempt.processing_expires_at <= now
-        ):
-            with transaction.atomic():
-                DeliveryAttempt.objects.filter(
-                    pk=attempt.pk,
-                    status=DeliveryAttempt.Status.PROCESSING,
-                ).update(
-                    status=DeliveryAttempt.Status.UNKNOWN,
-                    active_content_fingerprint=None,
-                    failure_type=DeliveryAttempt.FailureType.PROCESSING_EXPIRED,
-                    failed_at=now,
-                    completed_at=now,
-                )
-            attempt.refresh_from_db()
-        return self._submission(attempt, created=False)
-
     def _linked_target_directory(self):
         if self._target_directory is None:
-            from lineaccounts.delivery_repositories import (
-                DeliveryTargetDirectory,
+            raise RuntimeError(
+                "target directory dependency is not configured"
             )
-
-            self._target_directory = DeliveryTargetDirectory()
         return self._target_directory
 
     def _linked_attempt_repository(self):
         if self._attempt_repository is None:
-            from .repositories import DjangoAttemptRepository
-
-            self._attempt_repository = DjangoAttemptRepository(
-                clock=self.clock
+            raise RuntimeError(
+                "attempt repository dependency is not configured"
             )
         return self._attempt_repository
 
     def _receipt_factory(self):
         if self._receipt_capability_factory is None:
-            from .receipt import ReceiptCapabilityFactory
-
-            self._receipt_capability_factory = ReceiptCapabilityFactory()
+            raise RuntimeError(
+                "receipt capability factory dependency is not configured"
+            )
         return self._receipt_capability_factory
 
     def _linked_credential_repository(self):
         if self._credential_repository is None:
-            from linechannels.container import build_credential_repository
-
-            self._credential_repository = build_credential_repository()
+            raise RuntimeError(
+                "credential repository dependency is not configured"
+            )
         return self._credential_repository
 
     def _linked_channel_push_gateway(self):
         if self._channel_push_gateway is None:
-            from .gateway import LINEChannelPushGateway
-
-            self._channel_push_gateway = LINEChannelPushGateway()
+            raise RuntimeError(
+                "channel push gateway dependency is not configured"
+            )
         return self._channel_push_gateway
 
     def _prevent_linked_push(self, attempt_id, failure_type):
@@ -365,35 +321,3 @@ class DeliveryService:
         if target.snapshot.friendship_state == "unknown":
             return TargetUnavailable("friendship_unknown")
         return TargetUnavailable()
-
-    @staticmethod
-    def _submission(attempt, *, created):
-        common = {
-            "operation_id": attempt.operation_id,
-            "status": attempt.status,
-            "accepted_at": attempt.accepted_at,
-            "created": created,
-        }
-        if attempt.status == DeliveryAttempt.Status.PROCESSING:
-            return ProcessingSubmission(
-                **common,
-                processing_expires_at=attempt.processing_expires_at,
-            )
-        if attempt.status == DeliveryAttempt.Status.SUCCEEDED:
-            return SucceededSubmission(
-                **common,
-                completed_at=attempt.completed_at,
-                line_request_id=attempt.line_request_id,
-                line_accepted_request_id=attempt.line_accepted_request_id,
-            )
-        submission_type = (
-            UnknownSubmission
-            if attempt.status == DeliveryAttempt.Status.UNKNOWN
-            else FailedSubmission
-        )
-        return submission_type(
-            **common,
-            completed_at=attempt.completed_at,
-            failure_type=attempt.failure_type,
-            line_request_id=attempt.line_request_id,
-        )

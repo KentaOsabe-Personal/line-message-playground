@@ -12,8 +12,11 @@ from rest_framework.response import Response
 from lineaccounts.authentication import OwnerPrincipal, OwnerSessionContext
 from lineaccounts.views import OwnerProtectedAPIView
 
-from .confirmation import (
-    ConfirmationService,
+from .container import (
+    build_confirmation_service,
+    build_delivery_service,
+    build_status_service,
+    build_target_directory,
 )
 from .formatters import (
     MessageValidationError,
@@ -27,7 +30,6 @@ from .serializers import (
     LinkedPreviewRequestSerializer,
     LinkedSendDeliveryRequestSerializer,
 )
-from .services import DeliveryService
 from .types import (
     AcceptedLinkedAttempt,
     AttemptConflict,
@@ -84,21 +86,26 @@ def message_error_response(error):
     )
 
 
-def submission_response(submission, http_status):
+def fixed_submission_response(snapshot, http_status):
     data = {
-        "status": submission.status,
-        "operationId": str(submission.operation_id),
-        "acceptedAt": submission.accepted_at.isoformat(),
+        "status": snapshot.status,
+        "operationId": str(snapshot.operation_id),
+        "acceptedAt": snapshot.accepted_at.isoformat(),
     }
-    if submission.status == "processing":
-        data["expiresAt"] = submission.processing_expires_at.isoformat()
+    if snapshot.status == "processing":
+        if snapshot.processing_expires_at is None:
+            return error_response(
+                "unexpected",
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        data["expiresAt"] = snapshot.processing_expires_at.isoformat()
     else:
-        data["completedAt"] = submission.completed_at.isoformat()
-        data["lineRequestId"] = submission.line_request_id
-        if submission.status in ("failed", "unknown"):
+        data["completedAt"] = snapshot.completed_at.isoformat()
+        data["lineRequestId"] = snapshot.line_request_id
+        if snapshot.status in ("failed", "unknown"):
             data["error"] = {
-                "code": submission.failure_type,
-                "summary": safe_delivery_summary(submission.failure_type),
+                "code": snapshot.failure,
+                "summary": safe_delivery_summary(snapshot.failure),
             }
     return Response(data, status=http_status)
 
@@ -176,9 +183,7 @@ class DeliveryTargetChannelListAPIView(LocalDeliveryAPIView):
         principal = request.user
         assert isinstance(principal, OwnerPrincipal)
         try:
-            from lineaccounts.delivery_repositories import DeliveryTargetDirectory
-
-            choices = DeliveryTargetDirectory().list_channels(
+            choices = build_target_directory().list_channels(
                 principal.identity_public_id
             )
         except DatabaseError:
@@ -209,9 +214,7 @@ class DeliveryTargetRecipientListAPIView(LocalDeliveryAPIView):
         principal = request.user
         assert isinstance(principal, OwnerPrincipal)
         try:
-            from lineaccounts.delivery_repositories import DeliveryTargetDirectory
-
-            choices = DeliveryTargetDirectory().list_recipients(
+            choices = build_target_directory().list_recipients(
                 principal.identity_public_id,
                 parsed_channel_id,
             )
@@ -256,9 +259,7 @@ class PreviewAPIView(LocalDeliveryAPIView):
         assert isinstance(principal, OwnerPrincipal)
         assert isinstance(context, OwnerSessionContext)
         try:
-            from lineaccounts.delivery_repositories import DeliveryTargetDirectory
-
-            target = DeliveryTargetDirectory().resolve(
+            target = build_target_directory().resolve(
                 principal.identity_public_id,
                 values["channelId"],
                 values["recipientId"],
@@ -279,7 +280,7 @@ class PreviewAPIView(LocalDeliveryAPIView):
                 status.HTTP_409_CONFLICT,
             )
 
-        confirmation_service = ConfirmationService()
+        confirmation_service = build_confirmation_service()
         receipt_expires_at = confirmation_service.receipt_expires_at(
             values["receiptRequested"]
         )
@@ -335,9 +336,7 @@ class DeliveryAPIView(LocalDeliveryAPIView):
         assert isinstance(principal, OwnerPrincipal)
         assert isinstance(context, OwnerSessionContext)
         try:
-            from lineaccounts.delivery_repositories import DeliveryTargetDirectory
-
-            target = DeliveryTargetDirectory().resolve(
+            target = build_target_directory().resolve(
                 principal.identity_public_id,
                 values["channelId"],
                 values["recipientId"],
@@ -358,7 +357,7 @@ class DeliveryAPIView(LocalDeliveryAPIView):
                 status.HTTP_409_CONFLICT,
             )
 
-        verification = ConfirmationService().verify_request(
+        verification = build_confirmation_service().verify_request(
             values["confirmationToken"],
             owner=DeliveryOwnerPrincipal(context.session.owner_slot),
             owner_identity=OwnerIdentitySnapshot(principal.identity_public_id),
@@ -387,7 +386,7 @@ class DeliveryAPIView(LocalDeliveryAPIView):
         if not isinstance(verification, ConfirmationVerified):
             return error_response("unexpected", status.HTTP_503_SERVICE_UNAVAILABLE)
 
-        service = DeliveryService()
+        service = build_delivery_service()
         try:
             accepted = service.accept_confirmed(
                 SubmitLinkedDelivery(
@@ -459,7 +458,7 @@ class DeliveryStatusAPIView(LocalDeliveryAPIView):
             return error_response("validation_error", status.HTTP_400_BAD_REQUEST)
         context = request.auth
         assert isinstance(context, OwnerSessionContext)
-        service = DeliveryService()
+        service = build_status_service()
         try:
             snapshot = service.check_linked_status(
                 context.session.owner_slot,
@@ -482,13 +481,9 @@ class DeliveryStatusAPIView(LocalDeliveryAPIView):
                 else status.HTTP_200_OK
             )
             return linked_submission_response(snapshot, http_status)
-        # legacy fixed recordもowner scope確認後に既存DTOへ変換する。
-        submission = service.check_status(parsed_operation_id)
-        if submission is None:
-            return error_response("operation_not_found", status.HTTP_404_NOT_FOUND)
         http_status = (
             status.HTTP_202_ACCEPTED
-            if submission.status == "processing"
+            if snapshot.status == "processing"
             else status.HTTP_200_OK
         )
-        return submission_response(submission, http_status)
+        return fixed_submission_response(snapshot, http_status)

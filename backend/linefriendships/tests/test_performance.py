@@ -127,7 +127,7 @@ class FriendshipPerformanceIntegrationTests(TransactionTestCase):
         handler = build_friendship_sync_handler()
 
         with (
-            patch("delivery.views.DeliveryService") as delivery_service,
+            patch("delivery.views.build_delivery_service") as delivery_service,
             patch("delivery.gateway.ApiClient") as api_client,
             patch("delivery.gateway.MessagingApi") as messaging_api,
         ):
