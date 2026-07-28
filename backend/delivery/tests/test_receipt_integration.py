@@ -182,8 +182,6 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
             subject="件名",
             body="本文",
             formatted_text="【件名】\n\n本文",
-            content_fingerprint=hashlib.sha256(b"message").hexdigest(),
-            active_content_fingerprint=None,
             request_fingerprint=request_fingerprint,
             active_request_fingerprint=(
                 None if terminal else request_fingerprint

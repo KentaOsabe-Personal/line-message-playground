@@ -17,9 +17,8 @@ class DeliveryAttemptTests(TestCase):
             "subject": "件名",
             "body": "本文\n2行目",
             "formatted_text": "【件名】\n\n本文\n2行目",
-            "content_fingerprint": "a" * 64,
-            "active_content_fingerprint": "a" * 64,
             "request_fingerprint": "a" * 64,
+            "active_request_fingerprint": "a" * 64,
             "owner_principal_slot": 1,
             "accepted_at": accepted_at,
             "processing_expires_at": accepted_at + timedelta(seconds=30),
@@ -46,19 +45,19 @@ class DeliveryAttemptTests(TestCase):
         with self.assertRaises(IntegrityError), transaction.atomic():
             self.make_attempt(
                 operation_id=attempt.operation_id,
-                content_fingerprint="b" * 64,
-                active_content_fingerprint="b" * 64,
+                request_fingerprint="b" * 64,
+                active_request_fingerprint="b" * 64,
             )
 
-    # テストケース: 同じ処理中content fingerprintを持つ別の送信試行を作成する。
+    # テストケース: 同じ処理中request fingerprintを持つ別の送信試行を作成する。
     # 期待値: DBの一意制約により重複する処理中試行の作成が拒否される。
-    def test_active_content_fingerprint_is_unique_while_processing(self):
+    def test_active_request_fingerprint_is_unique_while_processing(self):
         attempt = self.make_attempt()
 
         with self.assertRaises(IntegrityError), transaction.atomic():
             self.make_attempt(
-                content_fingerprint=attempt.content_fingerprint,
-                active_content_fingerprint=attempt.active_content_fingerprint,
+                request_fingerprint=attempt.request_fingerprint,
+                active_request_fingerprint=attempt.active_request_fingerprint,
             )
 
     # テストケース: processingの送信試行をLINE受付成功へ遷移させる。
@@ -74,7 +73,7 @@ class DeliveryAttemptTests(TestCase):
         attempt.refresh_from_db()
 
         self.assertEqual(attempt.status, DeliveryAttempt.Status.SUCCEEDED)
-        self.assertIsNone(attempt.active_content_fingerprint)
+        self.assertIsNone(attempt.active_request_fingerprint)
         self.assertEqual(attempt.sent_at, completed_at)
         self.assertEqual(attempt.completed_at, completed_at)
         self.assertEqual(attempt.line_request_id, "request-id")
@@ -88,10 +87,11 @@ class DeliveryAttemptTests(TestCase):
             (DeliveryAttempt.Status.UNKNOWN, DeliveryAttempt.FailureType.TIMEOUT_UNKNOWN),
         ):
             with self.subTest(status=status):
+                fingerprint = str(uuid.uuid4()).replace("-", "") * 2
                 attempt = self.make_attempt(
                     operation_id=uuid.uuid4(),
-                    content_fingerprint=str(uuid.uuid4()).replace("-", "") * 2,
-                    active_content_fingerprint=str(uuid.uuid4()).replace("-", "") * 2,
+                    request_fingerprint=fingerprint,
+                    active_request_fingerprint=fingerprint,
                 )
                 completed_at = timezone.now()
 
@@ -103,7 +103,7 @@ class DeliveryAttemptTests(TestCase):
                 attempt.refresh_from_db()
 
                 self.assertEqual(attempt.status, status)
-                self.assertIsNone(attempt.active_content_fingerprint)
+                self.assertIsNone(attempt.active_request_fingerprint)
                 self.assertEqual(attempt.failed_at, completed_at)
                 self.assertEqual(attempt.completed_at, completed_at)
                 self.assertEqual(attempt.failure_type, failure_type)
@@ -127,7 +127,7 @@ class DeliveryAttemptTests(TestCase):
     def test_database_rejects_invalid_state_field_combinations(self):
         attempt = self.make_attempt()
         attempt.status = DeliveryAttempt.Status.SUCCEEDED
-        attempt.active_content_fingerprint = None
+        attempt.active_request_fingerprint = None
 
         with self.assertRaises(IntegrityError), transaction.atomic():
             attempt.save()
@@ -143,11 +143,13 @@ class DeliveryAttemptTests(TestCase):
                 "subject",
                 "body",
                 "formatted_text",
-                "content_fingerprint",
+                "request_fingerprint",
                 "target_mode",
                 "line_request_id",
             }.issubset(field_names)
         )
+        self.assertNotIn("content_fingerprint", field_names)
+        self.assertNotIn("active_content_fingerprint", field_names)
         self.assertFalse(
             {
                 "target",

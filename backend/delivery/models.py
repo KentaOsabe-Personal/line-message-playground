@@ -38,13 +38,7 @@ class DeliveryAttempt(models.Model):
     subject = models.TextField()
     body = models.TextField()
     formatted_text = models.TextField()
-    content_fingerprint = models.CharField(max_length=64, db_index=True)
-    active_content_fingerprint = models.CharField(
-        max_length=64,
-        null=True,
-        unique=True,
-    )
-    request_fingerprint = models.CharField(max_length=64)
+    request_fingerprint = models.CharField(max_length=64, db_index=True)
     active_request_fingerprint = models.CharField(
         max_length=64,
         null=True,
@@ -139,29 +133,17 @@ class DeliveryAttempt(models.Model):
                 condition=(
                     models.Q(
                         status="processing",
+                        active_request_fingerprint__isnull=False,
+                        active_request_fingerprint=models.F(
+                            "request_fingerprint"
+                        ),
                         failure_type__isnull=True,
                         sent_at__isnull=True,
                         failed_at__isnull=True,
                         completed_at__isnull=True,
                     )
-                    & (
-                        models.Q(
-                            target_mode="fixed_user",
-                            active_content_fingerprint__isnull=False,
-                            active_request_fingerprint__isnull=True,
-                        )
-                        | models.Q(
-                            target_mode="linked_recipient",
-                            active_content_fingerprint__isnull=True,
-                            active_request_fingerprint__isnull=False,
-                            active_request_fingerprint=models.F(
-                                "request_fingerprint"
-                            ),
-                        )
-                    )
                     | models.Q(
                         status="succeeded",
-                        active_content_fingerprint__isnull=True,
                         active_request_fingerprint__isnull=True,
                         failure_type__isnull=True,
                         sent_at__isnull=False,
@@ -170,7 +152,6 @@ class DeliveryAttempt(models.Model):
                     )
                     | models.Q(
                         status__in=("failed", "unknown"),
-                        active_content_fingerprint__isnull=True,
                         active_request_fingerprint__isnull=True,
                         failure_type__isnull=False,
                         sent_at__isnull=True,
@@ -227,7 +208,6 @@ class DeliveryAttempt(models.Model):
     ):
         self._ensure_transition_allowed()
         self.status = self.Status.SUCCEEDED
-        self.active_content_fingerprint = None
         self.active_request_fingerprint = None
         self.sent_at = completed_at
         self.completed_at = completed_at
@@ -236,7 +216,6 @@ class DeliveryAttempt(models.Model):
         self.save(
             update_fields=(
                 "status",
-                "active_content_fingerprint",
                 "active_request_fingerprint",
                 "sent_at",
                 "completed_at",
@@ -253,7 +232,6 @@ class DeliveryAttempt(models.Model):
             raise ValidationError("Unknown delivery failure type.")
 
         self.status = status
-        self.active_content_fingerprint = None
         self.active_request_fingerprint = None
         self.failure_type = failure_type
         self.failed_at = completed_at
@@ -261,7 +239,6 @@ class DeliveryAttempt(models.Model):
         self.save(
             update_fields=(
                 "status",
-                "active_content_fingerprint",
                 "active_request_fingerprint",
                 "failure_type",
                 "failed_at",

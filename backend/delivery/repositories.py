@@ -8,6 +8,7 @@ from uuid import UUID
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from .formatters import format_message_snapshot
 from .models import DeliveryAttempt
 from .types import (
     AcceptedDeliveryCommand,
@@ -144,8 +145,6 @@ class DjangoAttemptRepository:
                     subject=command.message.subject,
                     body=command.message.body,
                     formatted_text=command.message.formatted_text,
-                    content_fingerprint=command.message.fingerprint,
-                    active_content_fingerprint=None,
                     request_fingerprint=command.request_fingerprint.digest,
                     active_request_fingerprint=(
                         command.request_fingerprint.digest
@@ -229,7 +228,6 @@ class DjangoAttemptRepository:
         completed_at = _aware_datetime(completed_at)
 
         terminal_values: dict[str, object] = {
-            "active_content_fingerprint": None,
             "active_request_fingerprint": None,
             "completed_at": completed_at,
         }
@@ -303,7 +301,6 @@ class DjangoAttemptRepository:
                 failure_type=(
                     DeliveryAttempt.FailureType.PROCESSING_EXPIRED
                 ),
-                active_content_fingerprint=None,
                 active_request_fingerprint=None,
                 failed_at=now,
                 completed_at=now,
@@ -474,7 +471,10 @@ class DjangoAttemptRepository:
                 subject=attempt.subject,
                 body=attempt.body,
                 formatted_text=attempt.formatted_text,
-                fingerprint=attempt.content_fingerprint,
+                fingerprint=format_message_snapshot(
+                    attempt.subject,
+                    attempt.body,
+                ).fingerprint,
             ),
             status=attempt.status,
             accepted_at=attempt.accepted_at,

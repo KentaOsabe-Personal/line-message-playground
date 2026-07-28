@@ -3,6 +3,7 @@ from uuid import UUID, uuid4
 
 from django.test import TestCase
 
+from delivery.formatters import format_message_snapshot
 from delivery.models import DeliveryAttempt
 from delivery.repositories import (
     DjangoAttemptRepository,
@@ -188,7 +189,6 @@ class DjangoAttemptRepositoryAcceptTests(TestCase):
             attempt.active_request_fingerprint,
             command.request_fingerprint.digest,
         )
-        self.assertIsNone(attempt.active_content_fingerprint)
         self.assertEqual(attempt.accepted_at, NOW)
         self.assertEqual(
             attempt.processing_expires_at,
@@ -589,8 +589,6 @@ class DjangoAttemptRepositoryFinalizeAndLookupTests(TestCase):
             subject="旧件名",
             body="旧本文",
             formatted_text="【旧件名】\n\n旧本文",
-            content_fingerprint="a" * 64,
-            active_content_fingerprint=None,
             request_fingerprint="a" * 64,
             active_request_fingerprint=None,
             target_mode=DeliveryAttempt.TargetMode.FIXED_USER,
@@ -1130,8 +1128,6 @@ class DjangoAttemptRepositoryContractIntegrationTests(TestCase):
             subject="旧成功件名",
             body="旧成功本文",
             formatted_text="【旧成功件名】\n\n旧成功本文",
-            content_fingerprint="a" * 64,
-            active_content_fingerprint=None,
             request_fingerprint="a" * 64,
             active_request_fingerprint=None,
             target_mode=DeliveryAttempt.TargetMode.FIXED_USER,
@@ -1150,8 +1146,6 @@ class DjangoAttemptRepositoryContractIntegrationTests(TestCase):
             subject="旧失敗件名",
             body="旧失敗本文",
             formatted_text="【旧失敗件名】\n\n旧失敗本文",
-            content_fingerprint="b" * 64,
-            active_content_fingerprint=None,
             request_fingerprint="b" * 64,
             active_request_fingerprint=None,
             target_mode=DeliveryAttempt.TargetMode.FIXED_USER,
@@ -1189,7 +1183,10 @@ class DjangoAttemptRepositoryContractIntegrationTests(TestCase):
         )
         self.assertEqual(
             succeeded_snapshot.message.fingerprint,
-            "a" * 64,
+            format_message_snapshot(
+                "旧成功件名",
+                "旧成功本文",
+            ).fingerprint,
         )
         self.assertEqual(succeeded_snapshot.status, "succeeded")
         self.assertIsNone(succeeded_snapshot.failure)
@@ -1216,7 +1213,13 @@ class DjangoAttemptRepositoryContractIntegrationTests(TestCase):
             failed_snapshot.message.formatted_text,
             "【旧失敗件名】\n\n旧失敗本文",
         )
-        self.assertEqual(failed_snapshot.message.fingerprint, "b" * 64)
+        self.assertEqual(
+            failed_snapshot.message.fingerprint,
+            format_message_snapshot(
+                "旧失敗件名",
+                "旧失敗本文",
+            ).fingerprint,
+        )
         self.assertEqual(failed_snapshot.status, "failed")
         self.assertEqual(
             failed_snapshot.failure,
@@ -1233,13 +1236,7 @@ class DjangoAttemptRepositoryContractIntegrationTests(TestCase):
         failed.refresh_from_db()
         self.assertEqual(succeeded.owner_principal_slot, 1)
         self.assertEqual(failed.owner_principal_slot, 1)
-        self.assertEqual(
-            succeeded.request_fingerprint,
-            succeeded.content_fingerprint,
-        )
-        self.assertEqual(
-            failed.request_fingerprint,
-            failed.content_fingerprint,
-        )
+        self.assertEqual(succeeded.request_fingerprint, "a" * 64)
+        self.assertEqual(failed.request_fingerprint, "b" * 64)
         self.assertEqual(succeeded.sent_at, succeeded_at)
         self.assertEqual(failed.failed_at, failed_at)

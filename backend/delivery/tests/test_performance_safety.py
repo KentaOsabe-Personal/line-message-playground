@@ -180,7 +180,6 @@ class LinkedDeliveryQueryBudgetTests(TestCase):
             subject="query budget",
             body="fixture件数に依存しない",
             formatted_text="【query budget】\n\nfixture件数に依存しない",
-            content_fingerprint=message_fingerprint,
             request_fingerprint=message_fingerprint,
             status=DeliveryAttempt.Status.SUCCEEDED,
             accepted_at=accepted_at,

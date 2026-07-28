@@ -18,9 +18,8 @@ class DeliveryAttemptSchemaTests(TestCase):
             "subject": "件名",
             "body": "本文",
             "formatted_text": "【件名】\n\n本文",
-            "content_fingerprint": "a" * 64,
-            "active_content_fingerprint": "a" * 64,
             "request_fingerprint": "a" * 64,
+            "active_request_fingerprint": "a" * 64,
             "owner_principal_slot": 1,
             "accepted_at": accepted_at,
             "processing_expires_at": accepted_at + timedelta(seconds=30),
@@ -40,7 +39,6 @@ class DeliveryAttemptSchemaTests(TestCase):
             "recipient_enabled_snapshot": True,
             "friendship_state_snapshot": DeliveryAttempt.FriendshipState.FRIEND,
             "request_fingerprint": "b" * 64,
-            "active_content_fingerprint": None,
             "active_request_fingerprint": "b" * 64,
         }
 
@@ -48,10 +46,7 @@ class DeliveryAttemptSchemaTests(TestCase):
     # 期待値: legacy列を持つfixed行とowner・target snapshotを持つlinked行がどちらも有効になる。
     def test_fixed_and_linked_processing_rows_are_both_valid(self):
         fixed_attempt = self.make_attempt()
-        linked_attempt = self.make_attempt(
-            content_fingerprint="b" * 64,
-            **self.linked_values(),
-        )
+        linked_attempt = self.make_attempt(**self.linked_values())
 
         self.assertEqual(fixed_attempt.target_mode, DeliveryAttempt.TargetMode.FIXED_USER)
         self.assertEqual(
@@ -77,17 +72,14 @@ class DeliveryAttemptSchemaTests(TestCase):
         for index, field_name in enumerate(required_fields):
             with self.subTest(field_name=field_name):
                 values = self.linked_values()
+                fingerprint = f"{index + 10:064x}"
+                values["request_fingerprint"] = fingerprint
+                values["active_request_fingerprint"] = fingerprint
                 values[field_name] = None
                 with self.assertRaises(IntegrityError), transaction.atomic():
                     self.make_attempt(
                         operation_id=uuid.uuid4(),
-                        content_fingerprint=f"{index + 1:064x}",
-                        active_request_fingerprint=f"{index + 10:064x}",
-                        **{
-                            key: value
-                            for key, value in values.items()
-                            if key != "active_request_fingerprint"
-                        },
+                        **values,
                     )
 
     # テストケース: linked recipient行をLINE受付済みの終端状態として保存する。
@@ -103,7 +95,7 @@ class DeliveryAttemptSchemaTests(TestCase):
             line_request_id="request-id",
         )
 
-        attempt = self.make_attempt(content_fingerprint="c" * 64, **values)
+        attempt = self.make_attempt(**values)
 
         self.assertEqual(attempt.request_fingerprint, "b" * 64)
         self.assertIsNone(attempt.active_request_fingerprint)
@@ -120,17 +112,17 @@ class DeliveryAttemptSchemaTests(TestCase):
         )
 
         with self.assertRaises(IntegrityError), transaction.atomic():
-            self.make_attempt(content_fingerprint="c" * 64, **values)
+            self.make_attempt(**values)
 
     # テストケース: 同じactive request fingerprintを持つlinked処理中行を二件保存する。
     # 期待値: 一意制約により二件目が拒否され、同一requestの並行処理が一件へ制限される。
     def test_active_request_fingerprint_is_unique(self):
         values = self.linked_values()
-        self.make_attempt(content_fingerprint="d" * 64, **values)
+        self.make_attempt(**values)
 
         values["operation_id"] = uuid.uuid4()
         with self.assertRaises(IntegrityError), transaction.atomic():
-            self.make_attempt(content_fingerprint="e" * 64, **values)
+            self.make_attempt(**values)
 
     # テストケース: linked処理中行のactive request fingerprintを永続request identityと異なる値にする。
     # 期待値: DB制約が不一致を拒否し、処理中の一意キーが保存済みrequestと同一になる。
@@ -139,23 +131,23 @@ class DeliveryAttemptSchemaTests(TestCase):
         values["active_request_fingerprint"] = "c" * 64
 
         with self.assertRaises(IntegrityError), transaction.atomic():
-            self.make_attempt(content_fingerprint="0" * 64, **values)
+            self.make_attempt(**values)
 
     # テストケース: receipt未要求・要求中・確認済みの各列組合せを保存する。
     # 期待値: 有効な三状態だけが同じdelivery statusと独立して保存できる。
     def test_valid_receipt_field_combinations_are_saved(self):
         now = timezone.now()
-        without_receipt = self.make_attempt(content_fingerprint="f" * 64)
+        without_receipt = self.make_attempt()
         pending = self.make_attempt(
-            content_fingerprint="1" * 64,
-            active_content_fingerprint="1" * 64,
+            request_fingerprint="1" * 64,
+            active_request_fingerprint="1" * 64,
             receipt_requested=True,
             receipt_expires_at=now + timedelta(hours=24),
             receipt_token_digest="2" * 64,
         )
         confirmed = self.make_attempt(
-            content_fingerprint="3" * 64,
-            active_content_fingerprint="3" * 64,
+            request_fingerprint="3" * 64,
+            active_request_fingerprint="3" * 64,
             receipt_requested=True,
             receipt_expires_at=now + timedelta(hours=24),
             receipt_token_digest="4" * 64,
@@ -202,8 +194,8 @@ class DeliveryAttemptSchemaTests(TestCase):
                 with self.assertRaises(IntegrityError), transaction.atomic():
                     self.make_attempt(
                         operation_id=uuid.uuid4(),
-                        content_fingerprint=f"{index + 20:064x}",
-                        active_content_fingerprint=f"{index + 20:064x}",
+                        request_fingerprint=f"{index + 20:064x}",
+                        active_request_fingerprint=f"{index + 20:064x}",
                         **overrides,
                     )
 
@@ -212,8 +204,8 @@ class DeliveryAttemptSchemaTests(TestCase):
     def test_receipt_token_digest_is_unique(self):
         expires_at = timezone.now() + timedelta(hours=24)
         self.make_attempt(
-            content_fingerprint="8" * 64,
-            active_content_fingerprint="8" * 64,
+            request_fingerprint="8" * 64,
+            active_request_fingerprint="8" * 64,
             receipt_requested=True,
             receipt_expires_at=expires_at,
             receipt_token_digest="9" * 64,
@@ -221,8 +213,8 @@ class DeliveryAttemptSchemaTests(TestCase):
 
         with self.assertRaises(IntegrityError), transaction.atomic():
             self.make_attempt(
-                content_fingerprint="a" * 64,
-                active_content_fingerprint="a" * 64,
+                request_fingerprint="b" * 64,
+                active_request_fingerprint="b" * 64,
                 receipt_requested=True,
                 receipt_expires_at=expires_at,
                 receipt_token_digest="9" * 64,
@@ -250,8 +242,8 @@ class DeliveryAttemptSchemaTests(TestCase):
             with self.subTest(failure_type=failure_type):
                 attempt = self.make_attempt(
                     operation_id=uuid.uuid4(),
-                    content_fingerprint=f"{index + 40:064x}",
-                    active_content_fingerprint=f"{index + 40:064x}",
+                    request_fingerprint=f"{index + 40:064x}",
+                    active_request_fingerprint=f"{index + 40:064x}",
                 )
                 completed_at = timezone.now()
 

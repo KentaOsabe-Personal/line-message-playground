@@ -99,9 +99,8 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
             "subject": "移行後件名",
             "body": "移行後本文",
             "formatted_text": "【移行後件名】\n\n移行後本文",
-            "content_fingerprint": "f" * 64,
-            "active_content_fingerprint": "f" * 64,
             "request_fingerprint": "f" * 64,
+            "active_request_fingerprint": "f" * 64,
             "target_mode": "fixed_user",
             "status": "processing",
             "accepted_at": accepted_at,
@@ -109,6 +108,35 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         }
         values.update(overrides)
         return values
+
+    # テストケース: 0002適用後のmigration stateを検査する。
+    # 期待値: fingerprintはRenameFieldされた単一列だけが存在し、旧列とのdual-column状態を持たない。
+    def test_forward_schema_renames_fingerprint_fields_without_dual_columns(self):
+        self.executor = MigrationExecutor(connection)
+        self.executor.migrate(self.migrate_to)
+        apps = self.executor.loader.project_state(self.migrate_to).apps
+        attempt_model = apps.get_model("delivery", "DeliveryAttempt")
+        field_names = {
+            field.name
+            for field in attempt_model._meta.get_fields()
+        }
+        with connection.cursor() as cursor:
+            database_columns = {
+                column.name
+                for column in connection.introspection.get_table_description(
+                    cursor,
+                    attempt_model._meta.db_table,
+                )
+            }
+
+        self.assertIn("request_fingerprint", field_names)
+        self.assertIn("active_request_fingerprint", field_names)
+        self.assertNotIn("content_fingerprint", field_names)
+        self.assertNotIn("active_content_fingerprint", field_names)
+        self.assertIn("request_fingerprint", database_columns)
+        self.assertIn("active_request_fingerprint", database_columns)
+        self.assertNotIn("content_fingerprint", database_columns)
+        self.assertNotIn("active_content_fingerprint", database_columns)
 
     # テストケース: active ownerが一意な0001のfixed配信を新schemaへforward migrationする。
     # 期待値: 全監査値を同値で保持し、slot 1とrequest fingerprint、identity snapshotを補完する。
@@ -131,8 +159,6 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
                     "subject",
                     "body",
                     "formatted_text",
-                    "content_fingerprint",
-                    "active_content_fingerprint",
                     "status",
                     "failure_type",
                     "line_request_id",
@@ -150,6 +176,10 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
                 self.assertEqual(
                     attempt.request_fingerprint,
                     expected["content_fingerprint"],
+                )
+                self.assertEqual(
+                    attempt.active_request_fingerprint,
+                    expected["active_content_fingerprint"],
                 )
                 self.assertEqual(attempt.owner_principal_slot, 1)
                 self.assertEqual(
@@ -194,8 +224,16 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         self.executor.migrate(self.migrate_from)
         apps = self.executor.loader.project_state(self.migrate_from).apps
         attempt_model = apps.get_model("delivery", "DeliveryAttempt")
+        field_names = {
+            field.name
+            for field in attempt_model._meta.get_fields()
+        }
 
         self.assertEqual(attempt_model.objects.count(), len(self.legacy_rows))
+        self.assertIn("content_fingerprint", field_names)
+        self.assertIn("active_content_fingerprint", field_names)
+        self.assertNotIn("request_fingerprint", field_names)
+        self.assertNotIn("active_request_fingerprint", field_names)
         for expected in self.legacy_rows:
             with self.subTest(status=expected["status"]):
                 attempt = attempt_model.objects.get(
@@ -236,8 +274,6 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
             subject="linked件名",
             body="linked本文",
             formatted_text="【linked件名】\n\nlinked本文",
-            content_fingerprint="a" * 64,
-            active_content_fingerprint=None,
             request_fingerprint="b" * 64,
             active_request_fingerprint=None,
             target_mode="linked_recipient",
@@ -294,8 +330,6 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
                         "subject",
                         "body",
                         "formatted_text",
-                        "content_fingerprint",
-                        "active_content_fingerprint",
                         "status",
                         "failure_type",
                         "line_request_id",
@@ -317,6 +351,19 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
                             attempt.request_fingerprint,
                             expected["content_fingerprint"],
                         )
+                        self.assertEqual(
+                            attempt.active_request_fingerprint,
+                            expected["active_content_fingerprint"],
+                        )
+                    else:
+                        self.assertEqual(
+                            attempt.content_fingerprint,
+                            expected["content_fingerprint"],
+                        )
+                        self.assertEqual(
+                            attempt.active_content_fingerprint,
+                            expected["active_content_fingerprint"],
+                        )
 
     # テストケース: migration後の実DBへsnapshot不足のlinked recipient行を直接保存する。
     # 期待値: delivery_attempt_valid_target制約が不完全な対象監査を拒否する。
@@ -333,8 +380,6 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
                 subject="不完全なlinked件名",
                 body="不完全なlinked本文",
                 formatted_text="【不完全なlinked件名】\n\n不完全なlinked本文",
-                content_fingerprint="a" * 64,
-                active_content_fingerprint=None,
                 request_fingerprint="b" * 64,
                 active_request_fingerprint="b" * 64,
                 target_mode="linked_recipient",
@@ -359,8 +404,6 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
                 subject="不整合な状態",
                 body="本文",
                 formatted_text="【不整合な状態】\n\n本文",
-                content_fingerprint="c" * 64,
-                active_content_fingerprint=None,
                 request_fingerprint="c" * 64,
                 target_mode="fixed_user",
                 owner_principal_slot=1,
@@ -384,9 +427,8 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
                 subject="受取確認不整合",
                 body="本文",
                 formatted_text="【受取確認不整合】\n\n本文",
-                content_fingerprint="d" * 64,
-                active_content_fingerprint="d" * 64,
                 request_fingerprint="d" * 64,
+                active_request_fingerprint="d" * 64,
                 target_mode="fixed_user",
                 owner_principal_slot=1,
                 status="processing",
@@ -412,9 +454,8 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
             subject="移行後fixed件名",
             body="移行後fixed本文",
             formatted_text="【移行後fixed件名】\n\n移行後fixed本文",
-            content_fingerprint="f" * 64,
-            active_content_fingerprint="f" * 64,
             request_fingerprint="f" * 64,
+            active_request_fingerprint="f" * 64,
             target_mode="fixed_user",
             status="processing",
             accepted_at=accepted_at,
@@ -425,8 +466,7 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         self.assertEqual(attempt.target_mode, "fixed_user")
         self.assertEqual(attempt.owner_principal_slot, 1)
         self.assertEqual(attempt.request_fingerprint, "f" * 64)
-        self.assertEqual(attempt.active_content_fingerprint, "f" * 64)
-        self.assertIsNone(attempt.active_request_fingerprint)
+        self.assertEqual(attempt.active_request_fingerprint, "f" * 64)
         self.assertIsNone(attempt.channel_public_id)
         self.assertIsNone(attempt.recipient_public_id)
 
@@ -442,10 +482,11 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
             with self.subTest(field_name=field_name):
                 values = self.latest_attempt_values(
                     operation_id=uuid.uuid4(),
-                    content_fingerprint=uuid.uuid4().hex * 2,
-                    active_content_fingerprint=uuid.uuid4().hex * 2,
                     request_fingerprint=uuid.uuid4().hex * 2,
                 )
+                values["active_request_fingerprint"] = values[
+                    "request_fingerprint"
+                ]
                 values[field_name] = None
                 with self.assertRaises(IntegrityError), transaction.atomic():
                     attempt_model.objects.create(**values)
@@ -458,11 +499,9 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         apps = self.executor.loader.project_state(self.migrate_to).apps
         attempt_model = apps.get_model("delivery", "DeliveryAttempt")
         fixed_values = self.latest_attempt_values()
-        linked_fingerprint = "1" * 64
+        linked_fingerprint = "a" * 64
         linked_values = self.latest_attempt_values(
             operation_id=uuid.uuid4(),
-            content_fingerprint=linked_fingerprint,
-            active_content_fingerprint=None,
             request_fingerprint=linked_fingerprint,
             active_request_fingerprint=linked_fingerprint,
             target_mode="linked_recipient",
@@ -483,7 +522,6 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         unknown_values = {
             **linked_values,
             "operation_id": uuid.uuid4(),
-            "content_fingerprint": "2" * 64,
             "request_fingerprint": "2" * 64,
             "active_request_fingerprint": "2" * 64,
             "target_mode": "unknown_mode",
@@ -502,18 +540,18 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         invalid_cases = (
             {
                 "status": "processing",
-                "active_content_fingerprint": None,
+                "active_request_fingerprint": None,
             },
             {
                 "status": "succeeded",
-                "active_content_fingerprint": None,
+                "active_request_fingerprint": None,
                 "sent_at": completed_at,
                 "failed_at": completed_at,
                 "completed_at": completed_at,
             },
             {
                 "status": "failed",
-                "active_content_fingerprint": None,
+                "active_request_fingerprint": None,
                 "failure_type": "invalid_request",
                 "sent_at": completed_at,
                 "failed_at": completed_at,
@@ -521,7 +559,7 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
             },
             {
                 "status": "unknown",
-                "active_content_fingerprint": None,
+                "active_request_fingerprint": None,
                 "failure_type": "timeout_unknown",
                 "sent_at": completed_at,
                 "failed_at": completed_at,
@@ -534,10 +572,9 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
                 fingerprint = f"{index + 10:064x}"
                 values = self.latest_attempt_values(
                     operation_id=uuid.uuid4(),
-                    content_fingerprint=fingerprint,
                     request_fingerprint=fingerprint,
                     **(
-                        {"active_content_fingerprint": fingerprint}
+                        {"active_request_fingerprint": fingerprint}
                         | overrides
                     ),
                 )
@@ -554,9 +591,8 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         now = timezone.now()
         pending_values = self.latest_attempt_values(
             operation_id=uuid.uuid4(),
-            content_fingerprint="3" * 64,
-            active_content_fingerprint="3" * 64,
             request_fingerprint="3" * 64,
+            active_request_fingerprint="3" * 64,
             receipt_requested=True,
             receipt_expires_at=now + timedelta(hours=24),
             receipt_token_digest="4" * 64,
@@ -564,9 +600,8 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         confirmed_values = {
             **pending_values,
             "operation_id": uuid.uuid4(),
-            "content_fingerprint": "5" * 64,
-            "active_content_fingerprint": "5" * 64,
             "request_fingerprint": "5" * 64,
+            "active_request_fingerprint": "5" * 64,
             "receipt_token_digest": "6" * 64,
             "receipt_confirmed_at": now,
             "receipt_webhook_event_id": "01J00000000000000000000000",
@@ -599,9 +634,8 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
                 fingerprint = f"{index + 20:064x}"
                 values = self.latest_attempt_values(
                     operation_id=uuid.uuid4(),
-                    content_fingerprint=fingerprint,
-                    active_content_fingerprint=fingerprint,
                     request_fingerprint=fingerprint,
+                    active_request_fingerprint=fingerprint,
                     **receipt_values,
                 )
                 with self.assertRaises(IntegrityError), transaction.atomic():
