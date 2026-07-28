@@ -239,7 +239,7 @@
   - 完了時、一つのoperationが一回だけpushされ、delivery statusとreceiptが独立して確定する
   - _Requirements: 4.6, 5.1, 5.2, 5.7, 6.2, 7.3, 7.6, 8.2, 8.5, 8.10, 8.11_
   - _Depends: 2.4, 3.2, 4.3, 5.6, 6.2, 7.3_
-- [ ] 9.3 query budget・競合・deadline・外部call一回性を安全なfakeで検証する
+- [x] 9.3 query budget・競合・deadline・外部call一回性を安全なfakeで検証する
   - list／preview／statusの固定query上限、accept／finalize／receipt barrier、processing expiryを測定する
   - 外部LINEを負荷testせず、transaction外callとtimeout分類をfakeで確認する
   - 完了時、performance／safety suiteがN+1不在、CAS収束、call count上限を数値で検証する
