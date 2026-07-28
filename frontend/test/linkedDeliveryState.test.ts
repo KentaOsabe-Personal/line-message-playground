@@ -122,20 +122,42 @@ describe('linked delivery state', () => {
   // 期待値: どの変更もconfirmationを保持せず、変更済み入力だけを持つeditingへ戻る。
   test('invalidates confirmation for every editing axis', () => {
     const preview = confirmed()
-    const events = [
-      { type: 'channelChanged', channelId: channelTwo } as const,
-      { type: 'recipientChanged', recipientId: null } as const,
-      { type: 'subjectChanged', subject: '別件名' } as const,
-      { type: 'bodyChanged', body: '別本文' } as const,
-      { type: 'receiptChanged', receiptRequested: true } as const,
+    const cases = [
+      {
+        event: { type: 'channelChanged', channelId: channelTwo } as const,
+        expected: { ...preview.input, channelId: channelTwo, recipientId: null },
+      },
+      {
+        event: { type: 'recipientChanged', recipientId: null } as const,
+        expected: { ...preview.input, recipientId: null },
+      },
+      {
+        event: { type: 'subjectChanged', subject: '別件名' } as const,
+        expected: { ...preview.input, subject: '別件名' },
+      },
+      {
+        event: { type: 'bodyChanged', body: '別本文' } as const,
+        expected: { ...preview.input, body: '別本文' },
+      },
+      {
+        event: { type: 'receiptChanged', receiptRequested: true } as const,
+        expected: { ...preview.input, receiptRequested: true },
+      },
     ]
 
-    for (const event of events) {
+    for (const { event, expected } of cases) {
       const changed = transitionLinkedDelivery(preview, event)
-      expect(changed.phase).toBe('editing')
+      expect(changed).toEqual({ phase: 'editing', input: expected, errors: {} })
       expect('preview' in changed).toBe(false)
       expect('confirmationToken' in changed).toBe(false)
     }
+    expect(preview.input).toEqual({
+      channelId: channelOne,
+      recipientId: recipientOne,
+      subject: '件名',
+      body: '本文',
+      receiptRequested: false,
+    })
   })
 
   // テストケース: previewから入力へ戻る。

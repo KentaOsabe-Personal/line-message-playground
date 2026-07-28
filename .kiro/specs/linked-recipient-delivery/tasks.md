@@ -190,7 +190,7 @@
   - 完了時、全endpointでstatus codeとbodyが契約どおりになり外部生応答やPIIが出ない
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.7, 3.7, 4.8, 7.7, 7.9, 7.11, 9.1, 9.5, 9.6, 9.7_
 
-- [ ] 8. linked recipient配信のFrontend状態と操作画面を実装する
+- [x] 8. linked recipient配信のFrontend状態と操作画面を実装する
 - [x] 8.1 (P) target・preview・status・receipt応答をstrict runtime検証する
   - exact key、canonical UUID、closed enum、nullable expiry、safe errorを検証する
   - unknown key／enumとsecret canaryをprotocol errorへ変換する
@@ -219,7 +219,7 @@
   - 完了時、確認後に送信でき、到達／既読表現や自動再送なしで保存済み状態を確認できる
   - _Requirements: 3.3, 3.4, 3.6, 4.1, 4.2, 4.7, 7.6, 7.9, 8.1, 9.2, 9.3, 9.4_
   - _Depends: 7.2, 7.3, 8.1, 8.2, 8.3_
-- [ ] 8.6 Frontendの選択・確認破棄・連打抑止・表示契約を検証する
+- [x] 8.6 Frontendの選択・確認破棄・連打抑止・表示契約を検証する
   - channel変更、全入力軸、back保持、不可target、processing無効化、network error／status確認を網羅する
   - LINE受付文言とreceipt直交表示、DTO secret canary、API request payloadを固定する
   - 完了時、Frontend test suiteとproduction buildが新しい配信journeyを通過する
