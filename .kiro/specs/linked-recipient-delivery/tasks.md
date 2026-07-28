@@ -232,7 +232,7 @@
   - 完了時、migration testがlegacy保持と新規不変条件を再現可能に証明する
   - _Requirements: 7.8, 7.10, 9.7_
   - _Depends: 1.2, 1.3_
-- [ ] 9.2 previewからpush・status・receiptまでの代表flowを実compositionで検証する
+- [x] 9.2 previewからpush・status・receiptまでの代表flowを実compositionで検証する
   - target adapter、confirmation、repository、credential、gateway、webhook handler、APIのproduction compositionを接続する
   - receipt付きの正常系一件でpreview、単一push、succeeded status、検証済みpostback、confirmed receiptまでを通す
   - 個別failure／競合は5.7と6.3の責務に残し、このtaskでは重複検証しない
