@@ -13,7 +13,7 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         ("lineaccounts", "0002_friendship_order"),
     ]
     migrate_to = [
-        ("delivery", "0002_linked_recipient_delivery"),
+        ("delivery", "0003_remove_legacy_fingerprint_columns"),
         ("lineaccounts", "0002_friendship_order"),
     ]
 
@@ -109,8 +109,8 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         values.update(overrides)
         return values
 
-    # テストケース: 0002適用後のmigration stateを検査する。
-    # 期待値: fingerprintはRenameFieldされた単一列だけが存在し、旧列とのdual-column状態を持たない。
+    # テストケース: 0003適用後のmigration stateを検査する。
+    # 期待値: fingerprintは統合後の単一列だけが存在し、旧列とのdual-column状態を持たない。
     def test_forward_schema_renames_fingerprint_fields_without_dual_columns(self):
         self.executor = MigrationExecutor(connection)
         self.executor.migrate(self.migrate_to)
