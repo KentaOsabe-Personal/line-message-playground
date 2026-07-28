@@ -6,7 +6,6 @@ from uuid import UUID
 from django.core import signing
 from django.utils import timezone as django_timezone
 
-from .formatters import FORMATTER_VERSION
 from .types import (
     ConfirmationSnapshot,
     OwnerIdentitySnapshot,
@@ -15,7 +14,6 @@ from .types import (
 )
 
 
-CONFIRMATION_SALT = "delivery.confirmation.v1"
 LINKED_CONFIRMATION_SALT = "delivery.confirmation.snapshot.v1"
 CONFIRMATION_MAX_AGE = timedelta(minutes=10)
 RECEIPT_MAX_AGE = timedelta(hours=24)
@@ -23,33 +21,6 @@ _UNIX_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _VALID_CONFIRMATION_REJECTIONS = frozenset(
     ("invalid", "expired", "mismatch")
 )
-
-
-class ConfirmationError(ValueError):
-    pass
-
-
-class ConfirmationTokenService:
-    def issue(self, message):
-        return signing.dumps(
-            {"v": message.formatter_version, "fp": message.fingerprint},
-            salt=CONFIRMATION_SALT,
-            compress=True,
-        )
-
-    def verify(self, token, message):
-        try:
-            payload = signing.loads(token, salt=CONFIRMATION_SALT)
-        except (signing.BadSignature, TypeError, ValueError) as error:
-            raise ConfirmationError("confirmation_invalid") from error
-        if message.formatter_version != FORMATTER_VERSION or payload != {
-            "v": message.formatter_version,
-            "fp": message.fingerprint,
-        }:
-            raise ConfirmationError("confirmation_mismatch")
-
-    def decode_for_test(self, token):
-        return signing.loads(token, salt=CONFIRMATION_SALT)
 
 
 ConfirmationRejectionReason: TypeAlias = Literal[

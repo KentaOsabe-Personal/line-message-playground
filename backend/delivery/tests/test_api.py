@@ -3,17 +3,14 @@ from unittest.mock import Mock, patch
 from uuid import uuid4
 
 from django.db import DatabaseError, transaction
-from django.test import override_settings
 from rest_framework.test import APIClient, APITestCase
 from django.utils import timezone
 
 from delivery.confirmation import (
     ConfirmationRejected,
     ConfirmationService,
-    ConfirmationTokenService,
 )
 from delivery.formatters import format_message, format_message_snapshot
-from delivery.gateway import LINEGateway, LinePushAccepted, LinePushRejected, LinePushUnknown
 from delivery.models import DeliveryAttempt
 from delivery.types import (
     AcceptedLinkedAttempt,
@@ -34,17 +31,6 @@ from lineaccounts.models import DeliveryRecipient, LineIdentity, OwnerAccount
 from lineaccounts.repositories import DjangoAccountRepository
 from lineaccounts.types import LineSubject
 from linechannels.models import LineChannel
-
-
-class FakeGateway:
-    def __init__(self, result=None):
-        self.commands = []
-        self.result = result or LinePushAccepted("request-1", None)
-
-    def push_text(self, command):
-        self.commands.append(command)
-        return self.result
-
 
 class DeliveryApiTests(APITestCase):
     def setUp(self):
@@ -277,7 +263,6 @@ class DeliveryApiTests(APITestCase):
                 side_effect=DatabaseError("database-secret-canary"),
             ),
             patch("delivery.views.ConfirmationService.issue") as issue,
-            patch("delivery.views.LINEGateway") as gateway,
         ):
             response = self.client.post(
                 "/api/deliveries/preview/",
@@ -303,7 +288,6 @@ class DeliveryApiTests(APITestCase):
         )
         self.assertNotIn("database-secret-canary", str(response.json()))
         issue.assert_not_called()
-        gateway.assert_not_called()
         self.assertEqual(DeliveryAttempt.objects.count(), 0)
 
     # テストケース: 空白だけの件名をpreviewする
@@ -357,50 +341,25 @@ class DeliveryApiTests(APITestCase):
             {"subject": 123, "body": "本文"},
             format="json",
         )
-        gateway = FakeGateway()
-        with patch("delivery.views.LINEGateway", return_value=gateway):
-            send = self.client.post(
-                "/api/deliveries/",
-                {
-                    "subject": "件名",
-                    "body": False,
-                    "operationId": str(uuid4()),
-                    "confirmationToken": 123,
-                },
-                format="json",
-            )
+        send = self.client.post(
+            "/api/deliveries/",
+            {
+                "channelId": str(self.channel.public_id),
+                "recipientId": str(self.recipient.public_id),
+                "subject": "件名",
+                "body": False,
+                "receiptRequested": False,
+                "operationId": str(uuid4()),
+                "confirmationToken": 123,
+            },
+            format="json",
+        )
 
         self.assertEqual(preview.status_code, 400)
         self.assertEqual(preview.data["error"]["code"], "validation_error")
         self.assertEqual(send.status_code, 400)
         self.assertEqual(send.data["error"]["code"], "validation_error")
         self.assertEqual(DeliveryAttempt.objects.count(), 0)
-        self.assertEqual(gateway.commands, [])
-
-    # テストケース: active ownerが確認済み内容を最終送信する
-    # 期待値: 201成功応答を返し、安全な公開項目だけを含める
-    def test_send_confirmed_content_returns_created_success(self):
-        message = format_message("件名", "本文")
-        token = ConfirmationTokenService().issue(message)
-        gateway = FakeGateway()
-        with patch("delivery.views.LINEGateway", return_value=gateway):
-            response = self.client.post(
-                "/api/deliveries/",
-                {
-                    "subject": "件名",
-                    "body": "本文",
-                    "operationId": str(uuid4()),
-                    "confirmationToken": token,
-                },
-                format="json",
-            )
-
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data["status"], "succeeded")
-        self.assertEqual(response.data["lineRequestId"], "request-1")
-        self.assertNotIn("confirmationToken", response.data)
-        self.assertNotIn("target", response.data)
-        self.assertEqual(len(gateway.commands), 1)
 
     # テストケース: 匿名利用者が不正payloadで配信APIを操作する
     # 期待値: serializerとLINE gatewayより先に全endpointを401で拒否する
@@ -411,24 +370,20 @@ class DeliveryApiTests(APITestCase):
             HTTP_ORIGIN=self.origin,
             HTTP_X_CSRFTOKEN=bootstrap.cookies["csrftoken"].value,
         )
-        gateway = FakeGateway()
-
-        with patch("delivery.views.LINEGateway", return_value=gateway):
-            responses = (
-                client.post(
-                    "/api/deliveries/preview/",
-                    {"subject": [], "body": {}},
-                    format="json",
-                ),
-                client.post("/api/deliveries/", {}, format="json"),
-                client.post(
-                    "/api/deliveries/not-a-uuid/status/", {}, format="json"
-                ),
-            )
+        responses = (
+            client.post(
+                "/api/deliveries/preview/",
+                {"subject": [], "body": {}},
+                format="json",
+            ),
+            client.post("/api/deliveries/", {}, format="json"),
+            client.post(
+                "/api/deliveries/not-a-uuid/status/", {}, format="json"
+            ),
+        )
 
         self.assertTrue(all(response.status_code == 401 for response in responses))
         self.assertEqual(DeliveryAttempt.objects.count(), 0)
-        self.assertEqual(gateway.commands, [])
 
     # テストケース: unlink pendingのownerが不正payloadでpreview・send・statusを要求する
     # 期待値: serializer・target・serviceより先に全unsafe endpointを403で拒否する
@@ -437,11 +392,9 @@ class DeliveryApiTests(APITestCase):
             state=OwnerAccount.State.DEAUTHORIZATION_PENDING,
             unlink_generation=uuid4(),
         )
-        gateway = FakeGateway()
         operation_id = uuid4()
 
         with (
-            patch("delivery.views.LINEGateway", return_value=gateway),
             patch(
                 "delivery.views.LinkedPreviewRequestSerializer.is_valid",
                 side_effect=AssertionError("preview serializer must not run"),
@@ -493,109 +446,18 @@ class DeliveryApiTests(APITestCase):
             )
         )
         self.assertEqual(DeliveryAttempt.objects.count(), 0)
-        self.assertEqual(gateway.commands, [])
         service_factory.assert_not_called()
 
     # テストケース: active ownerがOriginなしで配信を要求する
     # 期待値: payload処理とLINE gatewayより先に403 csrf_failedで拒否する
     def test_delivery_requires_exact_origin_and_csrf_before_handler(self):
-        gateway = FakeGateway()
         self.client.credentials()
 
-        with patch("delivery.views.LINEGateway", return_value=gateway):
-            response = self.client.post("/api/deliveries/", {}, format="json")
+        response = self.client.post("/api/deliveries/", {}, format="json")
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["error"]["code"], "csrf_failed")
         self.assertEqual(DeliveryAttempt.objects.count(), 0)
-        self.assertEqual(gateway.commands, [])
-
-    # テストケース: 編集後の内容を古い確認トークンで送る
-    # 期待値: confirmation errorを返し、DB作成とLINE呼出しを行わない
-    def test_send_rejects_stale_confirmation_before_side_effects(self):
-        token = ConfirmationTokenService().issue(format_message("件名", "本文"))
-        gateway = FakeGateway()
-        with patch("delivery.views.LINEGateway", return_value=gateway):
-            response = self.client.post(
-                "/api/deliveries/",
-                {
-                    "subject": "変更後",
-                    "body": "本文",
-                    "operationId": str(uuid4()),
-                    "confirmationToken": token,
-                },
-                format="json",
-            )
-
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.data["error"]["code"], "confirmation_stale")
-        self.assertEqual(DeliveryAttempt.objects.count(), 0)
-        self.assertEqual(gateway.commands, [])
-
-    # テストケース: 同じ操作IDを異なる内容で再利用する
-    # 期待値: 409の安全なoperation_id_reusedを返し、追加送信しない
-    def test_send_rejects_operation_id_reuse(self):
-        operation_id = uuid4()
-        gateway = FakeGateway()
-        first_message = format_message("件名", "本文")
-        second_message = format_message("別件", "本文")
-        with patch("delivery.views.LINEGateway", return_value=gateway):
-            first = self.client.post(
-                "/api/deliveries/",
-                {"subject": "件名", "body": "本文", "operationId": str(operation_id), "confirmationToken": ConfirmationTokenService().issue(first_message)},
-                format="json",
-            )
-            second = self.client.post(
-                "/api/deliveries/",
-                {"subject": "別件", "body": "本文", "operationId": str(operation_id), "confirmationToken": ConfirmationTokenService().issue(second_message)},
-                format="json",
-            )
-
-        self.assertEqual(first.status_code, 201)
-        self.assertEqual(second.status_code, 409)
-        self.assertEqual(second.data["error"]["code"], "operation_id_reused")
-        self.assertEqual(len(gateway.commands), 1)
-
-    # テストケース: 同じ操作IDと確認済み内容を再度送信する
-    # 期待値: 既存terminal結果を200で返し、LINE呼出しを増やさない
-    def test_send_returns_existing_terminal_result(self):
-        operation_id = uuid4()
-        message = format_message("件名", "本文")
-        payload = {"subject": "件名", "body": "本文", "operationId": str(operation_id), "confirmationToken": ConfirmationTokenService().issue(message)}
-        gateway = FakeGateway()
-        with patch("delivery.views.LINEGateway", return_value=gateway):
-            first = self.client.post("/api/deliveries/", payload, format="json")
-            second = self.client.post("/api/deliveries/", payload, format="json")
-
-        self.assertEqual(first.status_code, 201)
-        self.assertEqual(second.status_code, 200)
-        self.assertEqual(second.data["status"], "succeeded")
-        self.assertEqual(len(gateway.commands), 1)
-
-    # テストケース: 別操作IDで同じ内容が処理中の間に送信する
-    # 期待値: 409 delivery_in_progressを返し、LINEを呼ばない
-    def test_send_rejects_same_content_while_processing(self):
-        message = format_message("件名", "本文")
-        now = timezone.now()
-        DeliveryAttempt.objects.create(
-            operation_id=uuid4(), owner_principal_slot=1,
-            subject=message.subject, body=message.body,
-            formatted_text=message.formatted_text, content_fingerprint=message.fingerprint,
-            active_content_fingerprint=message.fingerprint,
-            request_fingerprint=message.fingerprint, accepted_at=now,
-            processing_expires_at=now + timedelta(seconds=30),
-        )
-        gateway = FakeGateway()
-        with patch("delivery.views.LINEGateway", return_value=gateway):
-            response = self.client.post(
-                "/api/deliveries/",
-                {"subject": "件名", "body": "本文", "operationId": str(uuid4()), "confirmationToken": ConfirmationTokenService().issue(message)},
-                format="json",
-            )
-
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.data["error"]["code"], "delivery_in_progress")
-        self.assertEqual(gateway.commands, [])
 
     # テストケース: 存在しない操作IDの状態を確認する
     # 期待値: 試行を作らず安全な404を返す
@@ -625,14 +487,12 @@ class DeliveryApiTests(APITestCase):
     def test_status_maps_processing_and_expired_attempts(self):
         processing = self.create_processing_attempt()
         expired = self.create_processing_attempt(expires_at=timezone.now() - timedelta(seconds=1))
-        gateway = FakeGateway()
-        with patch("delivery.views.LINEGateway", return_value=gateway):
-            processing_response = self.client.post(
-                f"/api/deliveries/{processing.operation_id}/status/", format="json"
-            )
-            expired_response = self.client.post(
-                f"/api/deliveries/{expired.operation_id}/status/", format="json"
-            )
+        processing_response = self.client.post(
+            f"/api/deliveries/{processing.operation_id}/status/", format="json"
+        )
+        expired_response = self.client.post(
+            f"/api/deliveries/{expired.operation_id}/status/", format="json"
+        )
 
         self.assertEqual(processing_response.status_code, 202)
         self.assertEqual(processing_response.data["status"], "processing")
@@ -640,110 +500,6 @@ class DeliveryApiTests(APITestCase):
         self.assertEqual(expired_response.status_code, 200)
         self.assertEqual(expired_response.data["status"], "unknown")
         self.assertEqual(expired_response.data["error"]["code"], "processing_expired")
-        self.assertEqual(gateway.commands, [])
-
-    # テストケース: gatewayが設定不足、外部拒否、timeout、unexpectedを返す。
-    # 期待値: 各結果を安全なfailed/unknown応答と監査日時へ確定し、秘密値やraw errorを露出しない。
-    def test_send_maps_external_failures_to_safe_terminal_responses(self):
-        cases = (
-            (LinePushRejected("configuration"), "failed", "configuration", "Backendの配信設定を確認してください。"),
-            (LinePushRejected("invalid_request"), "failed", "invalid_request", "入力または配信設定を確認してください。"),
-            (LinePushRejected("authentication"), "failed", "authentication", "LINEの認証設定を確認してください。"),
-            (LinePushRejected("permission"), "failed", "permission", "LINEチャネルの権限を確認してください。"),
-            (LinePushRejected("conflict"), "failed", "conflict", "LINE側で送信が競合しました。"),
-            (LinePushRejected("rate_limited"), "failed", "rate_limited", "時間をおいて利用上限を確認してください。"),
-            (LinePushRejected("service_unavailable"), "failed", "service_unavailable", "LINE側の状態を確認してください。"),
-            (LinePushRejected("unexpected"), "failed", "unexpected", "配信結果を確定できませんでした。"),
-            (LinePushUnknown("timeout_unknown"), "unknown", "timeout_unknown", "送信結果を確認できませんでした。"),
-        )
-        for gateway_result, expected_status, expected_code, expected_summary in cases:
-            with self.subTest(code=expected_code):
-                operation_id = uuid4()
-                subject = f"secret-token-{operation_id}"
-                body = f"raw-error-secret-user-{operation_id}"
-                message = format_message(subject, body)
-                gateway = FakeGateway(gateway_result)
-                with patch("delivery.views.LINEGateway", return_value=gateway):
-                    response = self.client.post(
-                        "/api/deliveries/",
-                        {
-                            "subject": subject,
-                            "body": body,
-                            "operationId": str(operation_id),
-                            "confirmationToken": ConfirmationTokenService().issue(message),
-                        },
-                        format="json",
-                    )
-
-                attempt = DeliveryAttempt.objects.get(operation_id=operation_id)
-                rendered = str(response.data)
-                self.assertEqual(response.status_code, 201)
-                self.assertEqual(response.data["status"], expected_status)
-                self.assertEqual(response.data["error"]["code"], expected_code)
-                self.assertEqual(response.data["error"]["summary"], expected_summary)
-                self.assertIsNotNone(attempt.failed_at)
-                self.assertIsNotNone(attempt.completed_at)
-                self.assertEqual(attempt.failure_type, expected_code)
-                self.assertNotIn(subject, rendered)
-                self.assertNotIn(body, rendered)
-                self.assertNotIn("secret-user", rendered)
-                self.assertNotIn("raw-error", rendered)
-                self.assertEqual(len(gateway.commands), 1)
-
-    # テストケース: 実adapter境界へ秘密設定を注入し、SDKがraw情報を含む例外を送出する。
-    # 期待値: API応答、DB、通常ログのいずれにもtoken、固定宛先、raw例外を露出しない。
-    @override_settings(
-        LINE_CHANNEL_ACCESS_TOKEN="actual-token-sentinel",
-        LINE_USER_ID="actual-user-sentinel",
-    )
-    def test_send_does_not_expose_configuration_or_raw_gateway_error(self):
-        operation_id = uuid4()
-        message = format_message("件名", "本文")
-        api = Mock()
-        api.push_message_with_http_info.side_effect = RuntimeError(
-            "actual-raw-error-sentinel"
-        )
-        gateway = LINEGateway(api_client_factory=lambda _: api)
-
-        with (
-            patch("delivery.views.LINEGateway", return_value=gateway),
-            patch("logging.Logger._log") as log_call,
-        ):
-            response = self.client.post(
-                "/api/deliveries/",
-                {
-                    "subject": message.subject,
-                    "body": message.body,
-                    "operationId": str(operation_id),
-                    "confirmationToken": ConfirmationTokenService().issue(message),
-                },
-                format="json",
-            )
-
-        attempt = DeliveryAttempt.objects.get(operation_id=operation_id)
-        persisted_values = " ".join(
-            str(getattr(attempt, field.name))
-            for field in DeliveryAttempt._meta.concrete_fields
-        )
-        public_output = str(response.data)
-        logged_output = str(log_call.call_args_list)
-        for sentinel in (
-            "actual-token-sentinel",
-            "actual-user-sentinel",
-            "actual-raw-error-sentinel",
-        ):
-            with self.subTest(sentinel=sentinel):
-                self.assertNotIn(sentinel, public_output)
-                self.assertNotIn(sentinel, persisted_values)
-                self.assertNotIn(sentinel, logged_output)
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data["status"], "failed")
-        self.assertEqual(response.data["error"]["code"], "unexpected")
-        self.assertEqual(
-            response.data["error"]["summary"],
-            "配信結果を確定できませんでした。",
-        )
-        api.push_message_with_http_info.assert_called_once()
 
     def _linked_snapshot(
         self,
@@ -1452,33 +1208,56 @@ class DeliveryApiTests(APITestCase):
             },
         )
 
-    # テストケース: 既存fixed配信を送信後に同じowner scoped status endpointで照会する
+    # テストケース: linked target情報を持たない旧fixed payloadで新規送信を要求する
+    # 期待値: strict linked DTOとして400拒否し、fixed attemptもLINE callも作成しない
+    def test_legacy_fixed_payload_cannot_create_a_new_delivery(self):
+        operation_id = uuid4()
+        response = self.client.post(
+            "/api/deliveries/",
+            {
+                "subject": "legacy件名",
+                "body": "legacy本文",
+                "operationId": str(operation_id),
+                "confirmationToken": "legacy-confirmation",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertFalse(
+            DeliveryAttempt.objects.filter(operation_id=operation_id).exists()
+        )
+
+    # テストケース: migration済みの既存fixed配信をowner scoped status endpointで照会する
     # 期待値: legacy応答形と確定結果を維持しlinked snapshot・receiptを黙示追加しない
     def test_legacy_fixed_status_keeps_existing_response_contract(self):
         operation_id = uuid4()
         message = format_message("legacy件名", "legacy本文")
-        gateway = FakeGateway()
-        with patch("delivery.views.LINEGateway", return_value=gateway):
-            sent = self.client.post(
-                "/api/deliveries/",
-                {
-                    "subject": message.subject,
-                    "body": message.body,
-                    "operationId": str(operation_id),
-                    "confirmationToken": ConfirmationTokenService().issue(message),
-                },
-                format="json",
-            )
-            DeliveryAttempt.objects.filter(operation_id=operation_id).update(
-                owner_principal_slot=self.owner_session.owner_slot
-            )
-            checked = self.client.post(
-                f"/api/deliveries/{operation_id}/status/",
-                {},
-                format="json",
-            )
+        now = timezone.now()
+        DeliveryAttempt.objects.create(
+            operation_id=operation_id,
+            owner_principal_slot=self.owner_session.owner_slot,
+            subject=message.subject,
+            body=message.body,
+            formatted_text=message.formatted_text,
+            content_fingerprint=message.fingerprint,
+            active_content_fingerprint=None,
+            request_fingerprint=message.fingerprint,
+            target_mode=DeliveryAttempt.TargetMode.FIXED_USER,
+            status=DeliveryAttempt.Status.SUCCEEDED,
+            accepted_at=now,
+            processing_expires_at=now + timedelta(seconds=30),
+            sent_at=now,
+            completed_at=now,
+            line_request_id="request-1",
+        )
+        checked = self.client.post(
+            f"/api/deliveries/{operation_id}/status/",
+            {},
+            format="json",
+        )
 
-        self.assertEqual(sent.status_code, 201)
         self.assertEqual(checked.status_code, 200)
         self.assertEqual(
             set(checked.data),
@@ -1495,4 +1274,3 @@ class DeliveryApiTests(APITestCase):
         self.assertEqual(checked.data["lineRequestId"], "request-1")
         self.assertNotIn("snapshot", checked.data)
         self.assertNotIn("receipt", checked.data)
-        self.assertEqual(len(gateway.commands), 1)

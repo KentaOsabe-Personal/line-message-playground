@@ -5,8 +5,6 @@ from django.test import SimpleTestCase
 from delivery.serializers import (
     LinkedPreviewRequestSerializer,
     LinkedSendDeliveryRequestSerializer,
-    PreviewRequestSerializer,
-    SendDeliveryRequestSerializer,
 )
 
 
@@ -37,27 +35,6 @@ def send_payload(**overrides):
 
 
 class LinkedDeliveryRequestSerializerTests(SimpleTestCase):
-    # テストケース: linked route接続前のfixed配信requestを検証する
-    # 期待値: 既存endpoint向けDTOは従来のfield集合を維持する
-    def test_fixed_delivery_request_contract_remains_compatible(self):
-        preview = PreviewRequestSerializer(data={"subject": "件名", "body": "本文"})
-        send = SendDeliveryRequestSerializer(
-            data={
-                "subject": "件名",
-                "body": "本文",
-                "operationId": OPERATION_ID,
-                "confirmationToken": "opaque-confirmation",
-            }
-        )
-
-        self.assertTrue(preview.is_valid(), preview.errors)
-        self.assertEqual(set(preview.validated_data), {"subject", "body"})
-        self.assertTrue(send.is_valid(), send.errors)
-        self.assertEqual(
-            set(send.validated_data),
-            {"subject", "body", "operationId", "confirmationToken"},
-        )
-
     # テストケース: canonicalなpreview／send DTOを検証する
     # 期待値: UUIDとbooleanの型を保ち、宣言済みfieldだけを内部値へ渡す
     def test_valid_requests_expose_only_canonical_declared_fields(self):

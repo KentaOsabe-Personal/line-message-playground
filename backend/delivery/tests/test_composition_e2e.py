@@ -499,10 +499,6 @@ class LinkedDeliveryCompositionE2ETests(APITestCase):
                 "delivery.gateway.LINEChannelPushGateway._build_api",
                 side_effect=AssertionError("linked gateway must not start"),
             ) as linked_api_factory,
-            patch(
-                "delivery.gateway.LINEGateway.push_text",
-                side_effect=AssertionError("fixed gateway must not run"),
-            ) as fixed_push,
         ):
             first = self.client.post("/api/deliveries/", payload, format="json")
             repeated = self.client.post("/api/deliveries/", payload, format="json")
@@ -514,7 +510,6 @@ class LinkedDeliveryCompositionE2ETests(APITestCase):
         self.assertEqual(first.data["error"]["code"], "configuration")
         self.assertEqual(DeliveryAttempt.objects.count(), 1)
         linked_api_factory.assert_not_called()
-        fixed_push.assert_not_called()
         observed = repr(
             (
                 first.data,

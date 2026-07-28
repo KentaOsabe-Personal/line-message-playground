@@ -13,16 +13,12 @@ from lineaccounts.authentication import OwnerPrincipal, OwnerSessionContext
 from lineaccounts.views import OwnerProtectedAPIView
 
 from .confirmation import (
-    ConfirmationError,
     ConfirmationService,
-    ConfirmationTokenService,
 )
 from .formatters import (
     MessageValidationError,
-    format_message,
     format_message_snapshot,
 )
-from .gateway import LINEGateway
 from .serializers import (
     CanonicalUUIDField,
     DeliveryChannelChoiceResponseSerializer,
@@ -30,14 +26,8 @@ from .serializers import (
     EmptyRequestSerializer,
     LinkedPreviewRequestSerializer,
     LinkedSendDeliveryRequestSerializer,
-    SendDeliveryRequestSerializer,
 )
-from .services import (
-    DeliveryInProgressError,
-    DeliveryService,
-    OperationIdReusedError,
-    SubmitDeliveryCommand,
-)
+from .services import DeliveryService
 from .types import (
     AcceptedLinkedAttempt,
     AttemptConflict,
@@ -328,46 +318,6 @@ class PreviewAPIView(LocalDeliveryAPIView):
 
 class DeliveryAPIView(LocalDeliveryAPIView):
     def post(self, request):
-        if any(
-            key in request.data
-            for key in ("channelId", "recipientId", "receiptRequested")
-        ):
-            return self._post_linked(request)
-        serializer = SendDeliveryRequestSerializer(data=request.data)
-        if not serializer.is_valid():
-            return serializer_error_response(serializer)
-        values = serializer.validated_data
-        try:
-            message = format_message(values["subject"], values["body"])
-        except MessageValidationError as error:
-            return message_error_response(error)
-        try:
-            ConfirmationTokenService().verify(values["confirmationToken"], message)
-        except ConfirmationError as error:
-            code = (
-                "confirmation_stale"
-                if str(error) == "confirmation_mismatch"
-                else "confirmation_required"
-            )
-            return error_response(code, status.HTTP_400_BAD_REQUEST)
-        try:
-            submission = DeliveryService(gateway=LINEGateway()).submit(
-                SubmitDeliveryCommand(values["operationId"], message)
-            )
-        except OperationIdReusedError:
-            return error_response("operation_id_reused", status.HTTP_409_CONFLICT)
-        except DeliveryInProgressError:
-            return error_response("delivery_in_progress", status.HTTP_409_CONFLICT)
-        http_status = (
-            status.HTTP_201_CREATED
-            if submission.created
-            else status.HTTP_202_ACCEPTED
-            if submission.status == "processing"
-            else status.HTTP_200_OK
-        )
-        return submission_response(submission, http_status)
-
-    def _post_linked(self, request):
         serializer = LinkedSendDeliveryRequestSerializer(data=request.data)
         if not serializer.is_valid():
             return serializer_error_response(serializer)

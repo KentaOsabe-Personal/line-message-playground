@@ -1,39 +1,26 @@
 import {
   parseDeliveryChannelChoices,
   parseDeliveryRecipientChoices,
-  parseDeliveryResult,
   parseErrorResponse,
   parseLinkedDeliveryStatus,
   parseLinkedPreviewResponse,
-  parsePreviewResponse,
 } from './deliveryDto'
 import type {
   DeliveryChannelChoice,
   DeliveryRecipientChoice,
-  DeliveryResult,
   LinkedDeliveryStatus,
   LinkedPreviewResponse,
   Parsed,
-  PreviewResponse,
   SafeError,
 } from './deliveryDto'
 import { createProtectedHttpClient, ProtectedHttpClientError } from './httpApi'
 import type { ProtectedHttpClient } from './httpApi'
-
-export type PreviewRequest = { subject: string; body: string }
-export type SendDeliveryRequest = PreviewRequest & { operationId: string; confirmationToken: string }
 
 export class DeliveryApiError extends Error {
   constructor(public readonly error: SafeError, public readonly httpStatus?: number) {
     super(error.summary)
     this.name = 'DeliveryApiError'
   }
-}
-
-export interface DeliveryApiClient {
-  preview(input: PreviewRequest): Promise<PreviewResponse>
-  send(input: SendDeliveryRequest): Promise<DeliveryResult>
-  checkStatus(operationId: string): Promise<DeliveryResult>
 }
 
 export type LinkedPreviewRequest = {
@@ -208,19 +195,4 @@ async function requestProtected<T>(
   const parsed = parse(payload)
   if (!parsed.ok) throw new DeliveryApiError(parsed.error, response.status)
   return parsed.value
-}
-
-export function createDeliveryApiClient(
-  protectedClient: ProtectedHttpClient = createProtectedHttpClient(),
-): DeliveryApiClient {
-  const request = <T>(
-    url: string,
-    parse: (value: unknown) => Parsed<T>,
-    body?: unknown,
-  ) => requestProtected(protectedClient, url, 'POST', parse, body)
-  return {
-    preview: (input) => request('/api/deliveries/preview/', parsePreviewResponse, input),
-    send: (input) => request('/api/deliveries/', parseDeliveryResult, input),
-    checkStatus: (operationId) => request(`/api/deliveries/${encodeURIComponent(operationId)}/status/`, parseDeliveryResult),
-  }
 }

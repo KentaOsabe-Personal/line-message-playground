@@ -1,13 +1,11 @@
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.utils import timezone
 
-from .gateway import LINEGateway, LinePushAccepted, LinePushRejected, LinePushUnknown
-from .formatters import FormattedMessage
 from .models import DeliveryAttempt
 from .types import (
     AcceptedDeliveryCommand,
@@ -25,23 +23,6 @@ from .types import (
     SubmitLinkedDelivery,
     TargetUnavailable,
 )
-
-
-PROCESSING_TIMEOUT = timedelta(seconds=30)
-
-
-class OperationIdReusedError(ValueError):
-    pass
-
-
-class DeliveryInProgressError(ValueError):
-    pass
-
-
-@dataclass(frozen=True)
-class SubmitDeliveryCommand:
-    operation_id: UUID
-    message: FormattedMessage
 
 
 @dataclass(frozen=True)
@@ -94,7 +75,6 @@ DeliverySubmission = (
 class DeliveryService:
     def __init__(
         self,
-        gateway=None,
         *,
         clock=timezone.now,
         target_directory=None,
@@ -103,27 +83,12 @@ class DeliveryService:
         credential_repository=None,
         channel_push_gateway=None,
     ):
-        self.gateway = gateway
         self.clock = clock
         self._target_directory = target_directory
         self._attempt_repository = attempt_repository
         self._receipt_capability_factory = receipt_capability_factory
         self._credential_repository = credential_repository
         self._channel_push_gateway = channel_push_gateway
-
-    def submit(self, command):
-        if self.gateway is None:
-            self.gateway = LINEGateway()
-        attempt, created = self._accept(command)
-        if not created:
-            return self._submission(attempt, created=False)
-
-        gateway_result = self.gateway.push_text(
-            command=self._line_command(command)
-        )
-        self._finalize(attempt.pk, gateway_result)
-        attempt.refresh_from_db()
-        return self._submission(attempt, created=True)
 
     def accept_confirmed(self, command):
         """確認済みlinked commandをlive targetへ再検証してacceptする。
@@ -400,93 +365,6 @@ class DeliveryService:
         if target.snapshot.friendship_state == "unknown":
             return TargetUnavailable("friendship_unknown")
         return TargetUnavailable()
-
-    @staticmethod
-    def _line_command(command):
-        from .gateway import LinePushCommand
-
-        return LinePushCommand(
-            retry_key=command.operation_id,
-            text=command.message.formatted_text,
-        )
-
-    def _accept(self, command):
-        existing = DeliveryAttempt.objects.filter(
-            operation_id=command.operation_id
-        ).first()
-        if existing is not None:
-            return self._classify_existing(existing, command.message.fingerprint)
-
-        now = self.clock()
-        try:
-            with transaction.atomic():
-                attempt = DeliveryAttempt.objects.create(
-                    operation_id=command.operation_id,
-                    owner_principal_slot=1,
-                    subject=command.message.subject,
-                    body=command.message.body,
-                    formatted_text=command.message.formatted_text,
-                    content_fingerprint=command.message.fingerprint,
-                    active_content_fingerprint=command.message.fingerprint,
-                    request_fingerprint=command.message.fingerprint,
-                    accepted_at=now,
-                    processing_expires_at=now + PROCESSING_TIMEOUT,
-                )
-            return attempt, True
-        except IntegrityError:
-            existing = DeliveryAttempt.objects.filter(
-                operation_id=command.operation_id
-            ).first()
-            if existing is not None:
-                return self._classify_existing(existing, command.message.fingerprint)
-            if DeliveryAttempt.objects.filter(
-                active_content_fingerprint=command.message.fingerprint
-            ).exists():
-                raise DeliveryInProgressError("delivery_in_progress")
-            raise
-
-    @staticmethod
-    def _classify_existing(attempt, fingerprint):
-        if attempt.content_fingerprint != fingerprint:
-            raise OperationIdReusedError("operation_id_reused")
-        return attempt, False
-
-    def _finalize(self, attempt_id, gateway_result):
-        completed_at = self.clock()
-        values = {
-            "active_content_fingerprint": None,
-            "completed_at": completed_at,
-        }
-        if isinstance(gateway_result, LinePushAccepted):
-            values.update(
-                status=DeliveryAttempt.Status.SUCCEEDED,
-                sent_at=completed_at,
-                line_request_id=gateway_result.request_id,
-                line_accepted_request_id=gateway_result.accepted_request_id,
-            )
-        elif isinstance(gateway_result, LinePushUnknown):
-            values.update(
-                status=DeliveryAttempt.Status.UNKNOWN,
-                failure_type=gateway_result.failure_type,
-                failed_at=completed_at,
-            )
-        elif isinstance(gateway_result, LinePushRejected):
-            values.update(
-                status=DeliveryAttempt.Status.FAILED,
-                failure_type=gateway_result.failure_type,
-                failed_at=completed_at,
-            )
-        else:
-            values.update(
-                status=DeliveryAttempt.Status.FAILED,
-                failure_type=DeliveryAttempt.FailureType.UNEXPECTED,
-                failed_at=completed_at,
-            )
-        with transaction.atomic():
-            DeliveryAttempt.objects.filter(
-                pk=attempt_id,
-                status=DeliveryAttempt.Status.PROCESSING,
-            ).update(**values)
 
     @staticmethod
     def _submission(attempt, *, created):

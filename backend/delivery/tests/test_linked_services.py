@@ -332,11 +332,7 @@ class LinkedDeliveryAcceptTests(SimpleTestCase):
         self.assertIsNone(repository.commands[0].receipt_commitment)
         self.assertIsNone(result.push_preparation.receipt_capability)
 
-    @patch(
-        "delivery.services.LINEGateway",
-        side_effect=AssertionError("linked accept must not construct gateway"),
-    )
-    def test_accept_stage_has_no_gateway_dependency_or_call(self, _gateway):
+    def test_accept_stage_has_no_fixed_gateway_dependency_or_call(self):
         repository = FakeAttemptRepository(
             ExistingAttempt(self._snapshot(self.operation_id))
         )
@@ -345,7 +341,6 @@ class LinkedDeliveryAcceptTests(SimpleTestCase):
         result = service.accept_confirmed(self._command())
 
         self.assertIsInstance(result, ExistingAttempt)
-        _gateway.assert_not_called()
 
     def _service(self, repository):
         return DeliveryService(
@@ -843,26 +838,20 @@ class LinkedDeliveryFinalizationTests(LinkedDeliveryAcceptTests):
             AttemptAccepted(9, self.processing),
             final_snapshot=unknown,
         )
-        forbidden = patch(
-            "delivery.services.LINEGateway",
-            side_effect=AssertionError("must not construct a gateway"),
+        service = DeliveryService(
+            clock=lambda: NOW,
+            attempt_repository=repository,
         )
-        with forbidden as gateway_constructor:
-            service = DeliveryService(
-                clock=lambda: NOW,
-                attempt_repository=repository,
-            )
-            for _ in range(2):
-                result = service.finalize_linked_push(
-                    LinkedPushExecuted(
-                        9,
-                        LinePushUnknown("response_unknown"),
-                    )
+        for _ in range(2):
+            result = service.finalize_linked_push(
+                LinkedPushExecuted(
+                    9,
+                    LinePushUnknown("response_unknown"),
                 )
-                self.assertIs(result.snapshot, unknown)
+            )
+            self.assertIs(result.snapshot, unknown)
 
         self.assertEqual(len(repository.finalizations), 2)
-        gateway_constructor.assert_not_called()
 
     def test_already_stored_results_cannot_be_finalized_as_gateway_work(self):
         failed = replace(

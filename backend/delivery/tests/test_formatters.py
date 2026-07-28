@@ -1,13 +1,6 @@
-from django.core import signing
 from django.test import SimpleTestCase
 
-from delivery.confirmation import (
-    CONFIRMATION_SALT,
-    ConfirmationError,
-    ConfirmationTokenService,
-)
 from delivery.formatters import (
-    FormattedMessage,
     MessageValidationError,
     count_utf16_code_units,
     format_message_snapshot,
@@ -114,62 +107,3 @@ class LinkedRecipientMessageFormatterTests(SimpleTestCase):
         with self.assertRaises(MessageValidationError) as raised:
             format_message_snapshot("s", body + "a")
         self.assertEqual(raised.exception.code, "message_too_long")
-
-
-class ConfirmationTokenServiceTests(SimpleTestCase):
-    # テストケース: preview済み内容のtokenを同じ内容と変更内容で検証する。
-    # 期待値: 同じ内容だけ成功し、変更内容と改変tokenは確認エラーになる。
-    def test_only_confirmed_content_is_accepted(self):
-        service = ConfirmationTokenService()
-        message = format_message("件名", "本文")
-        token = service.issue(message)
-
-        service.verify(token, message)
-        with self.assertRaises(ConfirmationError):
-            service.verify(token, format_message("件名", "変更"))
-        with self.assertRaises(ConfirmationError):
-            service.verify(token + "x", message)
-
-        old_version = FormattedMessage(
-            subject=message.subject,
-            body=message.body,
-            formatted_text=message.formatted_text,
-            fingerprint=message.fingerprint,
-            formatter_version=message.formatter_version + 1,
-        )
-        with self.assertRaises(ConfirmationError):
-            service.verify(token, old_version)
-
-    # テストケース: 発行したopaque tokenの復号payloadを確認する。
-    # 期待値: versionとfingerprintだけを含み、入力本文や操作IDを含まない。
-    def test_token_payload_contains_only_version_and_fingerprint(self):
-        service = ConfirmationTokenService()
-        message = format_message("secret-subject", "secret-body")
-        token = service.issue(message)
-
-        payload = service.decode_for_test(token)
-        self.assertEqual(set(payload), {"v", "fp"})
-        self.assertNotIn("secret-subject", token)
-        self.assertNotIn("secret-body", token)
-
-    # テストケース: versionを書き換えて再署名した確認tokenを検証する。
-    # 期待値: 署名自体が正しくても現行formatter versionと異なるtokenは拒否される。
-    def test_rejects_resigned_token_with_different_version(self):
-        service = ConfirmationTokenService()
-        message = format_message("件名", "本文")
-        token = signing.dumps(
-            {"v": message.formatter_version + 1, "fp": message.fingerprint},
-            salt=CONFIRMATION_SALT,
-            compress=True,
-        )
-
-        with self.assertRaises(ConfirmationError):
-            service.verify(token, message)
-
-    # テストケース: 無効な入力から確認tokenの発行を試みる。
-    # 期待値: 整形段階で拒否され、送信可能なmessageやtokenは生成されない。
-    def test_invalid_input_cannot_produce_confirmation_token(self):
-        service = ConfirmationTokenService()
-
-        with self.assertRaises(MessageValidationError):
-            service.issue(format_message(" ", "本文"))

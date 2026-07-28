@@ -160,9 +160,6 @@ class FriendshipSecurityIntegrationTests(TestCase):
 
         with (
             patch("delivery.views.DeliveryService") as delivery_service,
-            patch("delivery.views.LINEGateway") as view_gateway,
-            patch("delivery.services.LINEGateway") as service_gateway,
-            patch("delivery.gateway.LINEGateway") as gateway_type,
             patch("delivery.gateway.ApiClient") as api_client,
             patch("delivery.gateway.MessagingApi") as messaging_api,
         ):
@@ -172,9 +169,6 @@ class FriendshipSecurityIntegrationTests(TestCase):
         self.assertEqual(response.content, b"")
         self.assertEqual(DeliveryAttempt.objects.count(), 0)
         delivery_service.assert_not_called()
-        view_gateway.assert_not_called()
-        service_gateway.assert_not_called()
-        gateway_type.assert_not_called()
         api_client.assert_not_called()
         messaging_api.assert_not_called()
         audits = list(FriendshipSyncAudit.objects.order_by("pk"))

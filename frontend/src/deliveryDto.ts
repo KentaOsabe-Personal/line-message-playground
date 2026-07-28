@@ -43,11 +43,6 @@ export type SafeErrorCode =
   | 'csrf_missing'
 export type SafeError = { code: SafeErrorCode; summary: string; fields?: Record<string, string[]> }
 
-export type PreviewResponse = { formattedText: string; confirmationToken: string }
-export type DeliveryProcessing = { status: 'processing'; operationId: string; acceptedAt: string; expiresAt: string }
-export type DeliverySuccess = { status: 'succeeded'; operationId: string; acceptedAt: string; completedAt: string; lineRequestId: string | null }
-export type DeliveryFailure = { status: 'failed' | 'unknown'; operationId: string; acceptedAt: string; completedAt: string; error: SafeError; lineRequestId: string | null }
-export type DeliveryResult = DeliveryProcessing | DeliverySuccess | DeliveryFailure
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: SafeError }
 
 export type FriendshipState = 'friend' | 'not_friend' | 'unknown'
@@ -530,43 +525,7 @@ export function parseLinkedDeliveryStatus(value: unknown): Parsed<LinkedDelivery
 
 export const parseDeliveryStatus = parseLinkedDeliveryStatus
 
-// 既存fixed配信の互換DTO。linked API adapterは上の専用parserを利用する。
-export function parsePreviewResponse(value: unknown): Parsed<PreviewResponse> {
-  if (!isRecord(value) || !hasExactKeys(value, ['formattedText', 'confirmationToken']) || !isString(value.formattedText) || !isString(value.confirmationToken)) return protocolError()
-  return { ok: true, value: { formattedText: value.formattedText, confirmationToken: value.confirmationToken } }
-}
-
 export function parseErrorResponse(value: unknown): Parsed<SafeError> {
   if (!isRecord(value) || !hasExactKeys(value, ['error']) || !isSafeError(value.error)) return protocolError()
   return { ok: true, value: copySafeError(value.error) }
-}
-
-export function parseDeliveryResult(value: unknown): Parsed<DeliveryResult> {
-  if (!isRecord(value) || !isString(value.status) || !isCanonicalUuid(value.operationId) || !isString(value.acceptedAt)) return protocolError()
-  if (value.status === 'processing' && hasExactKeys(value, ['status', 'operationId', 'acceptedAt', 'expiresAt']) && isString(value.expiresAt)) {
-    return { ok: true, value: { status: value.status, operationId: value.operationId, acceptedAt: value.acceptedAt, expiresAt: value.expiresAt } }
-  }
-  if (value.status === 'succeeded' && hasExactKeys(value, ['status', 'operationId', 'acceptedAt', 'completedAt', 'lineRequestId']) && isString(value.completedAt) && isNullableString(value.lineRequestId)) {
-    return { ok: true, value: { status: value.status, operationId: value.operationId, acceptedAt: value.acceptedAt, completedAt: value.completedAt, lineRequestId: value.lineRequestId } }
-  }
-  if (
-    (value.status === 'failed' || value.status === 'unknown') &&
-    hasExactKeys(value, ['status', 'operationId', 'acceptedAt', 'completedAt', 'error', 'lineRequestId']) &&
-    isString(value.completedAt) &&
-    isSafeError(value.error) &&
-    isNullableString(value.lineRequestId) &&
-    (
-      value.status === 'failed'
-        ? failedDeliveryCodes.has(value.error.code)
-        : unknownDeliveryCodes.has(value.error.code)
-    )
-  ) return { ok: true, value: {
-    status: value.status,
-    operationId: value.operationId,
-    acceptedAt: value.acceptedAt,
-    completedAt: value.completedAt,
-    error: copySafeError(value.error),
-    lineRequestId: value.lineRequestId,
-  } }
-  return protocolError()
 }

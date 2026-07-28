@@ -14,17 +14,6 @@ class StrictCharField(serializers.CharField):
         return super().to_internal_value(data)
 
 
-# fixed配信APIが後続のroute切替まで使用する既存request契約。
-class PreviewRequestSerializer(serializers.Serializer):
-    subject = StrictCharField(allow_blank=True, trim_whitespace=False)
-    body = StrictCharField(allow_blank=True, trim_whitespace=False)
-
-
-class SendDeliveryRequestSerializer(PreviewRequestSerializer):
-    operationId = serializers.UUIDField()
-    confirmationToken = StrictCharField(allow_blank=False)
-
-
 class CanonicalUUIDField(serializers.UUIDField):
     def to_internal_value(self, data):
         if not isinstance(data, str):
