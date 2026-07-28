@@ -1,17 +1,12 @@
-from django.core import signing
 from django.test import SimpleTestCase
 
-from delivery.confirmation import (
-    CONFIRMATION_SALT,
-    ConfirmationError,
-    ConfirmationTokenService,
-)
 from delivery.formatters import (
-    FormattedMessage,
     MessageValidationError,
     count_utf16_code_units,
+    format_message_snapshot,
     format_message,
 )
+from delivery.types import MessageSnapshot
 
 
 class MessageFormatterTests(SimpleTestCase):
@@ -68,60 +63,47 @@ class MessageFormatterTests(SimpleTestCase):
         )
 
 
-class ConfirmationTokenServiceTests(SimpleTestCase):
-    # テストケース: preview済み内容のtokenを同じ内容と変更内容で検証する。
-    # 期待値: 同じ内容だけ成功し、変更内容と改変tokenは確認エラーになる。
-    def test_only_confirmed_content_is_accepted(self):
-        service = ConfirmationTokenService()
-        message = format_message("件名", "本文")
-        token = service.issue(message)
+class LinkedRecipientMessageFormatterTests(SimpleTestCase):
+    # テストケース: 新しい配信経路で件名と改行を含む本文を整形する。
+    # 期待値: 既存formatterと同じ整形済みtextとfingerprintのsnapshotへ収束する。
+    def test_builds_same_canonical_snapshot_as_existing_formatter(self):
+        legacy = format_message("件名", "1行目\n2行目")
 
-        service.verify(token, message)
-        with self.assertRaises(ConfirmationError):
-            service.verify(token, format_message("件名", "変更"))
-        with self.assertRaises(ConfirmationError):
-            service.verify(token + "x", message)
+        snapshot = format_message_snapshot("件名", "1行目\n2行目")
 
-        old_version = FormattedMessage(
-            subject=message.subject,
-            body=message.body,
-            formatted_text=message.formatted_text,
-            fingerprint=message.fingerprint,
-            formatter_version=message.formatter_version + 1,
-        )
-        with self.assertRaises(ConfirmationError):
-            service.verify(token, old_version)
+        self.assertIsInstance(snapshot, MessageSnapshot)
+        self.assertEqual(snapshot.subject, legacy.subject)
+        self.assertEqual(snapshot.body, legacy.body)
+        self.assertEqual(snapshot.formatted_text, "【件名】\n\n1行目\n2行目")
+        self.assertEqual(snapshot.fingerprint, legacy.fingerprint)
 
-    # テストケース: 発行したopaque tokenの復号payloadを確認する。
-    # 期待値: versionとfingerprintだけを含み、入力本文や操作IDを含まない。
-    def test_token_payload_contains_only_version_and_fingerprint(self):
-        service = ConfirmationTokenService()
-        message = format_message("secret-subject", "secret-body")
-        token = service.issue(message)
+    # テストケース: 新しい配信経路の件名または本文へ空白だけを指定する。
+    # 期待値: 該当fieldを示す検証エラーとなり、snapshotは生成されない。
+    def test_rejects_blank_fields_before_snapshot_creation(self):
+        for subject, body, field in (
+            (" \t", "本文", "subject"),
+            ("件名", "\n ", "body"),
+        ):
+            with (
+                self.subTest(field=field),
+                self.assertRaises(MessageValidationError) as raised,
+            ):
+                format_message_snapshot(subject, body)
 
-        payload = service.decode_for_test(token)
-        self.assertEqual(set(payload), {"v", "fp"})
-        self.assertNotIn("secret-subject", token)
-        self.assertNotIn("secret-body", token)
+            self.assertEqual(raised.exception.code, "blank")
+            self.assertEqual(raised.exception.field, field)
 
-    # テストケース: versionを書き換えて再署名した確認tokenを検証する。
-    # 期待値: 署名自体が正しくても現行formatter versionと異なるtokenは拒否される。
-    def test_rejects_resigned_token_with_different_version(self):
-        service = ConfirmationTokenService()
-        message = format_message("件名", "本文")
-        token = signing.dumps(
-            {"v": message.formatter_version + 1, "fp": message.fingerprint},
-            salt=CONFIRMATION_SALT,
-            compress=True,
-        )
+    # テストケース: receipt表示文言とは独立にUTF-16で5,000単位と5,001単位の本文を整形する。
+    # 期待値: text一件だけの長さで境界判定し、receipt template文言を混入しない。
+    def test_enforces_text_limit_without_receipt_template_copy(self):
+        receipt_template_copy = "受け取りました"
+        prefix_units = count_utf16_code_units("【s】\n\n")
+        body = "a" * (5000 - prefix_units)
 
-        with self.assertRaises(ConfirmationError):
-            service.verify(token, message)
+        snapshot = format_message_snapshot("s", body)
 
-    # テストケース: 無効な入力から確認tokenの発行を試みる。
-    # 期待値: 整形段階で拒否され、送信可能なmessageやtokenは生成されない。
-    def test_invalid_input_cannot_produce_confirmation_token(self):
-        service = ConfirmationTokenService()
-
-        with self.assertRaises(MessageValidationError):
-            service.issue(format_message(" ", "本文"))
+        self.assertEqual(count_utf16_code_units(snapshot.formatted_text), 5000)
+        self.assertNotIn(receipt_template_copy, snapshot.formatted_text)
+        with self.assertRaises(MessageValidationError) as raised:
+            format_message_snapshot("s", body + "a")
+        self.assertEqual(raised.exception.code, "message_too_long")

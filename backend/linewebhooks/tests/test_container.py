@@ -7,6 +7,8 @@ from time import monotonic
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
+from delivery.receipt import ReceiptHandler
+from delivery.repositories import DjangoAttemptRepository
 from linechannels import runtime
 from linechannels.crypto import FernetCredentialCipher
 from linechannels.models import LineChannel, LineChannelCredential
@@ -34,7 +36,7 @@ class WebhookCompositionRootTests(SimpleTestCase):
         )
 
     # テストケース: Webhook ingress serviceをcomposition rootから構築する
-    # 期待値: friendshipとinteractionがprofile付きで静的登録される
+    # 期待値: friendship、interaction、delivery receiptが静的登録される
     def test_builds_service_with_static_runtime_handlers(self) -> None:
         runtime.load_credential_keyring()
         service = build_webhook_ingress_service()
@@ -85,6 +87,18 @@ class WebhookCompositionRootTests(SimpleTestCase):
             message_registration.handler._monotonic,
             service._monotonic_clock,
         )
+        action_registry = message_registration.handler._action_registry
+        self.assertEqual(
+            tuple(action_registry._handlers),
+            ("delivery.received",),
+        )
+        receipt_handler = action_registry.resolve("delivery.received")
+        self.assertIsInstance(receipt_handler, ReceiptHandler)
+        self.assertIsInstance(
+            receipt_handler._attempt_repository,
+            DjangoAttemptRepository,
+        )
+        self.assertIs(receipt_handler._clock, timezone.now)
         self.assertIsInstance(service._audit_logger, SafeWebhookAuditLogger)
         self.assertIs(service._monotonic_clock, monotonic)
         self.assertIs(service._observed_at_clock, timezone.now)

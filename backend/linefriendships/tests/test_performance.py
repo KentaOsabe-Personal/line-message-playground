@@ -127,9 +127,7 @@ class FriendshipPerformanceIntegrationTests(TransactionTestCase):
         handler = build_friendship_sync_handler()
 
         with (
-            patch("delivery.views.DeliveryService") as delivery_service,
-            patch("delivery.views.LINEGateway") as view_gateway,
-            patch("delivery.services.LINEGateway") as service_gateway,
+            patch("delivery.views.build_delivery_service") as delivery_service,
             patch("delivery.gateway.ApiClient") as api_client,
             patch("delivery.gateway.MessagingApi") as messaging_api,
         ):
@@ -151,8 +149,6 @@ class FriendshipPerformanceIntegrationTests(TransactionTestCase):
                         )
 
         delivery_service.assert_not_called()
-        view_gateway.assert_not_called()
-        service_gateway.assert_not_called()
         api_client.assert_not_called()
         messaging_api.assert_not_called()
 

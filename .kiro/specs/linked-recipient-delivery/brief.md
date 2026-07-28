@@ -14,7 +14,7 @@
 
 ## Approach
 
-既存の配信サービスと状態機械を維持しながら、送信commandへ内部`channelId`と`recipientId`を追加する。Backendで所有権、有効状態、チャネル別友だち状態を検証し、確認トークンとcontent fingerprintへ対象contextを含める。Gatewayは環境変数を直接読まず、選択チャネルの資格情報をrepositoryから受け取る。必要に応じて署名付きpostbackトークンを含む「受け取りました」操作を送り、`line-webhook-command-dispatch`のaction契約経由で当該配信だけを確認済みにする。
+既存の配信サービスと状態機械を維持しながら、送信commandへ内部`channelId`と`recipientId`を追加する。Backendで所有権、有効状態、チャネル別友だち状態を検証し、確認トークンとrequest fingerprintへowner principal、送信時identity、対象contextを含める。状態照会はunlink後も残るsingleton owner slotで認可し、削除されるidentity UUIDは監査snapshotへ分離する。Gatewayは環境変数を直接読まず、選択チャネルの資格情報をrepositoryから受け取る。必要に応じてpostback capability candidateをaccept前のmemory上で生成し、勝者のdigestだけをattemptと原子的に保存して「受け取りました」操作へ使用する。
 
 ## Scope
 
@@ -45,6 +45,19 @@
 
 - **Extends**: なし。既存`line-message-delivery`を初期版の承認済み仕様として残し、本specが後続migrationと新しい公開契約を所有する
 - **Adjacent**: 既存のformatting、confirmation、delivery service、gateway、Frontend reducerを再利用・拡張する。Webhook受付は`line-webhook-ingress`、汎用postback振り分けは`line-webhook-command-dispatch`が所有し、本specは受取確認tokenの検証と配信記録更新を所有する
+
+## Spec Size Assessment
+
+- **Policy verdict before exception**: `SPLIT_REQUIRED`（設計具体化後の上限見積りが40件以上）
+- **Effective verdict**: `PASS (single-spec, user-approved size exception)`。2026-07-23にユーザーがサイズ超過リスクを受容して単一Spec継続を明示した
+- **Projected executable tasks**: 35〜42件（選択API、対象検証、migration、確認・冪等性、チャネル別push、受取確認action、Frontend、競合・統合・セキュリティテストを含む）
+- **Independent responsibility seams**: 5（選択可能なチャネル・recipient一覧、対象込み確認、対象contextを含む冪等性・監査、チャネル別LINE gateway、明示的受取確認）
+- **Independently deliverable outcomes**: 2（登録済みrecipientへの選択配信、当該配信に対する明示的受取確認）。ただし、両者は同じ配信記録と利用者向けの一連の確認体験へ収束する
+- **External/stateful workflows**: 2（確認後のpush配信、Webhook postbackによる受取確認）。pushのterminal状態と受取確認属性を分離し、後続Webhookが配信結果を上書きしない
+- **Internal workstreams and dependency order**: `公開契約・migration → 選択肢取得と対象検証 → 対象込み確認・冪等性・gateway → 受取確認action → Frontend・境界横断統合`
+- **Review and validation strategy**: RequirementsとDesignで責任境界、共有する配信記録、外部通信前後の状態遷移を個別にレビューする。Tasksでは実数を隠さずworkstream別task-graph sanity reviewを行い、file owner、contract、依存順、integration checkpointを明示する
+- **Rationale**: policy上は上限42件で分割対象だが、ユーザーがレビュー負荷・実装期間・手戻りリスクを理解して単一Spec継続を承認した。5つの内部境界は一つの「選択した登録済みrecipientへ安全に送り、その配信を追跡する」成果を共同で構成し、pushと受取確認も同じ配信記録、status API、Frontend、rolloutへ収束する
+- **Exception boundary**: 例外は現在のサイズだけに適用する。汎用複数recipient、非同期worker、別receipt ledger、owner再割当て、独立rolloutが追加される場合は再度`$kiro-discovery`へ戻す
 
 ## Constraints
 

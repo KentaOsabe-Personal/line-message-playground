@@ -161,11 +161,12 @@ class AccountUnlinkServiceTests(TestCase):
         preview = service.preview(self.principal, now)
         audit = DeliveryAttempt.objects.create(
             operation_id=uuid4(),
+            owner_principal_slot=1,
             subject="監査対象",
             body="本文",
             formatted_text="整形済み",
-            content_fingerprint="a" * 64,
-            active_content_fingerprint="a" * 64,
+            request_fingerprint="a" * 64,
+            active_request_fingerprint="a" * 64,
             accepted_at=now,
             processing_expires_at=now + timedelta(minutes=1),
         )
