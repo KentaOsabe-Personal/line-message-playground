@@ -226,7 +226,7 @@
   - _Requirements: 2.3, 2.4, 2.5, 3.2, 3.7, 4.5, 4.7, 7.9, 8.1, 9.2, 9.3, 9.4, 9.5_
 
 - [ ] 9. migration・境界横断・安全性を最終検証する
-- [ ] 9.1 0001からのmigrationとfixed配信回帰を実DB契約で検証する
+- [x] 9.1 0001からのmigrationとfixed配信回帰を実DB契約で検証する
   - record count、operation／message／fingerprint／terminal／LINE ID／timestampsの同値を比較する
   - mode／receipt／status constraint、owner slot backfill、linked row存在時rollback停止を確認する
   - 完了時、migration testがlegacy保持と新規不変条件を再現可能に証明する

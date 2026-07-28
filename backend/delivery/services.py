@@ -422,11 +422,13 @@ class DeliveryService:
             with transaction.atomic():
                 attempt = DeliveryAttempt.objects.create(
                     operation_id=command.operation_id,
+                    owner_principal_slot=1,
                     subject=command.message.subject,
                     body=command.message.body,
                     formatted_text=command.message.formatted_text,
                     content_fingerprint=command.message.fingerprint,
                     active_content_fingerprint=command.message.fingerprint,
+                    request_fingerprint=command.message.fingerprint,
                     accepted_at=now,
                     processing_expires_at=now + PROCESSING_TIMEOUT,
                 )

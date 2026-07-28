@@ -44,7 +44,7 @@ class DeliveryAttempt(models.Model):
         null=True,
         unique=True,
     )
-    request_fingerprint = models.CharField(max_length=64, null=True)
+    request_fingerprint = models.CharField(max_length=64)
     active_request_fingerprint = models.CharField(
         max_length=64,
         null=True,
@@ -55,7 +55,7 @@ class DeliveryAttempt(models.Model):
         choices=TargetMode,
         default=TargetMode.FIXED_USER,
     )
-    owner_principal_slot = models.PositiveSmallIntegerField(null=True)
+    owner_principal_slot = models.PositiveSmallIntegerField()
     owner_identity_public_id = models.UUIDField(null=True)
     channel_public_id = models.UUIDField(null=True)
     channel_label_snapshot = models.CharField(max_length=255, null=True)

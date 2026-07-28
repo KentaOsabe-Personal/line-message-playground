@@ -20,6 +20,8 @@ class DeliveryAttemptSchemaTests(TestCase):
             "formatted_text": "【件名】\n\n本文",
             "content_fingerprint": "a" * 64,
             "active_content_fingerprint": "a" * 64,
+            "request_fingerprint": "a" * 64,
+            "owner_principal_slot": 1,
             "accepted_at": accepted_at,
             "processing_expires_at": accepted_at + timedelta(seconds=30),
         }

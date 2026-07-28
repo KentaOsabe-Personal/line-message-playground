@@ -81,11 +81,13 @@ class DeliveryServiceSubmitTests(TestCase):
         now = timezone.now()
         DeliveryAttempt.objects.create(
             operation_id=uuid4(),
+            owner_principal_slot=1,
             subject=message.subject,
             body=message.body,
             formatted_text=message.formatted_text,
             content_fingerprint=message.fingerprint,
             active_content_fingerprint=message.fingerprint,
+            request_fingerprint=message.fingerprint,
             accepted_at=now,
             processing_expires_at=now + timedelta(seconds=30),
         )
@@ -144,6 +146,8 @@ class DeliveryServiceSubmitTests(TestCase):
         self.assertEqual(attempt.body, message.body)
         self.assertEqual(attempt.formatted_text, message.formatted_text)
         self.assertEqual(attempt.content_fingerprint, message.fingerprint)
+        self.assertEqual(attempt.request_fingerprint, message.fingerprint)
+        self.assertEqual(attempt.owner_principal_slot, 1)
         self.assertEqual(attempt.target_mode, DeliveryAttempt.TargetMode.FIXED_USER)
         self.assertEqual(attempt.accepted_at, accepted_at)
         self.assertEqual(attempt.sent_at, accepted_at)
@@ -156,11 +160,13 @@ class DeliveryServiceSubmitTests(TestCase):
         accepted_at = timezone.now()
         attempt = DeliveryAttempt.objects.create(
             operation_id=uuid4(),
+            owner_principal_slot=1,
             subject=message.subject,
             body=message.body,
             formatted_text=message.formatted_text,
             content_fingerprint=message.fingerprint,
             active_content_fingerprint=message.fingerprint,
+            request_fingerprint=message.fingerprint,
             accepted_at=accepted_at,
             processing_expires_at=accepted_at + timedelta(seconds=30),
         )
@@ -193,11 +199,13 @@ class DeliveryServiceStatusTests(TestCase):
         message = format_message("件名", str(uuid4()))
         return DeliveryAttempt.objects.create(
             operation_id=uuid4(),
+            owner_principal_slot=1,
             subject=message.subject,
             body=message.body,
             formatted_text=message.formatted_text,
             content_fingerprint=message.fingerprint,
             active_content_fingerprint=message.fingerprint,
+            request_fingerprint=message.fingerprint,
             accepted_at=self.now - timedelta(seconds=5),
             processing_expires_at=expires_at,
         )

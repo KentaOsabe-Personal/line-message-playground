@@ -178,6 +178,16 @@ class Migration(migrations.Migration):
             backfill_legacy_delivery_scope,
             migrations.RunPython.noop,
         ),
+        migrations.AlterField(
+            model_name="deliveryattempt",
+            name="owner_principal_slot",
+            field=models.PositiveSmallIntegerField(),
+        ),
+        migrations.AlterField(
+            model_name="deliveryattempt",
+            name="request_fingerprint",
+            field=models.CharField(max_length=64),
+        ),
         migrations.AddIndex(
             model_name="deliveryattempt",
             index=models.Index(

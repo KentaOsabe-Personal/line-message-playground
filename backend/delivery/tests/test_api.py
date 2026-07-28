@@ -100,6 +100,7 @@ class DeliveryApiTests(APITestCase):
             formatted_text=message.formatted_text,
             content_fingerprint=message.fingerprint,
             active_content_fingerprint=message.fingerprint,
+            request_fingerprint=message.fingerprint,
             accepted_at=now,
             processing_expires_at=expires_at or now + timedelta(seconds=30),
         )
@@ -577,9 +578,11 @@ class DeliveryApiTests(APITestCase):
         message = format_message("件名", "本文")
         now = timezone.now()
         DeliveryAttempt.objects.create(
-            operation_id=uuid4(), subject=message.subject, body=message.body,
+            operation_id=uuid4(), owner_principal_slot=1,
+            subject=message.subject, body=message.body,
             formatted_text=message.formatted_text, content_fingerprint=message.fingerprint,
-            active_content_fingerprint=message.fingerprint, accepted_at=now,
+            active_content_fingerprint=message.fingerprint,
+            request_fingerprint=message.fingerprint, accepted_at=now,
             processing_expires_at=now + timedelta(seconds=30),
         )
         gateway = FakeGateway()

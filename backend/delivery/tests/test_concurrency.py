@@ -118,11 +118,13 @@ class DeliveryConcurrencyTests(TransactionTestCase):
         message = format_message("件名", "CAS競合")
         attempt = DeliveryAttempt.objects.create(
             operation_id=uuid4(),
+            owner_principal_slot=1,
             subject=message.subject,
             body=message.body,
             formatted_text=message.formatted_text,
             content_fingerprint=message.fingerprint,
             active_content_fingerprint=message.fingerprint,
+            request_fingerprint=message.fingerprint,
             accepted_at=now - timedelta(seconds=31),
             processing_expires_at=now - timedelta(seconds=1),
         )
