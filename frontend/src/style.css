@@ -149,6 +149,23 @@ h1 {
   margin: 0;
 }
 
+.delivery-status-line,
+.receipt-summary {
+  display: grid;
+  gap: 0.35rem 1rem;
+  grid-template-columns: 7rem 1fr;
+  margin: 1rem 0;
+}
+
+.receipt-summary {
+  padding-top: 0.75rem;
+  border-top: 1px solid #c8d5ce;
+}
+
+.receipt-summary > span:not(:first-of-type) {
+  grid-column: 2;
+}
+
 .delivery [aria-invalid='true'] {
   border-color: #b42318;
 }

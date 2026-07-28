@@ -213,7 +213,7 @@
   - 完了時、ownerはsafe labelだけで一件のtargetを選び、channel変更後にrecipient再選択を求められる
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8_
   - _Depends: 7.1, 8.1, 8.2, 8.3_
-- [ ] 8.5 preview・送信結果・receipt状態を誤解なく表示する
+- [x] 8.5 preview・送信結果・receipt状態を誤解なく表示する
   - source／recipient／friendship／formatted text／receipt有無と期限をpreviewに表示する
   - succeededはLINE受付として示し、unknownはstatus確認のみ、receiptは別行でpending／confirmed／expiredを表示する
   - 完了時、確認後に送信でき、到達／既読表現や自動再送なしで保存済み状態を確認できる

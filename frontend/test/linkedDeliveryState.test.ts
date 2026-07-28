@@ -293,6 +293,19 @@ describe('linked delivery state', () => {
     expect(reconciled.phase === 'unknown' && reconciled.result.receipt.status).toBe('confirmed')
   })
 
+  // テストケース: succeededの受取確認を再照会中に通信失敗する。
+  // 期待値: 既に確定したLINE受付結果を失わず、送信や状態を推測し直さない。
+  test('preserves a succeeded result when receipt refresh fails', () => {
+    const succeeded = transitionLinkedDelivery(submitted(), {
+      type: 'deliveryUpdated',
+      result: status('succeeded'),
+    })
+    const checking = transitionLinkedDelivery(succeeded, { type: 'checkStarted' })
+    const restored = transitionLinkedDelivery(checking, { type: 'networkFailed' })
+
+    expect(restored).toEqual(succeeded)
+  })
+
   // テストケース: preview APIが安全なfield errorを返し、呼出元のerror objectを後で変更する。
   // 期待値: reducerは公開fieldだけのcopyを保持し、生errorや後続mutationをstateへ混入させない。
   test('copies safe preview errors into editing state', () => {

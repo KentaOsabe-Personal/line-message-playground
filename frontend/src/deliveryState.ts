@@ -90,8 +90,9 @@ export type LinkedDeliveryUIState =
   | ({ phase: 'preview' } & LinkedPreviewContext)
   | ({ phase: 'submitting' } & LinkedOperationContext)
   | ({ phase: 'processing'; result: LinkedStatus<'processing'> } & LinkedOperationContext)
-  | ({ phase: 'checking'; previous: LinkedStatus<'processing' | 'unknown'> | null } & LinkedOperationContext)
+  | ({ phase: 'checking'; previous: LinkedDeliveryStatus | null } & LinkedOperationContext)
   | ({ phase: 'uncertain'; error: SafeError; canRetrySameOperation: boolean } & LinkedOperationContext)
+  | ({ phase: 'rejected'; error: SafeError } & LinkedOperationContext)
   | ({ phase: 'unknown'; result: LinkedStatus<'unknown'> } & LinkedOperationContext)
   | ({ phase: 'succeeded'; result: LinkedStatus<'succeeded'> } & LinkedOperationContext)
   | ({ phase: 'failed'; result: LinkedStatus<'failed'> } & LinkedOperationContext)
@@ -108,6 +109,7 @@ export type LinkedDeliveryEvent =
   | { type: 'backToEditing' }
   | { type: 'submitted'; operationId: string }
   | { type: 'deliveryUpdated'; result: LinkedDeliveryStatus }
+  | { type: 'sendRejected'; error: SafeError }
   | { type: 'networkFailed' }
   | { type: 'checkStarted' }
   | { type: 'statusMissing' }
@@ -189,6 +191,28 @@ const previewMatchesInput = (
   preview.recipientId === input.recipientId &&
   preview.receiptRequested === input.receiptRequested
 
+const linkedResultState = (
+  state: LinkedOperationContext,
+  result: LinkedDeliveryStatus,
+): LinkedDeliveryUIState => {
+  const copied = copyLinkedStatus(result)
+  const context: LinkedOperationContext = {
+    input: copyLinkedInput(state.input),
+    preview: copyLinkedPreview(state.preview),
+    operationId: state.operationId,
+  }
+  if (copied.status === 'processing') {
+    return { ...context, phase: 'processing', result: copied as LinkedStatus<'processing'> }
+  }
+  if (copied.status === 'unknown') {
+    return { ...context, phase: 'unknown', result: copied as LinkedStatus<'unknown'> }
+  }
+  if (copied.status === 'succeeded') {
+    return { ...context, phase: 'succeeded', result: copied as LinkedStatus<'succeeded'> }
+  }
+  return { ...context, phase: 'failed', result: copied as LinkedStatus<'failed'> }
+}
+
 export function transitionLinkedDelivery(
   state: LinkedDeliveryUIState,
   event: LinkedDeliveryEvent,
@@ -247,7 +271,10 @@ export function transitionLinkedDelivery(
       errors: linkedFieldErrors(copyLinkedError(event.error)),
     }
   }
-  if (event.type === 'backToEditing' && state.phase === 'preview') {
+  if (
+    event.type === 'backToEditing' &&
+    (state.phase === 'preview' || state.phase === 'rejected')
+  ) {
     return { phase: 'editing', input: copyLinkedInput(state.input), errors: {} }
   }
   if (event.type === 'submitted' && state.phase === 'preview') {
@@ -263,22 +290,24 @@ export function transitionLinkedDelivery(
     (state.phase === 'submitting' || state.phase === 'checking') &&
     state.operationId === event.result.operationId
   ) {
-    const result = copyLinkedStatus(event.result)
-    if (result.status === 'processing') {
-      return { ...state, phase: 'processing', result: result as LinkedStatus<'processing'> }
+    return linkedResultState(state, event.result)
+  }
+  if (event.type === 'sendRejected' && state.phase === 'submitting') {
+    return {
+      phase: 'rejected',
+      input: copyLinkedInput(state.input),
+      preview: copyLinkedPreview(state.preview),
+      operationId: state.operationId,
+      error: copyLinkedError(event.error),
     }
-    if (result.status === 'unknown') {
-      return { ...state, phase: 'unknown', result: result as LinkedStatus<'unknown'> }
-    }
-    if (result.status === 'succeeded') {
-      return { ...state, phase: 'succeeded', result: result as LinkedStatus<'succeeded'> }
-    }
-    return { ...state, phase: 'failed', result: result as LinkedStatus<'failed'> }
   }
   if (
     event.type === 'networkFailed' &&
     (state.phase === 'submitting' || state.phase === 'checking')
   ) {
+    if (state.phase === 'checking' && state.previous !== null) {
+      return linkedResultState(state, state.previous)
+    }
     return {
       phase: 'uncertain',
       input: copyLinkedInput(state.input),
@@ -290,7 +319,12 @@ export function transitionLinkedDelivery(
   }
   if (
     event.type === 'checkStarted' &&
-    (state.phase === 'processing' || state.phase === 'unknown' || state.phase === 'uncertain')
+    (
+      state.phase === 'processing' ||
+      state.phase === 'unknown' ||
+      state.phase === 'succeeded' ||
+      state.phase === 'uncertain'
+    )
   ) {
     return {
       phase: 'checking',
@@ -312,7 +346,7 @@ export function transitionLinkedDelivery(
   }
   if (
     event.type === 'newDelivery' &&
-    (state.phase === 'succeeded' || state.phase === 'failed')
+    (state.phase === 'succeeded' || state.phase === 'failed' || state.phase === 'rejected')
   ) {
     return initialLinkedDeliveryState
   }
