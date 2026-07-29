@@ -10,7 +10,7 @@
 
 ## Desired Outcome
 
-認証済みの自分だけが、専用画面からLINE公式アカウント／Messaging APIチャネルを一覧、登録、更新、有効化、無効化できる。アクセストークンとチャネルシークレットはwrite-onlyとして入力時だけ置換され、既存値、平文、暗号文を画面やAPIへ返さない。設定済み状態、更新日時、Webhook URL、接続確認結果は秘密値なしで確認できる。
+認証済みの自分だけが、専用画面から自分のLINE identityと同一provider配下のLINE公式アカウント／Messaging APIチャネルを一覧、登録、更新、有効化、無効化できる。アクセストークンとチャネルシークレットはwrite-onlyとして入力時だけ置換され、既存値、平文、暗号文を画面やAPIへ返さない。設定済み状態、更新日時、Webhook URL、接続確認結果は秘密値なしで確認できる。
 
 ## Approach
 
@@ -18,8 +18,8 @@
 
 ## Scope
 
-- **In**: チャネル一覧・詳細・新規登録・メタデータ更新、有効化・無効化、write-only資格情報置換、設定済み表示、Webhook URL表示・コピー、接続確認、安全な削除制約、Frontend状態・API契約・テスト
-- **Out**: 暗号化キー管理画面、秘密値の表示・コピー・export、複数管理者RBAC、LINE Developersコンソール設定の自動変更、利用量課金管理、公式アカウント自体の作成
+- **In**: ownerと同一providerのチャネル一覧・詳細・新規登録・メタデータ更新、有効化・無効化、write-only資格情報置換、設定済み表示、Webhook URL表示・コピー、接続確認、安全な削除制約、Frontend状態・API契約・テスト
+- **Out**: 異なるproviderのチャネル管理、暗号化キー管理画面、秘密値の表示・コピー・export、複数管理者RBAC、LINE Developersコンソール設定の自動変更、利用量課金管理、公式アカウント自体の作成
 
 ## Boundary Candidates
 
@@ -34,6 +34,7 @@
 - 保存済みアクセストークンやチャネルシークレットの復号表示
 - 暗号化マスターキーのブラウザ入力・DB保存
 - 未認証状態や一時的な共有URLからの管理操作
+- ownerのLINE identityと異なるproviderのチャネル管理
 - LINE DevelopersコンソールやOfficial Account Managerの代替
 
 ## Upstream / Downstream
@@ -53,3 +54,13 @@
 - エラー報告、監査ログ、テスト失敗出力でPOST値と復号済み変数をマスキングする
 - 配信先や配信履歴に参照されるチャネルの物理削除を防ぎ、無効化後も監査記録を保持する
 - 接続確認結果は秘密値やLINE raw responseを含まない安全な分類で返す
+- provider一致はrequest値ではなく、owner sessionからDBで再検証したLINE identity providerを基準にする
+
+## Spec Size Assessment
+
+- **Verdict**: `PASS (single-spec)`
+- **Projected executable tasks**: 24〜31件（owner限定APIと公開DTO 4〜5、登録・更新・有効化・無効化・削除制約・write-only資格情報置換 6〜8、接続確認 3〜4、Frontend API・DTO・状態・画面 7〜9、統合・セキュリティ・回帰検証 4〜5）
+- **Independent responsibility seams**: 5（owner限定チャネル管理API、write-only資格情報契約、安全な接続確認、参照整合性を守るライフサイクル操作、Frontend状態と表示）
+- **Independently deliverable outcomes**: 1（認証済みowner向けの安全なチャネル管理画面）。接続確認とWebhook URL表示は、保存済み設定を安全に運用するための従属機能であり、単独のrolloutや利用者成果を持たない
+- **External/state workflows**: LINEへの接続確認1件、チャネルの登録・更新・有効化・無効化・削除制約を扱うライフサイクル1件。認証、暗号化基盤、Webhook受付、配信は既存specの契約を利用し、本specでは新しい独立状態機械を追加しない
+- **Rationale**: UI・API・永続化境界を横断するが、すべて同じowner向け管理成果へ収束し、想定タスク数は40件未満である。接続確認以外の新規外部ワークフローや別個のrollout／rollbackを伴わず、内部ワークストリームと依存順を明示すれば単一のbounded reviewで扱える

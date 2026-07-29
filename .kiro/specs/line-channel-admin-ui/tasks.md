@@ -1,0 +1,269 @@
+# Implementation Plan
+
+- [ ] 1. 管理基盤と安全なデータ境界を整備する
+- [ ] 1.1 管理ユースケースのコマンドと安全な結果契約を定義する
+  - 登録、更新、状態変更、削除、接続確認の入力と、固定された成功・失敗分類を既存チャネル基盤と互換な形で表現する。
+  - 公開識別子、期待更新日時、provider、資格情報ペアを安全な値として扱い、秘密値を文字列表現や例外へ含めない。
+  - 完了時には、後続のrepository、service、HTTP境界が秘密値を応答型へ持ち込まず同じ契約を利用できる。
+  - _Requirements: 3.1, 3.2, 4.2, 5.3, 7.2, 8.6_
+  - _Boundary: ChannelAdminService_
+- [ ] 1.2 既存チャネル基盤へrevision・provider・資格情報修復の原子契約を追加する
+  - channel lock後に期待更新日時、provider不変条件、同一状態要求を検証し、競合を安全な結果へ変換する。
+  - 資格情報は両方なしなら維持、完全pairなら置換し、欠損行の修復と有効化を単一transactionで完了させる。
+  - 境界値、暗号失敗、欠損credential修復、修復+enable rollback、時刻round-tripを単体テストで固定する。
+  - 完了時には、失敗時にmetadata、状態、資格情報が一切変わらず、既存管理コマンドの互換動作も維持される。
+  - _Requirements: 3.2, 3.7, 3.8, 3.9, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.10, 5.1, 5.3, 5.4, 5.5, 5.6_
+  - _Boundary: FoundationChannelService_
+- [ ] 1.3 owner/session状態を線形化する管理操作fenceを実装する
+  - owner、sessionの順にlockし、identity、provider、active状態、有効期限をDBから再検証する。
+  - 一覧・詳細の投影完了まで同じ短いtransactionを維持し、unlinkやsession失効との前後関係を確定する。
+  - 完了時には、認証失敗またはunlink中の要求がチャネルを読まず変更せず、安全な認証・利用不可結果へ収束する。
+  - _Requirements: 1.1, 1.2, 1.5, 1.6, 3.9, 4.10_
+  - _Boundary: OwnerOperationFence_
+- [ ] 1.4 owner provider範囲の安全な一覧・詳細投影を実装する
+  - 同一providerとlegacy provider未設定のチャネルをactive/inactiveを含めて投影し、別providerを除外する。
+  - 資格情報は暗号文をmaterializeせずconfigured/repair_requiredと更新日時だけを導出する。
+  - 完了時には、一覧・詳細が全非秘密項目を返し、不在・削除済み対象は他チャネルを漏らさず、一覧queryが定数回かつ暗号文非取得であることをテストできる。
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
+  - _Boundary: AdminChannelRepository_
+- [ ] 1.5 接続確認snapshotと完了revision検証を実装する
+  - active状態に依存せず、token、bot user ID、更新revisionを単一queryから一貫して取得する。
+  - 資格情報欠損・破損をLINE未接続の安全な結果へし、完了時はprovider範囲のchannelをlockしてrevisionを比較する。
+  - 完了時には、tokenが直列化・文字列化されず、設定変更済みの外部結果がstaleとして破棄できる。
+  - _Requirements: 7.3, 7.8, 7.10_
+  - _Boundary: AdminChannelRepository_
+
+- [ ] 2. 参照整合性fenceを既存writerへ展開する
+- [ ] 2.1 チャネル行を共有lock rootとする参照fenceを実装する
+  - 呼出し側transaction内でcanonical channel UUIDの行をlockし、参照作成可否とstorage失敗を網羅的に分類する。
+  - row不存在を成功やprogramming errorへ変換せず、後続insertを許可しない契約にする。
+  - 完了時には、全参照writerと削除が同じchannel rowで直列化できる公開contractが利用できる。
+  - _Requirements: 8.2, 8.4, 8.7_
+  - _Boundary: ChannelReferenceFence_
+- [ ] 2.2 (P) 配信先の参照probeとwriterを参照fenceへ統合する
+  - recipient storeだけを照会するprobeを公開し、recipient insert前に同じtransactionでfenceを取得する。
+  - channel不在・storage失敗時は作成をrollbackし、既存のsafe mutation結果と成功契約を維持する。
+  - 完了時には、削除先行時に配信先が作成されず、管理側がrecipient参照を直接model importなしで検出できる。
+  - _Requirements: 8.2, 8.3, 8.4, 8.7_
+  - _Boundary: DeliveryRecipient ReferenceWriter_
+  - _Depends: 2.1_
+- [ ] 2.3 (P) 配信試行の参照probeとwriterを参照fenceへ統合する
+  - attempt storeだけを照会するprobeを公開し、attempt insertとLINE push開始前にfence結果を確認する。
+  - channel不在をtarget unavailableへ、storage分類を安全なHTTP結果へ写像し、transactionを部分完了させない。
+  - 完了時には、削除先行時にattemptもpushも開始されず、管理側がdelivery参照を検出できる。
+  - _Requirements: 8.2, 8.3, 8.4, 8.7_
+  - _Boundary: DeliveryAttempt ReferenceWriter_
+  - _Depends: 2.1_
+- [ ] 2.4 (P) Webhook受付の参照probeとwriterを参照fenceへ統合する
+  - receipt storeだけを照会するprobeを公開し、event batch先頭で一度channelをlockする。
+  - channel不在・storage失敗を公開ingressの安全な拒否へ写像し、receipt insertとhandler開始を止める。
+  - 完了時には、削除先行時にreceiptもhandlerも作成・実行されず、管理側がWebhook参照を検出できる。
+  - _Requirements: 8.2, 8.3, 8.4, 8.7_
+  - _Boundary: WebhookEventReceipt ReferenceWriter_
+  - _Depends: 2.1_
+- [ ] 2.5 (P) 友だち状態監査の参照probeとwriterを参照fenceへ統合する
+  - friendship audit storeだけを照会するprobeを公開し、projectionとaudit insert前にfenceを取得する。
+  - 不在・storage失敗時は同じtransactionをrollbackし、分類を既存friendship結果へ失わずに写像する。
+  - 完了時には、削除競合でfriendship状態とauditの片方だけが残らず、管理側が参照を検出できる。
+  - _Requirements: 8.2, 8.3, 8.4, 8.7_
+  - _Boundary: FriendshipSyncAudit ReferenceWriter_
+  - _Depends: 2.1_
+- [ ] 2.6 (P) interaction監査の参照probeとwriterを参照fenceへ統合する
+  - interaction audit storeだけを照会するprobeを公開し、audit insertと未開始reply/actionの前にfence結果を確認する。
+  - 既に確定した外部結果は既存safe outcomeとしてのみ扱い、秘密情報を追加保存しない。
+  - 完了時には、削除先行時に新規audit、reply、actionが開始されず、管理側が参照を検出できる。
+  - _Requirements: 8.2, 8.3, 8.4, 8.7_
+  - _Boundary: InteractionAudit ReferenceWriter_
+  - _Depends: 2.1_
+- [ ] 2.7 5種の参照probeを管理用directoryへ合成する
+  - recipient、delivery、webhook、friendship、interactionのprobeを固定順序で合成する。
+  - 最初の参照検出でreferencedを返し、DB失敗時は削除を許可せずsafe storage failureへ縮約する。
+  - 完了時には、linechannelsが下流modelを直接importせず、各store一回以内のqueryで削除直前に全参照を判定できる。
+  - _Requirements: 8.2, 8.3, 8.4, 8.7_
+  - _Boundary: ChannelReferenceDirectory_
+  - _Depends: 2.2, 2.3, 2.4, 2.5, 2.6_
+
+- [ ] 3. owner向け管理ユースケースを構築する
+- [ ] 3.1 owner保護された一覧・詳細ユースケースを統合する
+  - owner fenceをtransaction冒頭で取得し、provider proofと同じtransactionで安全な投影をmaterializeする。
+  - 別provider、不在、unlink・session失効、storage失敗を情報非開示のsafe結果へ変換する。
+  - 完了時には、認証済みownerだけが対象providerの一覧・詳細を取得でき、失効後データを返さない。
+  - _Requirements: 1.1, 1.2, 1.5, 1.6, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
+  - _Boundary: ChannelAdminService_
+- [ ] 3.2 同一provider限定の完全登録ユースケースを統合する
+  - DB由来owner provider proofと要求providerを比較してからチャネルをlock・保存する。
+  - opaque公開ID、metadata、完全資格情報pair、初期状態を一つのtransactionで登録し、duplicate/storage失敗を安全に分類する。
+  - 完了時には、異なるproviderや不完全・重複入力で既存データが変わらず、有効入力だけが完全な一件として登録される。
+  - _Requirements: 3.1, 3.2, 3.7, 3.8, 3.9_
+  - _Boundary: ChannelAdminService_
+- [ ] 3.3 非秘密metadata更新とwrite-only資格情報置換を統合する
+  - expected revision、owner provider、provider不変/backfill規則を検証し、指定metadataだけを更新する。
+  - 空pairは維持、完全pairは置換、片側入力・暗号・保存失敗は全変更をrollbackする。
+  - 完了時には、成功結果が更新後の非秘密情報と設定状態だけを返し、保存済み資格情報を読み戻さない。
+  - _Requirements: 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10_
+  - _Boundary: ChannelAdminService_
+- [ ] 3.4 有効化・無効化と資格情報修復を統合する
+  - 現在stateとexpected revisionを比較し、無効化では識別情報・資格情報・履歴を保持する。
+  - 有効化前に資格情報を安全に利用できることを確認し、完全pair修復との同時実行を単一transactionにする。
+  - 完了時には、欠損・破損・競合時に状態が変わらず、正常時は同じ公開IDで新状態が返る。
+  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6_
+  - _Boundary: ChannelAdminService_
+- [ ] 3.5 参照確認と原子削除を管理ユースケースへ統合する
+  - owner/session/channelのlock順、expected revision、全参照directoryの結果を削除直前に検証する。
+  - 参照中は無効化案内へ収束し、未参照時だけ資格情報と対象channelを同じtransactionで削除する。
+  - 完了時には、削除競合やstorage失敗で部分削除が成功表示されず、完了結果は対象の非秘密識別情報だけになる。
+  - _Requirements: 8.2, 8.3, 8.4, 8.5, 8.6, 8.7_
+  - _Boundary: ChannelAdminService, ChannelReferenceDirectory_
+  - _Depends: 2.7_
+- [ ] 3.6 (P) LINE bot identityを一回だけ取得するread-only gatewayを実装する
+  - SDK retryを0にし、bounded timeoutでbot infoを一回だけ呼び出す。
+  - bot user ID、認証失敗、rate limit、利用不能だけを返し、SDK例外・body・header・request IDを文字列化しない。
+  - 完了時には、送信やLINE上の変更なしに全外部結果が固定safe分類へ変換される。
+  - _Requirements: 7.1, 7.2, 7.4, 7.6, 7.7, 7.8_
+  - _Boundary: LineBotInfoGateway_
+  - _Depends: 1.1_
+- [ ] 3.7 snapshot・外部結果・revisionを接続確認ユースケースへ統合する
+  - 開始時にowner proofとsnapshotを取得し、DB transaction外でgatewayを一回呼び出す。
+  - 応答後にowner/session/channel revisionを再検証し、一致時だけbot ID比較と6分類を確定する。
+  - 完了時には、stale・削除・session失効時にLINE分類を破棄し、成功もaccess tokenとbot identityだけの限定scopeで返る。
+  - _Requirements: 1.5, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10, 9.10_
+  - _Boundary: ChannelAdminService, LineBotInfoGateway_
+  - _Depends: 1.3, 1.5, 3.6_
+
+- [ ] 4. 安全なowner管理HTTP APIを公開する
+- [ ] 4.1 write-only資格情報を含む管理request serializerを実装する
+  - create/update/state/delete/checkのexact shape、canonical UUID、timezone-aware expected revision、unknown key拒否を実装する。
+  - label、数値ID、bot ID、16KiB上限、完全pair、provider request規則を検証し、資格情報fieldを明示write-onlyにする。
+  - 境界値、unknown key、完全pair、write-only representationを単体テストで固定する。
+  - 完了時には、入力値やcanary秘密値を応答・field error・serialized representationへ含めず、修正対象だけを示せる。
+  - _Requirements: 3.1, 3.3, 3.4, 3.5, 3.6, 4.3, 4.4, 4.5, 4.6, 4.9, 5.3, 5.4, 5.5, 9.5_
+  - _Boundary: AdminSerializer_
+- [ ] 4.2 非秘密DTOと主要read/mutation endpointを統合する
+  - 全管理項目、資格情報状態、時刻をsafe DTOへ変換し、秘密fieldを出力schemaへ持ち込まない。
+  - 検証済み公開origin、reverseされたingress path、canonical公開IDだけから完全Webhook URLを作る。
+  - presenter、serializer、serviceを一覧・詳細・登録・更新のcollection/detail HTTP契約へ接続する。
+  - unsafe要求はservice呼出し前にexact OriginとCSRFを検証し、認証・競合・provider・storage結果を固定status/codeへ写像する。
+  - 完了時には、request Host、内部ID、owner/session情報を使わず、認証済みownerの正常応答だけがsafe DTOを返し、失敗時のDB無変更が観測できる。
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 3.7, 3.8, 3.9, 4.2, 4.3, 4.7, 4.8, 4.9, 4.10, 6.1, 6.3, 6.4, 6.5, 7.8, 7.9, 8.6, 9.5_
+  - _Boundary: AdminPresenter, AdminAPI Integration_
+- [ ] 4.3 状態変更・削除・接続確認endpointをowner保護境界へ接続する
+  - state、delete、connection-checkをowner保護Viewへ接続し、固定safe HTTP契約を提供する。
+  - connection statusは200 responseへ限定scope付きで返し、stale/認証/storage失敗時は外部分類を含めない。
+  - 完了時には、各操作のsafe resultが400/401/403/404/409/422/503または限定された接続分類へ一貫して写像される。
+  - _Requirements: 1.1, 1.3, 1.4, 1.5, 5.1, 5.3, 5.4, 5.5, 5.6, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10, 8.2, 8.3, 8.5, 8.6, 8.7, 9.10_
+  - _Boundary: AdminAPI_
+- [ ] 4.4 管理APIのrouteとruntime依存を合成する
+  - collection、detail、state、delete、connection-check routeを相対 `/api` 配下へ登録する。
+  - owner fence、reference directory、foundation service、gateway、presenterを管理serviceへ一度だけ合成する。
+  - 完了時には、全7 endpointが解決され、既存runtime containerから同じ管理依存を利用できる。
+  - _Requirements: 1.1, 1.3, 1.4, 8.2_
+  - _Boundary: AdminAPI Runtime Composition_
+  - _Depends: 4.2, 4.3_
+
+- [ ] 5. Frontendの非秘密境界と画面状態を構築する
+- [ ] 5.1 管理APIのsafe DTOを実行時検証する
+  - 応答をunknownとしてexact key、UUID、timezone-aware datetime、HTTPS URL、enumを検証する。
+  - Webhook URL内IDとchannel IDの一致を確認し、secret様fieldや余分なfieldをprotocol errorにする。
+  - 完了時には、Frontend型にtoken、secret、ciphertextを定義せず、exact DTOと秘密様field拒否をVitestで再現できる。
+  - _Requirements: 2.2, 2.3, 2.4, 2.5, 6.1, 6.4, 7.8_
+  - _Boundary: ChannelAdminDto_
+- [ ] 5.2 一回限りの管理HTTP手順と安全なclient errorを実装する
+  - 各API操作をProtectedHttpClientの一回のrequestへ写像し、401を既存session再取得へ接続する。
+  - network、protocol、safe API errorを識別し、secret request bodyをError、retry payload、履歴へ保持しない。
+  - 完了時には、mutationと接続確認が自動retryされず、HTTP error分類、401連携、one-shot requestをVitestで再現できる。
+  - _Requirements: 1.2, 1.5, 4.9, 7.8, 9.7, 9.8, 9.9, 9.10_
+  - _Boundary: ChannelAdminApi_
+- [ ] 5.3 非秘密の画面・操作状態遷移を実装する
+  - idle/loading/empty/ready/load_failed/refresh_requiredを排他的に扱い、古いrequest generationを破棄する。
+  - 操作keyごとに二重開始を拒否し、successはserver DTOだけで更新、network unknownやstaleは明示refreshへ遷移する。
+  - 完了時には、state/action/snapshotに秘密入力がなく、全状態遷移と明示refreshを純粋なVitestで再現できる。
+  - _Requirements: 1.5, 9.1, 9.2, 9.3, 9.4, 9.6, 9.7, 9.8, 9.9, 9.10_
+  - _Boundary: ChannelAdminState_
+
+- [ ] 6. owner向けチャネル管理画面を組み立てる
+- [ ] 6.1 (P) 一覧・詳細・空・読込・再取得画面を実装する
+  - authenticated状態だけでconsoleを表示し、loading、empty、safe error、readyを排他的に描画する。
+  - active/inactive、credential repair、legacy provider、日時、Webhook URLをチャネルごとに取り違えない構造で表示する。
+  - 完了時には、未取得・失敗データを最新と断定せず、明示retryと新規登録導線が利用できる。
+  - _Requirements: 1.1, 1.2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 6.1, 6.3, 9.1, 9.2, 9.3_
+  - _Boundary: ChannelAdminConsole_
+  - _Depends: 5.1, 5.2, 5.3_
+- [ ] 6.2 (P) 登録・編集のwrite-onlyフォームを実装する
+  - 非秘密項目と初期状態を編集でき、edit時の秘密欄を常に空のuncontrolled inputにする。
+  - submit時だけ完全pairを一度読み、成否にかかわらずformをresetし、処理中の重複submitを防ぐ。
+  - 完了時には、秘密値がvalue/defaultValue/placeholder/data属性/state/storage/errorへ残らず、metadataのみ更新と完全pair置換が行える。
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 4.1, 4.2, 4.4, 4.5, 4.6, 4.8, 4.9, 9.4, 9.5, 9.8, 9.9_
+  - _Boundary: ChannelEditor_
+  - _Depends: 5.1, 5.2, 5.3_
+- [ ] 6.3 (P) Webhook URL copyと一時接続確認表示を実装する
+  - 表示済みDTOのWebhook URLだけをclipboardへ渡し、成功・失敗を通知する。
+  - 接続確認の6分類と確認日時を一時表示し、connectedにもaccess tokenとbot identity限定の説明を併記する。
+  - 完了時には、inactiveを受付可能・持続connectedと表示せず、再確認はownerの明示clickでだけ開始される。
+  - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 9.4, 9.10_
+  - _Boundary: ChannelActions_
+  - _Depends: 5.1, 5.2, 5.3_
+- [ ] 6.4 状態変更と削除の確認・回復操作を実装する
+  - enable/disable/delete前にlabel、公開ID、現在状態、削除の取消不能性をdialogで再確認する。
+  - 資格情報修復付きenableではwrite-only editorから完全pairを一度だけ受け取り、状態変更と同じ一操作として送信する。
+  - 参照中削除は無効化案内へ、stale/network unknownは成功推測せずrefresh_requiredへ接続する。
+  - 完了時には、成功時だけserver DTOまたは削除結果で画面が更新され、処理中の同一操作が重複しない。
+  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 8.1, 8.3, 8.5, 8.6, 8.7, 9.4, 9.6, 9.7, 9.10_
+  - _Boundary: ChannelActions_
+  - _Depends: 6.2, 6.3_
+- [ ] 6.5 管理consoleを認証済みアプリケーションへ統合する
+  - console、editor、actions、状態遷移、safe通知をAuthGate配下へ合成する。
+  - 管理状態と確認dialogのstyleを既存画面と共存させ、相対API以外へ直接接続しない。
+  - 完了時には、認証済みownerが一画面で全操作を完了でき、未認証時は管理情報がmount・表示されない。
+  - _Requirements: 1.1, 1.2, 9.1, 9.2, 9.3, 9.4, 9.6, 9.7_
+  - _Boundary: ChannelAdminConsole, App_
+  - _Depends: 6.1, 6.2, 6.4_
+
+- [ ] 7. セキュリティ・競合・回帰を検証する
+- [ ] 7.1 owner認可・CSRF・read線形化のAPI統合テストを追加する
+  - unsafe endpointのOrigin/CSRF異常をserializer前に拒否し、DB無変更とcanary非露出を確認する。
+  - 一覧・詳細・mutationとunlink/session失効を競合させ、owner→session→channel lock順とdeadlock/timeoutのsafe分類を検証する。
+  - 完了時には、認証後競合を含む情報非開示・無変更・storage分類契約が実DBで再現できる。
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 8.7_
+  - _Boundary: OwnerOperationFence, AdminAPI Tests_
+- [ ] 7.2 登録・更新・状態変更・削除のAPI統合テストを追加する
+  - 同一/別provider、legacy backfill、重複、partial credential、stale、storage失敗、参照中削除を公開HTTP契約で検証する。
+  - 成功時はsafe DTO、失敗時は全体rollback、結果不明後は再取得で実状態へ収束することを確認する。
+  - 完了時には、主要lifecycle操作のstatus/body/DB状態が全受入基準どおり観測できる。
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 3.7, 3.8, 3.9, 4.2, 4.7, 4.8, 4.10, 5.1, 5.3, 5.4, 5.5, 5.6, 8.2, 8.3, 8.5, 8.6, 8.7, 9.6, 9.7_
+  - _Boundary: AdminAPI Tests_
+- [ ] 7.3 LINE gatewayの外部分類と秘密非露出テストを追加する
+  - bot ID成功、認証失敗、429、timeout、connection、5xx、不定形応答を固定safe結果へ分類する。
+  - SDK retry 0、timeout上限、one-shot呼出し、例外・body・header・request IDの非文字列化を検証する。
+  - 完了時には、送信なしのgateway分類とcanary秘密非露出が単体テストで再現できる。
+  - _Requirements: 7.1, 7.2, 7.4, 7.6, 7.7, 7.8, 9.10_
+  - _Boundary: LineBotInfoGateway Tests_
+- [ ] 7.4 接続確認serviceのrevision競合とtransaction境界を検証する
+  - credential不可、bot ID一致/不一致を含む6分類と限定scopeをservice/API契約で確認する。
+  - 外部call中のmetadata/credential更新、削除、unlinkを競合させ、transaction/row lock非保持とstale結果破棄を検証する。
+  - 完了時には、開始snapshotから完了revisionまでの競合と明示再確認契約が実DBで再現できる。
+  - _Requirements: 1.5, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10, 9.10_
+  - _Boundary: ChannelAdminService Connection Tests_
+- [ ] 7.5 recipient・delivery・Webhook writerと削除の実並行テストを追加する
+  - 共通競合fixtureでwriter先行とdelete先行を3種それぞれ再現する。
+  - record、push、handler、部分削除の有無とwriter固有のsafe分類を確認する。
+  - 完了時には、3 writerのfence利用と既存成功契約が実DBで自動検証される。
+  - _Requirements: 8.2, 8.3, 8.4, 8.5, 8.7_
+  - _Boundary: Recipient, Delivery, Webhook ReferenceWriter Tests_
+- [ ] 7.6 friendship・interaction writerと削除の実並行テストを追加する
+  - 共通競合fixtureでwriter先行とdelete先行を2種それぞれ再現する。
+  - projection、audit、reply/action、部分削除の有無と、各probeが一回以内であることを確認する。
+  - 完了時には、2 writerのfence利用、safe分類、既存成功契約が実DBで自動検証される。
+  - _Requirements: 8.2, 8.3, 8.4, 8.5, 8.7_
+  - _Boundary: Friendship, Interaction ReferenceWriter Tests_
+- [ ] 7.7 editorとチャネルlifecycleのUI統合テストを追加する
+  - emptyからの登録、metadata-only更新、完全pair置換、修復+enable、disable、参照中/未参照deleteを操作する。
+  - 秘密欄の空初期値、DOM非保持、処理中重複防止、成否後reset、stale/unknown後refreshを確認する。
+  - 完了時には、write-only editorとlifecycleの主要journeyが秘密非露出のままVitestで通る。
+  - _Requirements: 3.1, 3.2, 4.1, 4.2, 4.4, 4.5, 4.6, 4.8, 4.9, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 8.1, 8.3, 8.5, 8.6, 8.7, 9.2, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9, 9.10_
+  - _Boundary: ChannelEditor, ChannelActions Lifecycle Tests_
+- [ ] 7.8 一覧・copy・接続確認・認証表示のUI統合とbuildを検証する
+  - loading/empty/error/ready、Webhook copy通知、inactive表示、接続6分類、stale refresh、未認証非表示を操作する。
+  - 限定scope、secret様DOM属性非存在、既存Frontend回帰、production buildを確認する。
+  - 完了時には、Frontend test suiteとproduction buildが成功し、残るowner journeyが安全な画面状態で完了する。
+  - _Requirements: 1.1, 1.2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 6.1, 6.2, 6.3, 6.4, 6.5, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10, 9.1, 9.2, 9.3, 9.4, 9.6, 9.7, 9.10_
+  - _Boundary: ChannelAdminConsole, ChannelActions Connection Tests, App Build_
