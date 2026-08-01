@@ -84,7 +84,33 @@ docker compose up --build
 
 バックエンドは起動時にマイグレーションを自動適用します。
 
-チャネル管理コマンドで現在のアクセストークンとチャネルシークレットを初期登録し、登録済み資格情報を正常に利用できることを確認した後、従来の `LINE_CHANNEL_SECRET` がローカル `.env` に残っていれば削除してください。既存配信が利用する `LINE_CHANNEL_ACCESS_TOKEN` と `LINE_USER_ID` は、配信機能の移行が完了するまで維持します。
+### Messaging APIチャネルの登録
+
+チャネル管理画面には、同じMessaging APIチャネルのチャネルID、Bot user ID、チャネルアクセストークン、チャネルシークレット、provider IDを登録します。
+
+Bot user IDは、LINE Developers Consoleの［チャネル基本設定］に表示される［あなたのユーザーID］ではありません。［あなたのユーザーID］は開発者本人のLINEユーザーIDです。また、`@`で始まるベーシックIDや数字のチャネルIDとも異なります。ここで必要なのは、チャネルアクセストークンを使って[LINE公式アカウント（ボット）の情報を取得するAPI](https://developers.line.biz/ja/reference/messaging-api/#get-bot-info)が返す`userId`です。
+
+チャネルアクセストークンをコマンドラインへ直接記述せず、非表示で入力して確認します。次のコマンドが返すJSONの`userId`（`U`と32桁の小文字16進数）を、管理画面の［bot user ID］へ設定してください。
+
+```bash
+read -s "LINE_BOT_TOKEN?チャネルアクセストークン: " && echo
+curl -sS -H "Authorization: Bearer ${LINE_BOT_TOKEN}" https://api.line.me/v2/bot/info
+unset LINE_BOT_TOKEN
+```
+
+各IDの違いは次のとおりです。
+
+| 値 | 形式 | 登録先・用途 |
+| --- | --- | --- |
+| Messaging APIチャネルID | ASCII数字列 | 管理画面の［Messaging API チャネル ID］ |
+| Bot user ID | `U` + 32桁の小文字16進数 | `/v2/bot/info`の`userId`を管理画面の［bot user ID］へ登録 |
+| あなたのユーザーID | `U` + 32桁の小文字16進数 | 開発者本人のID。Bot user IDには使用しない |
+| ベーシックID | `@`から始まる文字列 | LINE公式アカウントの検索・表示用。Bot user IDには使用しない |
+| provider ID | ASCII数字列 | 管理画面の［provider ID］ |
+
+登録後はチャネルを有効化し、［接続を確認］を実行します。［接続できました］と表示されたら、表示されたWebhook URLをLINE Developers Consoleの［Messaging API設定］へ設定し、［検証］を実行してください。接続確認はアクセストークンとBot user IDの組み合わせだけを確認するため、チャネルシークレットとWebhookはLINE Developers Console側の検証成功まで確認できません。
+
+登録済み資格情報を正常に利用できることを確認した後、従来の `LINE_CHANNEL_SECRET` がローカル `.env` に残っていれば削除してください。既存配信が利用する `LINE_CHANNEL_ACCESS_TOKEN` と `LINE_USER_ID` は、配信機能の移行が完了するまで維持します。
 
 新しいチャネルの登録時は、LINE Developers Consoleで確認したprovider IDを入力します。provider IDは1〜64文字のASCII数字列としてそのまま保存され、空白除去・整数化・leading zero除去は行いません。既存チャネルはmigration後もprovider未設定のまま利用できますが、アカウント連携候補には表示されません。既存チャネルの公開UUIDを指定して、次の非対話コマンドで安全にbackfillします。
 
