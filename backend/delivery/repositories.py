@@ -8,6 +8,10 @@ from uuid import UUID
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from linechannels.reference_fence import (
+    ChannelReferenceFence,
+)
+
 from .formatters import format_message_snapshot
 from .models import DeliveryAttempt
 from .types import (
@@ -16,6 +20,8 @@ from .types import (
     AttemptAcceptResult,
     AttemptAccepted,
     AttemptConflict,
+    AttemptStorageFailed,
+    AttemptTargetUnavailable,
     ConfirmReceiptCommand,
     DeliverySnapshot,
     DeliveryPrePushFailure,
@@ -109,9 +115,11 @@ class DjangoAttemptRepository:
     def __init__(
         self,
         *,
+        reference_fence: ChannelReferenceFence,
         clock: Callable[[], datetime] = timezone.now,
     ) -> None:
         self._clock = clock
+        self._reference_fence = reference_fence
 
     def accept(
         self,
@@ -140,6 +148,18 @@ class DjangoAttemptRepository:
         commitment = command.receipt_commitment
         try:
             with transaction.atomic():
+                fence_result = self._reference_fence.lock_existing(
+                    command.target.channel_public_id
+                )
+                if fence_result.status == "channel_not_found":
+                    return AttemptTargetUnavailable()
+                if fence_result.status in (
+                    "storage_retryable",
+                    "storage_unavailable",
+                ):
+                    return AttemptStorageFailed(fence_result.status)
+                if fence_result.status != "locked":
+                    raise ValueError("invalid reference fence result")
                 attempt = DeliveryAttempt.objects.create(
                     operation_id=command.operation_id,
                     subject=command.message.subject,
@@ -362,7 +382,6 @@ class DjangoAttemptRepository:
         if classified is not None:
             return classified
         return ReceiptRejected("invalid")
-
     def _classify_operation(
         self,
         attempt: DeliveryAttempt,
@@ -499,3 +518,13 @@ def _aware_datetime(value: datetime) -> datetime:
     if not isinstance(value, datetime) or value.tzinfo is None:
         raise ValueError("clock must return an aware datetime")
     return value
+
+
+class DjangoDeliveryReferenceProbe:
+    def __init__(self, using: str = "default") -> None:
+        self.using = using
+
+    def is_referenced(self, channel_public_id: UUID) -> bool:
+        return DeliveryAttempt.objects.using(self.using).filter(
+            channel_public_id=channel_public_id
+        ).exists()

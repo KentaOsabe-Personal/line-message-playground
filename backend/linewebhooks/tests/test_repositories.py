@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import UUID, uuid4
 
 from django.db import DatabaseError
@@ -6,12 +6,18 @@ from django.test import TestCase
 
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.repositories import DjangoEventReceiptRepository
-from linewebhooks.types import ReceiptCandidate, ReceiptStorageFailed
+from linechannels.reference_fence import ReferenceFenceResult
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
+from linewebhooks.types import (
+    ReceiptCandidate,
+    ReceiptChannelUnavailable,
+    ReceiptStorageFailed,
+)
 
 
 class DjangoEventReceiptRepositoryAcceptanceTests(TestCase):
     def setUp(self) -> None:
-        self.repository = DjangoEventReceiptRepository()
+        self.repository = DjangoEventReceiptRepository(LOCKED_REFERENCE_FENCE)
         self.channel_public_id = uuid4()
 
     def _candidate(
@@ -32,6 +38,27 @@ class DjangoEventReceiptRepositoryAcceptanceTests(TestCase):
             is_redelivery=is_redelivery,
             initial_status=initial_status,  # type: ignore[arg-type]
         )
+
+    # テストケース: batch先頭のchannel fenceが不在またはstorage失敗を返す
+    # 期待値: receiptを一件も作らずhandler開始前のsafe拒否材料を返す
+    def test_reference_fence_failure_prevents_entire_batch(self):
+        for status, expected_type in (
+            ("channel_not_found", ReceiptChannelUnavailable),
+            ("storage_retryable", ReceiptStorageFailed),
+            ("storage_unavailable", ReceiptStorageFailed),
+        ):
+            fence = Mock()
+            fence.lock_existing.return_value = ReferenceFenceResult(status)
+            repository = DjangoEventReceiptRepository(reference_fence=fence)
+
+            with self.subTest(status=status):
+                result = repository.accept_batch(
+                    (self._candidate("01ARZ3NDEKTSV4RRFFQ69G5FAV"),)
+                )
+
+            self.assertIsInstance(result, expected_type)
+            self.assertEqual(WebhookEventReceipt.objects.count(), 0)
+            fence.lock_existing.assert_called_once_with(self.channel_public_id)
 
     # テストケース: 同じ request 内に重複を含む複数 event を一括受付する
     # 期待値: candidate と同じ順序で最初だけに処理権を与え、ID ごと一行へ収束する
@@ -127,7 +154,7 @@ class DjangoEventReceiptRepositoryAcceptanceTests(TestCase):
 
 class DjangoEventReceiptRepositoryFinalizationTests(TestCase):
     def setUp(self) -> None:
-        self.repository = DjangoEventReceiptRepository()
+        self.repository = DjangoEventReceiptRepository(LOCKED_REFERENCE_FENCE)
         self.channel_public_id = uuid4()
 
     def _candidate(

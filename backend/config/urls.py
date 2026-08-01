@@ -7,4 +7,5 @@ urlpatterns = [
     path("api/account/", include("lineaccounts.urls")),
     path("api/deliveries/", include("delivery.urls")),
     path("api/line/webhooks/", include("linewebhooks.urls")),
+    path("api/line/channels/", include("linechannels.urls")),
 ]

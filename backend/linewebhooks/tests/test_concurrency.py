@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from django.db import close_old_connections
 from django.test import TransactionTestCase
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.repositories import DjangoEventReceiptRepository
@@ -103,7 +104,7 @@ class WebhookIngressConcurrencyIntegrationTests(TransactionTestCase):
         )
 
         def accept(candidates: tuple[ReceiptCandidate, ...]):
-            repository = DjangoEventReceiptRepository()
+            repository = DjangoEventReceiptRepository(LOCKED_REFERENCE_FENCE)
             start.wait(timeout=5)
             return repository.accept_batch(candidates)
 
@@ -143,7 +144,7 @@ class WebhookIngressConcurrencyIntegrationTests(TransactionTestCase):
     # テストケース: processing receiptのCAS失敗確定とduplicate読取りを独立connectionで競合させる
     # 期待値: 最終状態はfailedからprocessingへ戻らず、競合側に新規dispatch権を返さない
     def test_finalize_and_duplicate_race_preserves_terminal_state(self) -> None:
-        repository = DjangoEventReceiptRepository()
+        repository = DjangoEventReceiptRepository(LOCKED_REFERENCE_FENCE)
         created = repository.accept_batch(
             (_candidate(EVENT_IDS[0], occurred_at_ms=100),)
         )
@@ -153,13 +154,13 @@ class WebhookIngressConcurrencyIntegrationTests(TransactionTestCase):
 
         def finalize():
             start.wait(timeout=5)
-            return DjangoEventReceiptRepository().mark_failed(
+            return DjangoEventReceiptRepository(LOCKED_REFERENCE_FENCE).mark_failed(
                 receipt_id, "handler_failed"
             )
 
         def duplicate():
             start.wait(timeout=5)
-            return DjangoEventReceiptRepository().accept_batch(
+            return DjangoEventReceiptRepository(LOCKED_REFERENCE_FENCE).accept_batch(
                 (
                     _candidate(
                         EVENT_IDS[0], occurred_at_ms=999, is_redelivery=True
@@ -186,7 +187,7 @@ class WebhookIngressConcurrencyIntegrationTests(TransactionTestCase):
     # テストケース: failed receiptをserviceから再送する
     # 期待値: handlerを再実行せず、保存済みfailed分類を維持してacceptedへ収束する
     def test_failed_duplicate_never_regains_dispatch_right(self) -> None:
-        repository = DjangoEventReceiptRepository()
+        repository = DjangoEventReceiptRepository(LOCKED_REFERENCE_FENCE)
         created = repository.accept_batch(
             (_candidate(EVENT_IDS[0], occurred_at_ms=100),)
         )

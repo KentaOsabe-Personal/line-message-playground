@@ -11,6 +11,7 @@ from uuid import UUID
 from django.utils import timezone
 
 from linechannels.types import ChannelSecret, WebhookChannelAvailable
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 from linewebhooks.handlers import StaticHandlerRegistry
 from linewebhooks.repositories import DjangoEventReceiptRepository
 from linewebhooks.services import WebhookIngressService
@@ -136,7 +137,7 @@ def build_service(
             signature_verifier=RawSignatureVerifier(),
             payload_validator=WebhookPayloadValidator(),
             receipt_repository=(
-                receipt_repository or DjangoEventReceiptRepository()
+                receipt_repository or DjangoEventReceiptRepository(LOCKED_REFERENCE_FENCE)
             ),
             registry=StaticHandlerRegistry(registrations),
             audit_logger=audit,

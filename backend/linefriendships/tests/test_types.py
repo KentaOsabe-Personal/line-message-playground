@@ -50,6 +50,12 @@ class _AccountRepository:
 
 
 class _AuditRepository:
+    def lock_reference(self, channel_public_id):
+        return object()
+
+    def record_after_fence(self, audit, locked):
+        return None
+
     def record(self, audit):
         return None
 

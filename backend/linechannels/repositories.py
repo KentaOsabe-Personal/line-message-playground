@@ -164,7 +164,10 @@ class PersistenceError(RuntimeError):
 
 
 class RepositoryProgrammingError(RuntimeError):
-    def __init__(self, code: Literal["transaction_required", "empty_mutation"]) -> None:
+    def __init__(
+        self,
+        code: Literal["transaction_required", "empty_mutation", "invalid_revision"],
+    ) -> None:
         self.code = code
         super().__init__(code)
 
@@ -283,7 +286,17 @@ class DjangoLineChannelRepository:
                         updated_at=now,
                     )
                 )
-                if replaced != 1:
+                if replaced == 0:
+                    LineChannelCredential.objects.using(self.using).create(
+                        line_channel=stored,
+                        access_token_ciphertext=(
+                            mutation.encrypted_credentials.access_token.ciphertext
+                        ),
+                        channel_secret_ciphertext=(
+                            mutation.encrypted_credentials.channel_secret.ciphertext
+                        ),
+                    )
+                elif replaced != 1:
                     raise PersistenceError("credentials_incomplete")
                 credentials_configured = True
 

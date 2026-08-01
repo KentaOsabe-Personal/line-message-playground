@@ -39,7 +39,9 @@ test('integrates account and delivery views according to the owner state', () =>
   })} />)
 
   expect(active).toContain('アカウント管理')
+  expect(active).toContain('LINEチャネル管理')
   expect(active).toContain('LINEテスト配信')
   expect(pending).toContain('全連携解除を処理中です')
+  expect(pending).not.toContain('LINEチャネル管理')
   expect(pending).not.toContain('LINEテスト配信')
 })

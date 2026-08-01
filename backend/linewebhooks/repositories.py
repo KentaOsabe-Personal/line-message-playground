@@ -4,10 +4,15 @@ from typing import Literal, TypeAlias
 from django.db import DatabaseError, IntegrityError, transaction
 from django.utils import timezone
 
+from linechannels.reference_fence import (
+    ChannelReferenceFence,
+)
+
 from .models import WebhookEventReceipt
 from .types import (
     ReceiptCandidate,
     ReceiptDecision,
+    ReceiptChannelUnavailable,
     ReceiptStorageFailed,
 )
 
@@ -16,17 +21,41 @@ FinalizationResult: TypeAlias = Literal["updated", "unchanged", "failed"]
 
 
 class DjangoEventReceiptRepository:
-    def __init__(self, using: str = "default") -> None:
+    def __init__(
+        self,
+        reference_fence: ChannelReferenceFence,
+        *,
+        using: str = "default",
+    ) -> None:
         self.using = using
+        self._reference_fence = reference_fence
 
     def accept_batch(
         self,
         candidates: tuple[ReceiptCandidate, ...],
-    ) -> tuple[ReceiptDecision, ...] | ReceiptStorageFailed:
+    ) -> tuple[ReceiptDecision, ...] | ReceiptStorageFailed | ReceiptChannelUnavailable:
         decisions_by_event_id: dict[str, ReceiptDecision] = {}
         decisions: list[ReceiptDecision] = []
+        if candidates and any(
+            candidate.channel_public_id != candidates[0].channel_public_id
+            for candidate in candidates[1:]
+        ):
+            return ReceiptChannelUnavailable()
         try:
             with transaction.atomic(using=self.using):
+                if candidates:
+                    fence_result = self._reference_fence.lock_existing(
+                        candidates[0].channel_public_id
+                    )
+                    if fence_result.status == "channel_not_found":
+                        return ReceiptChannelUnavailable()
+                    if fence_result.status in (
+                        "storage_retryable",
+                        "storage_unavailable",
+                    ):
+                        return ReceiptStorageFailed(fence_result.status)
+                    if fence_result.status != "locked":
+                        return ReceiptStorageFailed()
                 for candidate in candidates:
                     prior = decisions_by_event_id.get(candidate.webhook_event_id)
                     if prior is not None:
@@ -56,7 +85,6 @@ class DjangoEventReceiptRepository:
         except DatabaseError:
             return ReceiptStorageFailed()
         return tuple(decisions)
-
     def _create_receipt(self, candidate: ReceiptCandidate) -> WebhookEventReceipt:
         completed_at: datetime | None = None
         if candidate.initial_status == WebhookEventReceipt.Status.UNSUPPORTED:
@@ -146,3 +174,13 @@ class DjangoEventReceiptRepository:
             status=receipt.status,
             created=created,
         )
+
+
+class DjangoWebhookReferenceProbe:
+    def __init__(self, using: str = "default") -> None:
+        self.using = using
+
+    def is_referenced(self, channel_public_id) -> bool:
+        return WebhookEventReceipt.objects.using(self.using).filter(
+            channel_public_id=channel_public_id
+        ).exists()

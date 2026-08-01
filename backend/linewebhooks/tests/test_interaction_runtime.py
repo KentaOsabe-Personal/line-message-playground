@@ -869,11 +869,11 @@ class WebhookInteractionRuntimeTests(TransactionTestCase):
                 query_counts[count] = len(queries)
                 self.assertLessEqual(
                     len(queries),
-                    {1: 13, 5: 53, 10: 103}[count],
+                    {1: 18, 5: 74, 10: 144}[count],
                 )
 
-        self.assertEqual(query_counts[5] - query_counts[1], 10 * 4)
-        self.assertEqual(query_counts[10] - query_counts[5], 10 * 5)
+        self.assertEqual(query_counts[5] - query_counts[1], 14 * 4)
+        self.assertEqual(query_counts[10] - query_counts[5], 14 * 5)
 
     # テストケース: 先行replyが共有deadlineを消費する10件requestを処理する
     # 期待値: 予算不足後は新しいreplyを開始せず、残eventを期限超過receiptへ確定する
@@ -1014,5 +1014,11 @@ class _UnavailableCredentialRepository:
 
 
 class _FailingAuditRepository:
+    def reserve(self, audit: object) -> str:
+        return "recorded"
+
+    def replace_reserved(self, audit: object) -> str:
+        return "failed"
+
     def record(self, audit: object) -> str:
         return "failed"

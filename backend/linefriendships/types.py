@@ -182,4 +182,12 @@ class AccountProjectionRepository(Protocol):
 
 @runtime_checkable
 class FriendshipAuditRepository(Protocol):
+    def lock_reference(self, channel_public_id: UUID) -> object: ...
+
+    def record_after_fence(
+        self,
+        audit: FriendshipAuditRecord,
+        locked: object,
+    ) -> None: ...
+
     def record(self, audit: FriendshipAuditRecord) -> None: ...

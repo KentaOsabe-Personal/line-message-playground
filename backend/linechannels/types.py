@@ -144,6 +144,8 @@ MutationFailureCode = Literal[
     "credential_unreadable",
     "retryable",
     "storage_unavailable",
+    "stale_channel",
+    "provider_immutable",
 ]
 
 
@@ -187,6 +189,8 @@ class UpdateLineChannel:
     credentials: CredentialPair | None = None
     is_active: bool | None = None
     provider_id: str | None = None
+    expected_updated_at: datetime | None = None
+    required_provider_id: str | None = None
 
     def __repr__(self) -> str:
         fields = (
@@ -195,6 +199,8 @@ class UpdateLineChannel:
             "label",
             "is_active",
             "provider_id",
+            "expected_updated_at",
+            "required_provider_id",
         )
         specified = ", ".join(
             field for field in fields if getattr(self, field) is not None

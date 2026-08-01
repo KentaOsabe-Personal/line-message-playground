@@ -740,8 +740,22 @@ class AttemptConflict:
             raise ValueError("invalid attempt status")
 
 
+@dataclass(frozen=True, slots=True)
+class AttemptTargetUnavailable:
+    code: Literal["channel_not_found"] = "channel_not_found"
+
+
+@dataclass(frozen=True, slots=True)
+class AttemptStorageFailed:
+    code: Literal["storage_retryable", "storage_unavailable"]
+
+
 AttemptAcceptResult: TypeAlias = (
-    AttemptAccepted | ExistingAttempt | AttemptConflict
+    AttemptAccepted
+    | ExistingAttempt
+    | AttemptConflict
+    | AttemptTargetUnavailable
+    | AttemptStorageFailed
 )
 
 

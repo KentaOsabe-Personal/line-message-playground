@@ -1,4 +1,6 @@
 import uuid
+from datetime import datetime, timedelta
+from unittest.mock import patch
 
 from django.test import TransactionTestCase
 
@@ -342,3 +344,182 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
         self.assertEqual((missing.status, missing.code), ("failed", "channel_not_found"))
         self.assertEqual((empty.status, empty.code), ("failed", "invalid_input"))
         self.assertEqual(LineChannel.objects.count(), 1)
+
+    # テストケース: stale revisionまたは別provider proofで管理更新を要求する
+    # 期待値: どちらも安全な失敗へ収束しmetadataを変更しない
+    def test_expected_revision_and_required_provider_guard_all_mutations(self):
+        channel = LineChannel.objects.get(public_id=self.public_id)
+        stale_revision = channel.updated_at - timedelta(seconds=1)
+
+        stale = self.service.update(
+            UpdateLineChannel(
+                self.public_id,
+                label="保存されない",
+                expected_updated_at=stale_revision,
+                required_provider_id="000123",
+            )
+        )
+        hidden = self.service.update(
+            UpdateLineChannel(
+                self.public_id,
+                label="保存されない",
+                expected_updated_at=channel.updated_at,
+                required_provider_id="999999",
+            )
+        )
+
+        channel.refresh_from_db()
+        self.assertEqual((stale.status, stale.code), ("failed", "stale_channel"))
+        self.assertEqual((hidden.status, hidden.code), ("failed", "channel_not_found"))
+        self.assertEqual(channel.label, "登録時名称")
+
+    # テストケース: 同一stateを管理revision付きとlegacy commandで要求する
+    # 期待値: 管理経路だけstaleになり、期待値なしの既存commandは互換成功する
+    def test_admin_same_state_is_stale_but_legacy_command_remains_compatible(self):
+        channel = LineChannel.objects.get(public_id=self.public_id)
+
+        admin = self.service.update(
+            UpdateLineChannel(
+                self.public_id,
+                is_active=True,
+                expected_updated_at=channel.updated_at,
+                required_provider_id="000123",
+            )
+        )
+        legacy = self.service.set_active(self.public_id, True)
+
+        self.assertEqual((admin.status, admin.code), ("failed", "stale_channel"))
+        self.assertEqual(legacy.status, "succeeded")
+
+    # テストケース: 欠損credential行を完全pairで修復しながらenableする
+    # 期待値: credential作成とstate変更が同じtransactionで成功する
+    def test_missing_credential_row_is_repaired_atomically_with_enable(self):
+        self.service.set_active(self.public_id, False)
+        LineChannelCredential.objects.filter(
+            line_channel__public_id=self.public_id
+        ).delete()
+        channel = LineChannel.objects.get(public_id=self.public_id)
+
+        result = self.service.update(
+            UpdateLineChannel(
+                self.public_id,
+                credentials=build_credential_pair("token-replacement", "secret-replacement"),
+                is_active=True,
+                expected_updated_at=channel.updated_at,
+                required_provider_id="000123",
+            )
+        )
+
+        channel.refresh_from_db()
+        self.assertEqual(result.status, "succeeded", result)
+        credential = LineChannelCredential.objects.get(line_channel=channel)
+        self.assertTrue(channel.is_active)
+        self.assertEqual(bytes(credential.access_token_ciphertext), b"cipher-access_token")
+
+    # テストケース: 欠損credential修復とenableの保存完了直後にstorage失敗する
+    # 期待値: metadata、state、作成credential行をすべてrollbackする
+    def test_missing_credential_repair_and_enable_roll_back_on_storage_failure(self):
+        self.service.set_active(self.public_id, False)
+        LineChannelCredential.objects.filter(
+            line_channel__public_id=self.public_id
+        ).delete()
+        channel = LineChannel.objects.get(public_id=self.public_id)
+        original_update = self.service._repository.update_locked
+
+        def fail_after_update(*args, **kwargs):
+            original_update(*args, **kwargs)
+            from linechannels.repositories import PersistenceError
+
+            raise PersistenceError("storage_unavailable")
+
+        with patch.object(
+            self.service._repository, "update_locked", side_effect=fail_after_update
+        ):
+            result = self.service.update(
+                UpdateLineChannel(
+                    self.public_id,
+                    label="保存されない",
+                    credentials=build_credential_pair(
+                        "token-replacement", "secret-replacement"
+                    ),
+                    is_active=True,
+                    expected_updated_at=channel.updated_at,
+                    required_provider_id="000123",
+                )
+            )
+
+        channel.refresh_from_db()
+        self.assertEqual((result.status, result.code), ("failed", "storage_unavailable"))
+        self.assertEqual(channel.label, "登録時名称")
+        self.assertFalse(channel.is_active)
+        self.assertFalse(
+            LineChannelCredential.objects.filter(line_channel=channel).exists()
+        )
+
+    # テストケース: DB round-tripしたaware revisionとnaive revisionで更新する
+    # 期待値: aware完全一致だけ成功し、naive値はDB変更前に拒否する
+    def test_revision_requires_timezone_aware_exact_database_value(self):
+        channel = LineChannel.objects.get(public_id=self.public_id)
+        self.assertIsNotNone(channel.updated_at.tzinfo)
+
+        succeeded = self.service.update(
+            UpdateLineChannel(
+                self.public_id,
+                label="round-trip成功",
+                expected_updated_at=channel.updated_at,
+                required_provider_id="000123",
+            )
+        )
+        rejected = self.service.update(
+            UpdateLineChannel(
+                self.public_id,
+                label="保存されない",
+                expected_updated_at=datetime.now(),
+                required_provider_id="000123",
+            )
+        )
+
+        channel.refresh_from_db()
+        self.assertEqual(succeeded.status, "succeeded")
+        self.assertEqual((rejected.status, rejected.code), ("failed", "invalid_input"))
+        self.assertEqual(channel.label, "round-trip成功")
+
+    # テストケース: non-null provider変更とlegacy provider backfillを管理proof付きで要求する
+    # 期待値: non-null値はimmutable、legacyはrequired provider完全一致時だけ補完できる
+    def test_admin_provider_immutable_and_legacy_backfill_scope(self):
+        channel = LineChannel.objects.get(public_id=self.public_id)
+        immutable = self.service.update(
+            UpdateLineChannel(
+                self.public_id,
+                provider_id="000456",
+                expected_updated_at=channel.updated_at,
+                required_provider_id="000123",
+            )
+        )
+        self.assertEqual(
+            (immutable.status, immutable.code), ("failed", "provider_immutable")
+        )
+
+        LineChannel.objects.filter(public_id=self.public_id).update(provider_id=None)
+        channel.refresh_from_db()
+        outside = self.service.update(
+            UpdateLineChannel(
+                self.public_id,
+                provider_id="000456",
+                expected_updated_at=channel.updated_at,
+                required_provider_id="000123",
+            )
+        )
+        inside = self.service.update(
+            UpdateLineChannel(
+                self.public_id,
+                provider_id="000123",
+                expected_updated_at=channel.updated_at,
+                required_provider_id="000123",
+            )
+        )
+
+        channel.refresh_from_db()
+        self.assertEqual((outside.status, outside.code), ("failed", "channel_not_found"))
+        self.assertEqual(inside.status, "succeeded")
+        self.assertEqual(channel.provider_id, "000123")

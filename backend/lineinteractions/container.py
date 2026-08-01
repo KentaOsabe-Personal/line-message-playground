@@ -4,6 +4,7 @@ from lineaccounts.interaction_repositories import (
     DjangoInteractionAccountDirectory,
 )
 from linechannels.container import (
+    build_channel_reference_fence,
     build_credential_repository,
     build_line_channel_directory,
 )
@@ -31,6 +32,8 @@ def build_interaction_handler(
         action_registry=action_registry,
         credential_repository=build_credential_repository(),
         reply_gateway=HttpxLineReplyGateway(),
-        audit_repository=DjangoInteractionAuditRepository(),
+        audit_repository=DjangoInteractionAuditRepository(
+            reference_fence=build_channel_reference_fence()
+        ),
         monotonic=monotonic_clock,
     )

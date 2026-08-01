@@ -4,7 +4,10 @@ from time import monotonic
 from django.utils import timezone
 
 from delivery.container import build_receipt_handler
-from linechannels.container import build_webhook_credential_repository
+from linechannels.container import (
+    build_channel_reference_fence,
+    build_webhook_credential_repository,
+)
 from linefriendships.container import build_friendship_sync_handler
 from lineinteractions.container import build_interaction_handler
 from lineinteractions.types import PostbackActionHandler
@@ -43,7 +46,9 @@ def build_webhook_ingress_service(
         credential_repository=build_webhook_credential_repository(),
         signature_verifier=RawSignatureVerifier(),
         payload_validator=WebhookPayloadValidator(),
-        receipt_repository=DjangoEventReceiptRepository(),
+        receipt_repository=DjangoEventReceiptRepository(
+            reference_fence=build_channel_reference_fence()
+        ),
         registry=StaticHandlerRegistry(
             (
                 HandlerRegistration("follow", friendship_handler, "local"),

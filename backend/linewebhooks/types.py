@@ -222,6 +222,15 @@ class ReceiptDecision:
 
 @dataclass(frozen=True)
 class ReceiptStorageFailed:
+    code: Literal["storage_retryable", "storage_unavailable"] = (
+        "storage_unavailable"
+    )
+    status: Literal["failed"] = "failed"
+
+
+@dataclass(frozen=True)
+class ReceiptChannelUnavailable:
+    code: Literal["channel_unavailable"] = "channel_unavailable"
     status: Literal["failed"] = "failed"
 
 

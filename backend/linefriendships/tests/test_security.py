@@ -14,6 +14,7 @@ from linechannels import runtime
 from linechannels.crypto import FernetCredentialCipher
 from linechannels.models import LineChannel, LineChannelCredential
 from linechannels.types import AccessToken, ChannelSecret, CredentialContext
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 from linefriendships.models import FriendshipSyncAudit
 from linefriendships.parsing import DefaultFriendshipEventParser
 from linefriendships.repositories import DjangoFriendshipAuditRepository
@@ -222,7 +223,7 @@ class FriendshipSecurityIntegrationTests(TestCase):
                 )()},
             )(),
             account_repository=_FailingAccountRepository(),
-            audit_repository=DjangoFriendshipAuditRepository(),
+            audit_repository=DjangoFriendshipAuditRepository(LOCKED_REFERENCE_FENCE),
         )
 
         result = service.handle(event)

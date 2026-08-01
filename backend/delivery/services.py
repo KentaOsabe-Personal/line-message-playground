@@ -3,6 +3,7 @@ from typing import Callable, Protocol
 from uuid import UUID
 
 from django.utils import timezone
+from django.db import DatabaseError
 
 from linechannels.types import (
     AccessToken,
@@ -16,6 +17,8 @@ from .types import (
     AcceptedLinkedAttempt,
     AttemptAccepted,
     AttemptConflict,
+    AttemptStorageFailed,
+    AttemptTargetUnavailable,
     DeliveryPrePushFailure,
     ExistingAttempt,
     LinkedPushExecuted,
@@ -148,6 +151,10 @@ class DeliveryService:
         candidate = None
         if isinstance(accept_result, (ExistingAttempt, AttemptConflict)):
             return accept_result
+        if isinstance(accept_result, AttemptTargetUnavailable):
+            return TargetUnavailable("target_not_available")
+        if isinstance(accept_result, AttemptStorageFailed):
+            raise DatabaseError("storage_unavailable")
         raise ValueError("invalid attempt accept result")
 
     def push_accepted(self, accepted):

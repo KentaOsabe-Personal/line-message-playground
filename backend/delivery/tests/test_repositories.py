@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 from django.test import TestCase
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
 from delivery.formatters import format_message_snapshot
 from delivery.models import DeliveryAttempt
@@ -13,6 +15,8 @@ from delivery.types import (
     AcceptedDeliveryCommand,
     AttemptAccepted,
     AttemptConflict,
+    AttemptStorageFailed,
+    AttemptTargetUnavailable,
     ConfirmReceiptCommand,
     DeliveryPrePushFailure,
     ExistingAttempt,
@@ -29,6 +33,7 @@ from delivery.types import (
     ReceiptUnchanged,
 )
 from lineaccounts.models import LineIdentity, OwnerAccount
+from linechannels.reference_fence import ReferenceFenceResult
 
 
 NOW = datetime(2026, 7, 26, 12, 0, tzinfo=timezone.utc)
@@ -114,7 +119,7 @@ class RequestFingerprintTests(TestCase):
 
 class DjangoAttemptRepositoryAcceptTests(TestCase):
     def setUp(self):
-        self.repository = DjangoAttemptRepository(clock=lambda: NOW)
+        self.repository = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW)
         self.owner = OwnerPrincipal(1)
         self.owner_identity = OwnerIdentitySnapshot(
             UUID("11111111-1111-4111-8111-111111111111")
@@ -162,6 +167,30 @@ class DjangoAttemptRepositoryAcceptTests(TestCase):
             ),
             receipt_commitment=receipt_commitment,
         )
+
+    # テストケース: attempt insert前のchannel fenceが不在またはstorage失敗を返す
+    # 期待値: attemptを作成せずwriter固有のsafe非挿入結果へ分類する
+    def test_reference_fence_failure_prevents_attempt_creation(self):
+        for status, expected_type in (
+            ("channel_not_found", AttemptTargetUnavailable),
+            ("storage_retryable", AttemptStorageFailed),
+            ("storage_unavailable", AttemptStorageFailed),
+        ):
+            fence = Mock()
+            fence.lock_existing.return_value = ReferenceFenceResult(status)
+            repository = DjangoAttemptRepository(
+                clock=lambda: NOW,
+                reference_fence=fence,
+            )
+
+            with self.subTest(status=status):
+                result = repository.accept(self.command())
+
+            self.assertIsInstance(result, expected_type)
+            self.assertEqual(DeliveryAttempt.objects.count(), 0)
+            fence.lock_existing.assert_called_once_with(
+                self.target.channel_public_id
+            )
 
     # テストケース: linked recipientへの新しい配信要求を受理する。
     # 期待値: processing行と全snapshotを作り、新規受理結果へ同じcanonical operationを返す。
@@ -289,7 +318,7 @@ class DjangoAttemptRepositoryAcceptTests(TestCase):
 class DjangoAttemptRepositoryFinalizeAndLookupTests(TestCase):
     def setUp(self):
         self.clock_now = NOW
-        self.repository = DjangoAttemptRepository(
+        self.repository = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE,
             clock=lambda: self.clock_now
         )
         self.owner = OwnerPrincipal(1)
@@ -617,7 +646,7 @@ class DjangoAttemptRepositoryFinalizeAndLookupTests(TestCase):
 
 class DjangoAttemptRepositoryReceiptTests(TestCase):
     def setUp(self):
-        self.repository = DjangoAttemptRepository(clock=lambda: NOW)
+        self.repository = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW)
         self.channel_public_id = UUID(
             "22222222-2222-4222-8222-222222222222"
         )
@@ -872,7 +901,7 @@ class DjangoAttemptRepositoryReceiptTests(TestCase):
 
 class DjangoAttemptRepositoryContractIntegrationTests(TestCase):
     def setUp(self):
-        self.repository = DjangoAttemptRepository(clock=lambda: NOW)
+        self.repository = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW)
         self.owner = OwnerPrincipal(1)
         self.owner_identity = OwnerIdentitySnapshot(
             UUID("11111111-1111-4111-8111-111111111111")

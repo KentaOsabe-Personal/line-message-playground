@@ -6,7 +6,10 @@ from datetime import datetime
 from django.utils import timezone
 
 from lineaccounts.delivery_repositories import DeliveryTargetDirectory
-from linechannels.container import build_credential_repository
+from linechannels.container import (
+    build_channel_reference_fence,
+    build_credential_repository,
+)
 
 from .confirmation import ConfirmationService
 from .gateway import LINEChannelPushGateway
@@ -33,7 +36,10 @@ def build_delivery_service(
     return DeliveryService(
         clock=clock,
         target_directory=build_target_directory(),
-        attempt_repository=DjangoAttemptRepository(clock=clock),
+        attempt_repository=DjangoAttemptRepository(
+            clock=clock,
+            reference_fence=build_channel_reference_fence(),
+        ),
         receipt_capability_factory=ReceiptCapabilityFactory(),
         credential_repository=build_credential_repository(),
         channel_push_gateway=LINEChannelPushGateway(),
@@ -46,7 +52,10 @@ def build_status_service(
 ) -> DeliveryService:
     return DeliveryService(
         clock=clock,
-        attempt_repository=DjangoAttemptRepository(clock=clock),
+        attempt_repository=DjangoAttemptRepository(
+            clock=clock,
+            reference_fence=build_channel_reference_fence(),
+        ),
     )
 
 
@@ -55,6 +64,9 @@ def build_receipt_handler(
     clock: Callable[[], datetime] = timezone.now,
 ) -> ReceiptHandler:
     return ReceiptHandler(
-        attempt_repository=DjangoAttemptRepository(clock=clock),
+        attempt_repository=DjangoAttemptRepository(
+            clock=clock,
+            reference_fence=build_channel_reference_fence(),
+        ),
         clock=clock,
     )

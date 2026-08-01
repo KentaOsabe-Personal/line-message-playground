@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from django.db import connection
 from django.test import SimpleTestCase, TestCase, TransactionTestCase
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
 from delivery.models import DeliveryAttempt
 from delivery.receipt import ReceiptCapabilityFactory
@@ -957,7 +958,7 @@ class LinkedDeliveryStoredResultIntegrationTests(TestCase):
             formatted_text="件名\n\n本文",
             fingerprint=DIGEST_B,
         )
-        self.repository = DjangoAttemptRepository(clock=lambda: self.now)
+        self.repository = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: self.now)
         self.service = DeliveryService(
             clock=lambda: self.now,
             attempt_repository=self.repository,
@@ -1089,7 +1090,7 @@ class LinkedDeliverySinglePushIntegrationTests(TransactionTestCase):
             fingerprint=DIGEST_B,
         )
         self.expiry = NOW + timedelta(hours=1)
-        self.repository = DjangoAttemptRepository(clock=lambda: self.now)
+        self.repository = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: self.now)
 
     def test_new_attempt_uses_only_selected_secrets_once_and_persists_safe_result(
         self,

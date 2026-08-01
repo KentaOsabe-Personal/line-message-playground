@@ -24,10 +24,10 @@ from linewebhooks.types import FrozenJsonObject, HandlerSucceeded, VerifiedWebho
 SINGLE_EVENT_RUNS = 5
 TEN_EVENT_REQUEST_BUDGET_MS = 2_000
 SINGLE_EVENT_QUERY_BUDGETS = {
-    "valid": 8,
-    "invalid": 3,
-    "unlinked": 5,
-    "stale": 6,
+    "valid": 9,
+    "invalid": 4,
+    "unlinked": 6,
+    "stale": 7,
 }
 
 
