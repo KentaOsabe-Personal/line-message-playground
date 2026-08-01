@@ -73,3 +73,60 @@ test('requires an irreversible deletion confirmation with channel identity', asy
   await act(async () => confirm?.click())
   expect(onDelete).toHaveBeenCalledTimes(1)
 })
+
+// テストケース: owner clickごとに接続確認の全6分類を返す
+// 期待値: 自動確認せず、各safe分類を対応する一時表示へ写像する
+test('renders every safe connection classification with no automatic recheck', async () => {
+  const labels = {
+    connected: '接続できました',
+    credential_unavailable: '資格情報を安全に利用できません',
+    authentication_failed: 'アクセストークンが拒否されました',
+    identity_mismatch: 'bot identity が一致しません',
+    rate_limited: 'LINE の利用制限中です',
+    line_unavailable: 'LINE の確認結果を確定できません',
+  } as const
+  for (const [status, label] of Object.entries(labels)) {
+    const onCheck = vi.fn().mockResolvedValue({
+      channelId: item.channelId, status, checkedAt: '2026-07-29T12:00:00Z',
+      scope: 'access_token_and_bot_identity_only',
+    })
+    await act(async () => root.render(
+      <ChannelActions key={status} item={item} onSetState={vi.fn()} onDelete={vi.fn()} onCheck={onCheck} />,
+    ))
+    expect(onCheck).not.toHaveBeenCalled()
+    const check = [...container.querySelectorAll('button')].find((button) => button.textContent === '接続を確認')
+    await act(async () => check?.click())
+    expect(onCheck).toHaveBeenCalledTimes(1)
+    expect(container.textContent).toContain(label)
+  }
+})
+
+// テストケース: repair_requiredチャネルを完全pair修復と同時に有効化する
+// 期待値: 一操作だけを送り、完了後は秘密値をDOMへ保持しない
+test('repairs credentials during enable and clears secret DOM values after completion', async () => {
+  const onSetState = vi.fn().mockResolvedValue(undefined)
+  await act(async () => root.render(
+    <ChannelActions item={item} onSetState={onSetState} onDelete={vi.fn()} onCheck={vi.fn()} />,
+  ))
+  const enable = [...container.querySelectorAll('button')].find((button) => button.textContent === '有効化')
+  await act(async () => enable?.click())
+  const token = container.querySelector<HTMLInputElement>('input[name="accessToken"]')!
+  const secret = container.querySelector<HTMLInputElement>('input[name="channelSecret"]')!
+  for (const input of [token, secret]) {
+    expect(input.getAttribute('value')).toBeNull()
+    expect(input.getAttribute('placeholder')).toBeNull()
+    expect([...input.attributes].some((attribute) => attribute.name.startsWith('data-'))).toBe(false)
+  }
+  token.value = 'repair-token-canary'
+  secret.value = 'repair-secret-canary'
+  await act(async () => container.querySelector('form')!.dispatchEvent(
+    new SubmitEvent('submit', { bubbles: true, cancelable: true }),
+  ))
+
+  expect(onSetState).toHaveBeenCalledWith(true, {
+    accessToken: 'repair-token-canary', channelSecret: 'repair-secret-canary',
+  })
+  expect(container.querySelector('[role="dialog"]')).toBeNull()
+  expect(container.textContent).not.toContain('repair-token-canary')
+  expect(container.textContent).not.toContain('repair-secret-canary')
+})

@@ -51,3 +51,49 @@ test('rejects a one-sided credential pair before calling the mutation', async ()
   expect(container.textContent).toContain('資格情報は完全なペアで入力してください')
   expect(container.querySelector<HTMLInputElement>('input[name="accessToken"]')!.value).toBe('')
 })
+
+// テストケース: 新規登録で完全な資格情報pairを一度だけ送信する
+// 期待値: 成功後は全fieldをresetし、秘密値をDOMへ保持しない
+test('submits a complete create pair once and clears every form field after success', async () => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined)
+  await act(async () => root.render(<ChannelEditor mode="create" onSubmit={onSubmit} />))
+  const values: Record<string, string> = {
+    label: '新規', messagingApiChannelId: '789', botUserId: `U${'d'.repeat(32)}`,
+    providerId: '456', accessToken: 'create-token-canary', channelSecret: 'create-secret-canary',
+  }
+  for (const [name, value] of Object.entries(values)) {
+    container.querySelector<HTMLInputElement>(`input[name="${name}"]`)!.value = value
+  }
+  container.querySelector<HTMLInputElement>('input[name="active"]')!.checked = true
+
+  await act(async () => container.querySelector('form')!.dispatchEvent(
+    new SubmitEvent('submit', { bubbles: true, cancelable: true }),
+  ))
+
+  expect(onSubmit).toHaveBeenCalledTimes(1)
+  expect(onSubmit).toHaveBeenCalledWith({ ...values, active: true })
+  for (const name of Object.keys(values)) {
+    expect(container.querySelector<HTMLInputElement>(`input[name="${name}"]`)!.value).toBe('')
+  }
+  expect(container.textContent).not.toContain('create-token-canary')
+  expect(container.textContent).not.toContain('create-secret-canary')
+})
+
+// テストケース: 保存済み資格情報を空欄のままmetadataだけ更新する
+// 期待値: 秘密fieldと固定providerをrequestへ含めず、非秘密項目だけを送る
+test('omits blank credentials from a metadata-only edit', async () => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined)
+  await act(async () => root.render(<ChannelEditor mode="edit" item={item} onSubmit={onSubmit} />))
+  container.querySelector<HTMLInputElement>('input[name="label"]')!.value = 'metadata only'
+
+  await act(async () => container.querySelector('form')!.dispatchEvent(
+    new SubmitEvent('submit', { bubbles: true, cancelable: true }),
+  ))
+
+  expect(onSubmit).toHaveBeenCalledWith({
+    expectedUpdatedAt: item.updatedAt,
+    label: 'metadata only',
+    messagingApiChannelId: item.messagingApiChannelId,
+    botUserId: item.botUserId,
+  })
+})

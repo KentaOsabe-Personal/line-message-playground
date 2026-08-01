@@ -50,6 +50,8 @@ class LineBotInfoGatewayTests(SimpleTestCase):
             (SafeApiError(429), "rate_limited"),
             (SafeApiError(503), "line_unavailable"),
             (TimeoutError("raw-canary"), "line_unavailable"),
+            (ConnectionError("connection-canary"), "line_unavailable"),
+            (RuntimeError("unexpected-canary"), "line_unavailable"),
         )
         for error, expected in cases:
             with self.subTest(expected=expected):
@@ -60,6 +62,10 @@ class LineBotInfoGatewayTests(SimpleTestCase):
                 ).get_bot_identity(AccessToken("gateway-token"))
                 self.assertEqual(result.code, expected)
                 self.assertNotIn("raw-canary", repr(result))
+                self.assertNotIn("connection-canary", repr(result))
+                self.assertNotIn("unexpected-canary", repr(result))
+                client.get_bot_info.assert_called_once()
+                client.close.assert_called_once_with()
 
         client = Mock()
         client.get_bot_info.return_value = Mock(user_id="unexpected")

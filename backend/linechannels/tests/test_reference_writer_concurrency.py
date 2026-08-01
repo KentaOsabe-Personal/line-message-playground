@@ -2,8 +2,9 @@ import threading
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from django.db import close_old_connections, transaction
+from django.db import close_old_connections, connection, transaction
 from django.test import TransactionTestCase
+from django.test.utils import CaptureQueriesContext
 
 from delivery.formatters import format_message_snapshot
 from delivery.models import DeliveryAttempt
@@ -88,12 +89,19 @@ class ReferenceWriterConcurrencyTests(TransactionTestCase):
     def _writers(self, channel, fence):
         event_id = "01" + uuid4().hex[:24]
         recipient_repository = DjangoAccountRepository(reference_fence=fence)
+        effects = {
+            "recipient_projection": 0,
+            "delivery_push": 0,
+            "webhook_handler": 0,
+            "friendship_projection": 0,
+            "interaction_reply_or_action": 0,
+        }
 
         def recipient_writer():
             try:
                 with transaction.atomic():
                     owner = recipient_repository.lock_owner_account()
-                    return recipient_repository.create_recipient(
+                    result = recipient_repository.create_recipient(
                         owner,
                         NewRecipient(
                             identity_id=self.identity.public_id,
@@ -101,8 +109,58 @@ class ReferenceWriterConcurrencyTests(TransactionTestCase):
                             friendship_state="unknown",
                         ),
                     )
+                    effects["recipient_projection"] += 1
+                    return result
             except AccountStateError as error:
                 return error.code
+
+        def delivery_writer():
+            result = DjangoAttemptRepository(
+                reference_fence=fence,
+                clock=lambda: NOW,
+            ).accept(delivery_command)
+            if isinstance(result, AttemptAccepted):
+                effects["delivery_push"] += 1
+            return result
+
+        def webhook_writer():
+            result = DjangoEventReceiptRepository(fence).accept_batch(
+                (
+                    ReceiptCandidate(
+                        channel_public_id=channel.public_id,
+                        webhook_event_id=event_id,
+                        event_type="message",
+                        occurred_at_ms=1,
+                        is_redelivery=False,
+                        initial_status="processing",
+                    ),
+                )
+            )
+            if isinstance(result, tuple):
+                effects["webhook_handler"] += 1
+            return result
+
+        def friendship_writer():
+            result = self._record_friendship(channel, event_id, fence)
+            if result == "recorded":
+                effects["friendship_projection"] += 1
+            return result
+
+        def interaction_writer():
+            result = DjangoInteractionAuditRepository(fence).record(
+                InteractionAuditRecord(
+                    channel_public_id=channel.public_id,
+                    webhook_event_id=event_id,
+                    event_type="message",
+                    operation_kind="command",
+                    operation_identifier="connectivity_ping_v1",
+                    interaction_outcome="command_processed",
+                    reply_outcome="accepted",
+                )
+            )
+            if result == "recorded":
+                effects["interaction_reply_or_action"] += 1
+            return result
 
         target = LinkedTargetSnapshot(
             channel_public_id=channel.public_id,
@@ -145,62 +203,43 @@ class ReferenceWriterConcurrencyTests(TransactionTestCase):
                     line_channel__public_id=channel.public_id
                 ).count(),
                 lambda result: not isinstance(result, str),
+                lambda: effects["recipient_projection"],
             ),
             (
                 "delivery",
-                lambda: DjangoAttemptRepository(
-                    reference_fence=fence,
-                    clock=lambda: NOW,
-                ).accept(delivery_command),
+                delivery_writer,
                 lambda: DeliveryAttempt.objects.filter(
                     channel_public_id=channel.public_id
                 ).count(),
                 lambda result: isinstance(result, AttemptAccepted),
+                lambda: effects["delivery_push"],
             ),
             (
                 "webhook",
-                lambda: DjangoEventReceiptRepository(fence).accept_batch(
-                    (
-                        ReceiptCandidate(
-                            channel_public_id=channel.public_id,
-                            webhook_event_id=event_id,
-                            event_type="message",
-                            occurred_at_ms=1,
-                            is_redelivery=False,
-                            initial_status="processing",
-                        ),
-                    )
-                ),
+                webhook_writer,
                 lambda: WebhookEventReceipt.objects.filter(
                     channel_public_id=channel.public_id
                 ).count(),
                 lambda result: isinstance(result, tuple),
+                lambda: effects["webhook_handler"],
             ),
             (
                 "friendship",
-                lambda: self._record_friendship(channel, event_id, fence),
+                friendship_writer,
                 lambda: FriendshipSyncAudit.objects.filter(
                     channel_public_id=channel.public_id
                 ).count(),
                 lambda result: result == "recorded",
+                lambda: effects["friendship_projection"],
             ),
             (
                 "interaction",
-                lambda: DjangoInteractionAuditRepository(fence).record(
-                    InteractionAuditRecord(
-                        channel_public_id=channel.public_id,
-                        webhook_event_id=event_id,
-                        event_type="message",
-                        operation_kind="command",
-                        operation_identifier="connectivity_ping_v1",
-                        interaction_outcome="command_processed",
-                        reply_outcome="accepted",
-                    )
-                ),
+                interaction_writer,
                 lambda: InteractionAudit.objects.filter(
                     channel_public_id=channel.public_id
                 ).count(),
                 lambda result: result == "recorded",
+                lambda: effects["interaction_reply_or_action"],
             ),
         )
 
@@ -270,6 +309,7 @@ class ReferenceWriterConcurrencyTests(TransactionTestCase):
                 self.assertFalse(delete_thread.is_alive())
                 self.assertFalse(writer_thread.is_alive())
                 self.assertEqual(writer[2](), 0)
+                self.assertEqual(writer[4](), 0)
                 self.assertEqual(len(outcomes), 1)
                 self.assertFalse(writer[3](outcomes[0]))
                 self.assertTrue(
@@ -290,6 +330,7 @@ class ReferenceWriterConcurrencyTests(TransactionTestCase):
                 )
                 outcomes = []
                 delete_results = []
+                probe_queries = []
 
                 def run_writer():
                     close_old_connections()
@@ -305,9 +346,11 @@ class ReferenceWriterConcurrencyTests(TransactionTestCase):
                         if locked.status != "locked":
                             delete_results.append(locked.status)
                             return
-                        check = build_channel_reference_directory().is_referenced(
-                            channel.public_id
-                        )
+                        with CaptureQueriesContext(connection) as captured:
+                            check = build_channel_reference_directory().is_referenced(
+                                channel.public_id
+                            )
+                        probe_queries.extend(query["sql"].lower() for query in captured.captured_queries)
                         delete_results.append(check.status)
                         if check.status == "unreferenced":
                             LineChannel.objects.filter(
@@ -328,8 +371,21 @@ class ReferenceWriterConcurrencyTests(TransactionTestCase):
                 self.assertFalse(delete_thread.is_alive())
                 self.assertEqual(len(outcomes), 1)
                 self.assertTrue(writer[3](outcomes[0]))
+                self.assertEqual(writer[4](), 1)
                 self.assertEqual(delete_results, ["referenced"])
                 self.assertTrue(
                     LineChannel.objects.filter(public_id=channel.public_id).exists()
                 )
                 self.assertEqual(writer[2](), 1)
+                for table in (
+                    "lineaccounts_deliveryrecipient",
+                    "delivery_deliveryattempt",
+                    "linewebhooks_webhookeventreceipt",
+                    "linefriendships_friendshipsyncaudit",
+                    "lineinteractions_interactionaudit",
+                ):
+                    self.assertLessEqual(
+                        sum(table in sql for sql in probe_queries),
+                        1,
+                        f"{name}: {table} probe must execute at most once",
+                    )

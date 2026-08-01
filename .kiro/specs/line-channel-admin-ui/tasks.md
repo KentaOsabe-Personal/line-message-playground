@@ -218,50 +218,50 @@
   - _Boundary: ChannelAdminConsole, App_
   - _Depends: 6.1, 6.2, 6.4_
 
-- [ ] 7. セキュリティ・競合・回帰を検証する
-- [ ] 7.1 owner認可・CSRF・read線形化のAPI統合テストを追加する
+- [x] 7. セキュリティ・競合・回帰を検証する
+- [x] 7.1 owner認可・CSRF・read線形化のAPI統合テストを追加する
   - unsafe endpointのOrigin/CSRF異常をserializer前に拒否し、DB無変更とcanary非露出を確認する。
   - 一覧・詳細・mutationとunlink/session失効を競合させ、owner→session→channel lock順とdeadlock/timeoutのsafe分類を検証する。
   - 完了時には、認証後競合を含む情報非開示・無変更・storage分類契約が実DBで再現できる。
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 8.7_
   - _Boundary: OwnerOperationFence, AdminAPI Tests_
-- [ ] 7.2 登録・更新・状態変更・削除のAPI統合テストを追加する
+- [x] 7.2 登録・更新・状態変更・削除のAPI統合テストを追加する
   - 同一/別provider、legacy backfill、重複、partial credential、stale、storage失敗、参照中削除を公開HTTP契約で検証する。
   - 成功時はsafe DTO、失敗時は全体rollback、結果不明後は再取得で実状態へ収束することを確認する。
   - 完了時には、主要lifecycle操作のstatus/body/DB状態が全受入基準どおり観測できる。
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 3.7, 3.8, 3.9, 4.2, 4.7, 4.8, 4.10, 5.1, 5.3, 5.4, 5.5, 5.6, 8.2, 8.3, 8.5, 8.6, 8.7, 9.6, 9.7_
   - _Boundary: AdminAPI Tests_
-- [ ] 7.3 LINE gatewayの外部分類と秘密非露出テストを追加する
+- [x] 7.3 LINE gatewayの外部分類と秘密非露出テストを追加する
   - bot ID成功、認証失敗、429、timeout、connection、5xx、不定形応答を固定safe結果へ分類する。
   - SDK retry 0、timeout上限、one-shot呼出し、例外・body・header・request IDの非文字列化を検証する。
   - 完了時には、送信なしのgateway分類とcanary秘密非露出が単体テストで再現できる。
   - _Requirements: 7.1, 7.2, 7.4, 7.6, 7.7, 7.8, 9.10_
   - _Boundary: LineBotInfoGateway Tests_
-- [ ] 7.4 接続確認serviceのrevision競合とtransaction境界を検証する
+- [x] 7.4 接続確認serviceのrevision競合とtransaction境界を検証する
   - credential不可、bot ID一致/不一致を含む6分類と限定scopeをservice/API契約で確認する。
   - 外部call中のmetadata/credential更新、削除、unlinkを競合させ、transaction/row lock非保持とstale結果破棄を検証する。
   - 完了時には、開始snapshotから完了revisionまでの競合と明示再確認契約が実DBで再現できる。
   - _Requirements: 1.5, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10, 9.10_
   - _Boundary: ChannelAdminService Connection Tests_
-- [ ] 7.5 recipient・delivery・Webhook writerと削除の実並行テストを追加する
+- [x] 7.5 recipient・delivery・Webhook writerと削除の実並行テストを追加する
   - 共通競合fixtureでwriter先行とdelete先行を3種それぞれ再現する。
   - record、push、handler、部分削除の有無とwriter固有のsafe分類を確認する。
   - 完了時には、3 writerのfence利用と既存成功契約が実DBで自動検証される。
   - _Requirements: 8.2, 8.3, 8.4, 8.5, 8.7_
   - _Boundary: Recipient, Delivery, Webhook ReferenceWriter Tests_
-- [ ] 7.6 friendship・interaction writerと削除の実並行テストを追加する
+- [x] 7.6 friendship・interaction writerと削除の実並行テストを追加する
   - 共通競合fixtureでwriter先行とdelete先行を2種それぞれ再現する。
   - projection、audit、reply/action、部分削除の有無と、各probeが一回以内であることを確認する。
   - 完了時には、2 writerのfence利用、safe分類、既存成功契約が実DBで自動検証される。
   - _Requirements: 8.2, 8.3, 8.4, 8.5, 8.7_
   - _Boundary: Friendship, Interaction ReferenceWriter Tests_
-- [ ] 7.7 editorとチャネルlifecycleのUI統合テストを追加する
+- [x] 7.7 editorとチャネルlifecycleのUI統合テストを追加する
   - emptyからの登録、metadata-only更新、完全pair置換、修復+enable、disable、参照中/未参照deleteを操作する。
   - 秘密欄の空初期値、DOM非保持、処理中重複防止、成否後reset、stale/unknown後refreshを確認する。
   - 完了時には、write-only editorとlifecycleの主要journeyが秘密非露出のままVitestで通る。
   - _Requirements: 3.1, 3.2, 4.1, 4.2, 4.4, 4.5, 4.6, 4.8, 4.9, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 8.1, 8.3, 8.5, 8.6, 8.7, 9.2, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9, 9.10_
   - _Boundary: ChannelEditor, ChannelActions Lifecycle Tests_
-- [ ] 7.8 一覧・copy・接続確認・認証表示のUI統合とbuildを検証する
+- [x] 7.8 一覧・copy・接続確認・認証表示のUI統合とbuildを検証する
   - loading/empty/error/ready、Webhook copy通知、inactive表示、接続6分類、stale refresh、未認証非表示を操作する。
   - 限定scope、secret様DOM属性非存在、既存Frontend回帰、production buildを確認する。
   - 完了時には、Frontend test suiteとproduction buildが成功し、残るowner journeyが安全な画面状態で完了する。
