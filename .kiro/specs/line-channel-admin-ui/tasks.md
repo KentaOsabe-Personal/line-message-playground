@@ -160,20 +160,20 @@
   - _Boundary: AdminAPI Runtime Composition_
   - _Depends: 4.2, 4.3_
 
-- [ ] 5. Frontendの非秘密境界と画面状態を構築する
-- [ ] 5.1 管理APIのsafe DTOを実行時検証する
+- [x] 5. Frontendの非秘密境界と画面状態を構築する
+- [x] 5.1 管理APIのsafe DTOを実行時検証する
   - 応答をunknownとしてexact key、UUID、timezone-aware datetime、HTTPS URL、enumを検証する。
   - Webhook URL内IDとchannel IDの一致を確認し、secret様fieldや余分なfieldをprotocol errorにする。
   - 完了時には、Frontend型にtoken、secret、ciphertextを定義せず、exact DTOと秘密様field拒否をVitestで再現できる。
   - _Requirements: 2.2, 2.3, 2.4, 2.5, 6.1, 6.4, 7.8_
   - _Boundary: ChannelAdminDto_
-- [ ] 5.2 一回限りの管理HTTP手順と安全なclient errorを実装する
+- [x] 5.2 一回限りの管理HTTP手順と安全なclient errorを実装する
   - 各API操作をProtectedHttpClientの一回のrequestへ写像し、401を既存session再取得へ接続する。
   - network、protocol、safe API errorを識別し、secret request bodyをError、retry payload、履歴へ保持しない。
   - 完了時には、mutationと接続確認が自動retryされず、HTTP error分類、401連携、one-shot requestをVitestで再現できる。
   - _Requirements: 1.2, 1.5, 4.9, 7.8, 9.7, 9.8, 9.9, 9.10_
   - _Boundary: ChannelAdminApi_
-- [ ] 5.3 非秘密の画面・操作状態遷移を実装する
+- [x] 5.3 非秘密の画面・操作状態遷移を実装する
   - idle/loading/empty/ready/load_failed/refresh_requiredを排他的に扱い、古いrequest generationを破棄する。
   - 操作keyごとに二重開始を拒否し、successはserver DTOだけで更新、network unknownやstaleは明示refreshへ遷移する。
   - 完了時には、state/action/snapshotに秘密入力がなく、全状態遷移と明示refreshを純粋なVitestで再現できる。
