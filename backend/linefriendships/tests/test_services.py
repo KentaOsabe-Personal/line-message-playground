@@ -8,6 +8,7 @@ from lineaccounts.friendship_repositories import DjangoAccountProjectionReposito
 from lineaccounts.models import DeliveryRecipient, LineIdentity, OwnerAccount
 from linechannels.models import LineChannel
 from linechannels.repositories import DjangoLineChannelDirectory
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 from linewebhooks.types import (
     FrozenJsonObject,
     HandlerFailed,
@@ -187,8 +188,19 @@ class _MissingChannelDirectory:
 
 
 class _FailingAuditRepository:
+    def lock_reference(self, channel_public_id):
+        return object()
+
+    def record_after_fence(self, audit, locked):
+        raise RuntimeError("safe audit failure")
+
     def record(self, audit):
         raise RuntimeError("safe audit failure")
+
+
+class _RecordOnlyAuditRepository:
+    def record(self, audit):
+        return None
 
 
 class _FailingAccountRepository:
@@ -233,7 +245,7 @@ class FriendshipSyncServiceTests(TransactionTestCase):
             self.parser,
             directory or DjangoLineChannelDirectory(),
             account or DjangoAccountProjectionRepository(),
-            audit or DjangoFriendshipAuditRepository(),
+            audit or DjangoFriendshipAuditRepository(LOCKED_REFERENCE_FENCE),
         )
 
     def event(
@@ -386,6 +398,18 @@ class FriendshipSyncServiceTests(TransactionTestCase):
         self.assertIsNone(stored.last_friendship_event_occurred_at_ms)
         self.assertIsNone(stored.last_friendship_webhook_event_id)
         self.assertEqual(FriendshipSyncAudit.objects.count(), 0)
+
+    # テストケース: 旧record-only audit repositoryをvalid projectionへ渡す
+    # 期待値: mandatory channel lock contract欠落をfail closedしprojectionを開始しない
+    def test_record_only_repository_cannot_bypass_projection_fence(self):
+        result = self.service(audit=_RecordOnlyAuditRepository()).handle(
+            self.event()
+        )
+
+        self.assertIsInstance(result, HandlerFailed)
+        stored = DeliveryRecipient.objects.get(pk=self.recipient.pk)
+        self.assertEqual(stored.friendship_state, "unknown")
+        self.assertIsNone(stored.last_friendship_event_occurred_at_ms)
 
     # テストケース: account lockがstorage/contract failureを返す
     # 期待値: exception detailを公開せずHandlerFailedへ縮約する

@@ -17,6 +17,7 @@ from .types import (
     IngressResult,
     PayloadRejected,
     ReceiptCandidate,
+    ReceiptChannelUnavailable,
     ReceiptDecision,
     ReceiptStorageFailed,
     VerifiedEventData,
@@ -127,6 +128,9 @@ class WebhookIngressService:
                 )
             )
             decisions = self._receipt_repository.accept_batch(candidates)  # type: ignore[attr-defined]
+            if isinstance(decisions, ReceiptChannelUnavailable):
+                self._audit("channel_rejected", channel_public_id=channel_public_id)
+                return IngressRejected(code="channel_unavailable")
             if isinstance(decisions, ReceiptStorageFailed) or not self._valid_decisions(
                 payload.events, decisions
             ):

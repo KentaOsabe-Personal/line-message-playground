@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from django.db import DatabaseError
 from django.test import TestCase
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
 from linewebhooks.audit import SafeWebhookAuditLogger
 from linewebhooks.models import WebhookEventReceipt
@@ -141,7 +142,7 @@ class WebhookSecurityIntegrationTests(TestCase):
     def test_rejection_and_storage_exception_do_not_expose_internal_data(self) -> None:
         handler = RecordingHandler()
         audit_logger = SafeWebhookAuditLogger(self.logger)
-        repository = DjangoEventReceiptRepository()
+        repository = DjangoEventReceiptRepository(LOCKED_REFERENCE_FENCE)
         service, _ = build_service(
             handler=handler,
             receipt_repository=repository,

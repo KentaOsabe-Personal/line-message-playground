@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import Mock
 from uuid import uuid4
 
 from django.db import transaction
@@ -19,11 +20,17 @@ from lineaccounts.recipient_services import (
     RecipientMutationFailed,
     RecipientMutationSucceeded,
 )
-from lineaccounts.repositories import DjangoAccountRepository, NewRecipient
+from lineaccounts.repositories import (
+    AccountPersistenceError,
+    AccountStateError,
+    DjangoAccountRepository,
+    NewRecipient,
+)
 from lineaccounts.runtime import LiffLinkedChannelPolicy
 from lineaccounts.types import LineSubject, UserAccessToken
 from linechannels.models import LineChannel
 from linechannels.repositories import DjangoLineChannelDirectory
+from linechannels.reference_fence import ReferenceFenceResult
 
 
 class RecipientChannelListingTests(TestCase):
@@ -73,6 +80,39 @@ class RecipientChannelListingTests(TestCase):
                     False,
                 )
         return recipient
+
+    # テストケース: recipient insert前のchannel fenceが不在またはstorage失敗を返す
+    # 期待値: recipientを作成せず既存のsafe state/storage分類へ変換する
+    def test_reference_fence_failure_prevents_recipient_creation(self):
+        channel = self.channel("競合対象")
+        for status, error_type, expected in (
+            ("channel_not_found", AccountStateError, "channel_not_found"),
+            ("storage_retryable", AccountPersistenceError, "retryable"),
+            (
+                "storage_unavailable",
+                AccountPersistenceError,
+                "storage_unavailable",
+            ),
+        ):
+            fence = Mock()
+            fence.lock_existing.return_value = ReferenceFenceResult(status)
+            repository = DjangoAccountRepository(reference_fence=fence)
+
+            with self.subTest(status=status), self.assertRaises(
+                error_type
+            ) as raised, transaction.atomic():
+                owner = repository.lock_owner_account()
+                repository.create_recipient(
+                    owner,
+                    NewRecipient(
+                        identity_id=self.identity.public_id,
+                        channel_id=channel.public_id,
+                        friendship_state="unknown",
+                    ),
+                )
+
+            self.assertEqual(raised.exception.code, expected)
+            self.assertEqual(DeliveryRecipient.objects.count(), 0)
 
     # テストケース: provider一致active channelと既存recipient channelを一覧する
     # 期待値: 他providerを除外しinactive既存linkを含むchannel UUID順の安全な和集合を返す

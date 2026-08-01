@@ -33,49 +33,49 @@
   - _Requirements: 7.3, 7.8, 7.10_
   - _Boundary: AdminChannelRepository_
 
-- [ ] 2. 参照整合性fenceを既存writerへ展開する
-- [ ] 2.1 チャネル行を共有lock rootとする参照fenceを実装する
+- [x] 2. 参照整合性fenceを既存writerへ展開する
+- [x] 2.1 チャネル行を共有lock rootとする参照fenceを実装する
   - 呼出し側transaction内でcanonical channel UUIDの行をlockし、参照作成可否とstorage失敗を網羅的に分類する。
   - row不存在を成功やprogramming errorへ変換せず、後続insertを許可しない契約にする。
   - 完了時には、全参照writerと削除が同じchannel rowで直列化できる公開contractが利用できる。
   - _Requirements: 8.2, 8.4, 8.7_
   - _Boundary: ChannelReferenceFence_
-- [ ] 2.2 (P) 配信先の参照probeとwriterを参照fenceへ統合する
+- [x] 2.2 (P) 配信先の参照probeとwriterを参照fenceへ統合する
   - recipient storeだけを照会するprobeを公開し、recipient insert前に同じtransactionでfenceを取得する。
   - channel不在・storage失敗時は作成をrollbackし、既存のsafe mutation結果と成功契約を維持する。
   - 完了時には、削除先行時に配信先が作成されず、管理側がrecipient参照を直接model importなしで検出できる。
   - _Requirements: 8.2, 8.3, 8.4, 8.7_
   - _Boundary: DeliveryRecipient ReferenceWriter_
   - _Depends: 2.1_
-- [ ] 2.3 (P) 配信試行の参照probeとwriterを参照fenceへ統合する
+- [x] 2.3 (P) 配信試行の参照probeとwriterを参照fenceへ統合する
   - attempt storeだけを照会するprobeを公開し、attempt insertとLINE push開始前にfence結果を確認する。
   - channel不在をtarget unavailableへ、storage分類を安全なHTTP結果へ写像し、transactionを部分完了させない。
   - 完了時には、削除先行時にattemptもpushも開始されず、管理側がdelivery参照を検出できる。
   - _Requirements: 8.2, 8.3, 8.4, 8.7_
   - _Boundary: DeliveryAttempt ReferenceWriter_
   - _Depends: 2.1_
-- [ ] 2.4 (P) Webhook受付の参照probeとwriterを参照fenceへ統合する
+- [x] 2.4 (P) Webhook受付の参照probeとwriterを参照fenceへ統合する
   - receipt storeだけを照会するprobeを公開し、event batch先頭で一度channelをlockする。
   - channel不在・storage失敗を公開ingressの安全な拒否へ写像し、receipt insertとhandler開始を止める。
   - 完了時には、削除先行時にreceiptもhandlerも作成・実行されず、管理側がWebhook参照を検出できる。
   - _Requirements: 8.2, 8.3, 8.4, 8.7_
   - _Boundary: WebhookEventReceipt ReferenceWriter_
   - _Depends: 2.1_
-- [ ] 2.5 (P) 友だち状態監査の参照probeとwriterを参照fenceへ統合する
+- [x] 2.5 (P) 友だち状態監査の参照probeとwriterを参照fenceへ統合する
   - friendship audit storeだけを照会するprobeを公開し、projectionとaudit insert前にfenceを取得する。
   - 不在・storage失敗時は同じtransactionをrollbackし、分類を既存friendship結果へ失わずに写像する。
   - 完了時には、削除競合でfriendship状態とauditの片方だけが残らず、管理側が参照を検出できる。
   - _Requirements: 8.2, 8.3, 8.4, 8.7_
   - _Boundary: FriendshipSyncAudit ReferenceWriter_
   - _Depends: 2.1_
-- [ ] 2.6 (P) interaction監査の参照probeとwriterを参照fenceへ統合する
+- [x] 2.6 (P) interaction監査の参照probeとwriterを参照fenceへ統合する
   - interaction audit storeだけを照会するprobeを公開し、audit insertと未開始reply/actionの前にfence結果を確認する。
   - 既に確定した外部結果は既存safe outcomeとしてのみ扱い、秘密情報を追加保存しない。
   - 完了時には、削除先行時に新規audit、reply、actionが開始されず、管理側が参照を検出できる。
   - _Requirements: 8.2, 8.3, 8.4, 8.7_
   - _Boundary: InteractionAudit ReferenceWriter_
   - _Depends: 2.1_
-- [ ] 2.7 5種の参照probeを管理用directoryへ合成する
+- [x] 2.7 5種の参照probeを管理用directoryへ合成する
   - recipient、delivery、webhook、friendship、interactionのprobeを固定順序で合成する。
   - 最初の参照検出でreferencedを返し、DB失敗時は削除を許可せずsafe storage failureへ縮約する。
   - 完了時には、linechannelsが下流modelを直接importせず、各store一回以内のqueryで削除直前に全参照を判定できる。

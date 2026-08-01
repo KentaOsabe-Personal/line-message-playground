@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 from django.db import connections
 from django.test import TransactionTestCase
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
 from delivery.models import DeliveryAttempt
 from delivery.receipt import ReceiptHandler
@@ -140,7 +141,7 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
             patch(
                 "linewebhooks.container.build_receipt_handler",
                 side_effect=lambda **kwargs: build_spy(
-                    attempt_repository=DjangoAttemptRepository(
+                    attempt_repository=DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE,
                         clock=kwargs["clock"]
                     ),
                     clock=kwargs["clock"],

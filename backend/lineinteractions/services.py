@@ -176,6 +176,15 @@ class DefaultInteractionService:
                 interaction_outcome="handler_failed",
             )
 
+        reserved = self._reserve_external_audit(
+            event=event,
+            operation_kind="action",
+            operation_identifier=parsed.action_name,
+            fallback_outcome="handler_failed",
+        )
+        if reserved is None:
+            return HandlerFailed()
+
         command = PostbackActionCommand(
             action_name=parsed.action_name,
             payload=parsed.payload,
@@ -205,6 +214,7 @@ class DefaultInteractionService:
             operation_kind="action",
             operation_identifier=parsed.action_name,
             interaction_outcome=interaction_outcome,
+            reserved=reserved,
         )
 
     def _handle_command(
@@ -230,6 +240,15 @@ class DefaultInteractionService:
                 interaction_outcome="processing_failed",
             )
 
+        reserved = self._reserve_external_audit(
+            event=event,
+            operation_kind="command",
+            operation_identifier=command.identifier,
+            fallback_outcome="processing_failed",
+        )
+        if reserved is None:
+            return HandlerFailed()
+
         try:
             credential = self._credential_repository.get_access_token(
                 channel.channel_public_id
@@ -239,12 +258,14 @@ class DefaultInteractionService:
                 event=event,
                 command=command,
                 interaction_outcome="processing_failed",
+                reserved=reserved,
             )
         if isinstance(credential, CredentialUnavailable):
             return self._finish_command(
                 event=event,
                 command=command,
                 interaction_outcome="credential_unavailable",
+                reserved=reserved,
             )
         if (
             not isinstance(credential, CredentialAvailable)
@@ -254,6 +275,7 @@ class DefaultInteractionService:
                 event=event,
                 command=command,
                 interaction_outcome="processing_failed",
+                reserved=reserved,
             )
 
         cutoff = context.external_io_deadline_monotonic
@@ -273,6 +295,7 @@ class DefaultInteractionService:
                 event=event,
                 command=command,
                 interaction_outcome="deadline_exceeded",
+                reserved=reserved,
             )
 
         timeout = ReplyTimeoutBudget(
@@ -302,6 +325,7 @@ class DefaultInteractionService:
             command=command,
             interaction_outcome="command_processed",
             reply_outcome=reply_outcome,
+            reserved=reserved,
         )
 
     def _finish_command(
@@ -311,6 +335,7 @@ class DefaultInteractionService:
         command: CommandDefinition,
         interaction_outcome: InteractionOutcome,
         reply_outcome: ReplyOutcome = "not_started",
+        reserved: bool = False,
     ) -> HandlerOutcome:
         return self._finish(
             event=event,
@@ -318,7 +343,32 @@ class DefaultInteractionService:
             operation_identifier=command.identifier,
             interaction_outcome=interaction_outcome,
             reply_outcome=reply_outcome,
+            reserved=reserved,
         )
+
+    def _reserve_external_audit(
+        self,
+        *,
+        event: VerifiedWebhookEvent,
+        operation_kind: OperationKind,
+        operation_identifier: str,
+        fallback_outcome: InteractionOutcome,
+    ) -> bool | None:
+        try:
+            result = self._audit_repository.reserve(
+                InteractionAuditRecord(
+                    channel_public_id=event.channel_public_id,
+                    webhook_event_id=event.webhook_event_id,
+                    event_type=event.event_type,
+                    operation_kind=operation_kind,
+                    operation_identifier=operation_identifier,
+                    interaction_outcome=fallback_outcome,
+                    reply_outcome="not_started",
+                )
+            )
+        except Exception:
+            return None
+        return True if result == "recorded" else None
 
     def _finish(
         self,
@@ -328,18 +378,22 @@ class DefaultInteractionService:
         operation_kind: OperationKind = "none",
         operation_identifier: str | None = None,
         reply_outcome: ReplyOutcome = "not_started",
+        reserved: bool = False,
     ) -> HandlerOutcome:
+        record = InteractionAuditRecord(
+            channel_public_id=event.channel_public_id,
+            webhook_event_id=event.webhook_event_id,
+            event_type=event.event_type,
+            operation_kind=operation_kind,
+            operation_identifier=operation_identifier,
+            interaction_outcome=interaction_outcome,
+            reply_outcome=reply_outcome,
+        )
         try:
-            record_result = self._audit_repository.record(
-                InteractionAuditRecord(
-                    channel_public_id=event.channel_public_id,
-                    webhook_event_id=event.webhook_event_id,
-                    event_type=event.event_type,
-                    operation_kind=operation_kind,
-                    operation_identifier=operation_identifier,
-                    interaction_outcome=interaction_outcome,
-                    reply_outcome=reply_outcome,
-                )
+            record_result = (
+                self._audit_repository.replace_reserved(record)
+                if reserved
+                else self._audit_repository.record(record)
             )
         except Exception:
             return HandlerFailed()

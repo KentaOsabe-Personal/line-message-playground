@@ -56,6 +56,12 @@ class _ReplyGateway:
 
 
 class _AuditRepository:
+    def reserve(self, audit):
+        return "recorded"
+
+    def replace_reserved(self, audit):
+        return "recorded"
+
     def record(self, audit):
         return "recorded"
 

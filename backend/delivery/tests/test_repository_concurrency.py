@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 from django.db import close_old_connections
 from django.test import TransactionTestCase
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
 from delivery.models import DeliveryAttempt
 from delivery.repositories import (
@@ -101,7 +102,7 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
 
         results = self._run_concurrently(
             tuple(
-                lambda command=command: DjangoAttemptRepository(
+                lambda command=command: DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE,
                     clock=lambda: NOW
                 ).accept(command)
                 for command in commands
@@ -176,7 +177,7 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
     def test_finalize_race_keeps_first_terminal_and_callers_converge(
         self,
     ) -> None:
-        accepted = DjangoAttemptRepository(clock=lambda: NOW).accept(
+        accepted = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW).accept(
             self._command(operation_id=uuid4())
         )
         self.assertIsInstance(accepted, AttemptAccepted)
@@ -192,7 +193,7 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
         snapshots = self._run_concurrently(
             tuple(
                 lambda result=result, completed_at=completed_at:
-                DjangoAttemptRepository(clock=lambda: NOW).finalize(
+                DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW).finalize(
                     accepted.attempt_id,
                     result,
                     completed_at,
@@ -236,7 +237,7 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
         self,
     ) -> None:
         digest = "6" * 64
-        accepted = DjangoAttemptRepository(clock=lambda: NOW).accept(
+        accepted = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW).accept(
             self._command(
                 operation_id=uuid4(),
                 receipt_digest=digest,
@@ -244,7 +245,7 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
         )
         self.assertIsInstance(accepted, AttemptAccepted)
         completed_at = NOW + timedelta(seconds=30)
-        terminal = DjangoAttemptRepository(clock=lambda: NOW).finalize(
+        terminal = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW).finalize(
             accepted.attempt_id,
             LinePushAccepted(
                 "receipt-race-request-id",
@@ -268,7 +269,7 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
 
         results = self._run_concurrently(
             tuple(
-                lambda command=command: DjangoAttemptRepository(
+                lambda command=command: DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE,
                     clock=lambda: NOW
                 ).confirm_receipt(command)
                 for command in commands

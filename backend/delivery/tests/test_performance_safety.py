@@ -10,6 +10,7 @@ from django.db import close_old_connections, connection, transaction
 from django.test import TestCase, TransactionTestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 from rest_framework.test import APIClient
 
 from delivery.models import DeliveryAttempt
@@ -236,7 +237,7 @@ class LinkedDeliveryBarrierTests(TransactionTestCase):
         )
         accepted_results = self._race(
             tuple(
-                lambda command=command: DjangoAttemptRepository(
+                lambda command=command: DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE,
                     clock=lambda: NOW
                 ).accept(command)
                 for command in commands
@@ -255,12 +256,12 @@ class LinkedDeliveryBarrierTests(TransactionTestCase):
 
         terminal_snapshots = self._race(
             (
-                lambda: DjangoAttemptRepository(clock=lambda: NOW).finalize(
+                lambda: DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW).finalize(
                     attempt.pk,
                     LinePushAccepted("winner-request", None),
                     NOW + timedelta(seconds=1),
                 ),
-                lambda: DjangoAttemptRepository(clock=lambda: NOW).finalize(
+                lambda: DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW).finalize(
                     attempt.pk,
                     LinePushRejected("permission"),
                     NOW + timedelta(seconds=2),
@@ -277,7 +278,7 @@ class LinkedDeliveryBarrierTests(TransactionTestCase):
             else LinePushAccepted("late-opposite-request", None)
         )
 
-        late_snapshot = DjangoAttemptRepository(clock=lambda: NOW).finalize(
+        late_snapshot = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW).finalize(
             attempt.pk,
             opposite_result,
             NOW + timedelta(seconds=9),
@@ -288,11 +289,11 @@ class LinkedDeliveryBarrierTests(TransactionTestCase):
         self.assertEqual(self._terminal_fields(attempt), winner_fields)
         self.assertIsNone(attempt.active_request_fingerprint)
 
-        receipt_accepted = DjangoAttemptRepository(clock=lambda: NOW).accept(
+        receipt_accepted = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW).accept(
             self._accepted_command(uuid4(), "7" * 64)
         )
         self.assertIsInstance(receipt_accepted, AttemptAccepted)
-        receipt_terminal = DjangoAttemptRepository(
+        receipt_terminal = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE,
             clock=lambda: NOW
         ).finalize(
             receipt_accepted.attempt_id,
@@ -321,7 +322,7 @@ class LinkedDeliveryBarrierTests(TransactionTestCase):
         )
         receipt_results = self._race(
             tuple(
-                lambda command=command: DjangoAttemptRepository(
+                lambda command=command: DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE,
                     clock=lambda: NOW
                 ).confirm_receipt(command)
                 for command in receipt_commands
@@ -565,7 +566,7 @@ class LinkedDeliveryDeadlineTests(TransactionTestCase):
             message=message,
         )
         clock = _MutableClock(NOW)
-        repository = DjangoAttemptRepository(clock=clock)
+        repository = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=clock)
         gateway = _DeadlineGateway(clock)
         service = DeliveryService(
             clock=clock,

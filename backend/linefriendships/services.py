@@ -90,14 +90,17 @@ class DefaultFriendshipSyncService:
                 return HandlerSucceeded()
 
             with transaction.atomic(using=self.using):
+                locked_reference = self.audit_repository.lock_reference(
+                    parsed.channel_public_id
+                )
                 target = self.account_repository.lock_target(
                     channel_public_id=parsed.channel_public_id,
                     provider_id=channel.provider_id,
                     subject=parsed.subject,
                 )
                 if isinstance(target, ProjectionTargetMissing):
-                    self.audit_repository.record(
-                        self._audit(parsed, "unlinked")
+                    self.audit_repository.record_after_fence(
+                        self._audit(parsed, "unlinked"), locked_reference
                     )
                     return HandlerSucceeded()
                 if not isinstance(target, LockedRecipientProjection):
@@ -111,7 +114,9 @@ class DefaultFriendshipSyncService:
                         occurred_at_ms=parsed.occurred_at_ms,
                         webhook_event_id=parsed.webhook_event_id,
                     )
-                self.audit_repository.record(self._audit(parsed, outcome))
+                self.audit_repository.record_after_fence(
+                    self._audit(parsed, outcome), locked_reference
+                )
             return HandlerSucceeded()
         except Exception:
             return HandlerFailed()

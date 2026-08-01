@@ -11,6 +11,11 @@ from uuid import UUID
 from django.db import DatabaseError, IntegrityError, OperationalError, transaction
 from django.utils import timezone
 
+from linechannels.reference_fence import (
+    ChannelReferenceFence,
+    DjangoChannelReferenceFence,
+)
+
 from linechannels.models import LineChannel
 
 from .gateway import VerifiedLineIdentity
@@ -23,7 +28,11 @@ PersistenceFailureCode = Literal[
     "retryable",
     "storage_unavailable",
 ]
-ProgrammingErrorCode = Literal["transaction_required", "invalid_command"]
+ProgrammingErrorCode = Literal[
+    "transaction_required",
+    "invalid_command",
+    "invalid_fence_result",
+]
 AccountStateErrorCode = Literal[
     "owner_not_active",
     "identity_mismatch",
@@ -198,13 +207,30 @@ class AccountRepository(Protocol):
     ) -> None: ...
 
 
+class DjangoRecipientReferenceProbe:
+    def __init__(self, using: str = "default") -> None:
+        self.using = using
+
+    def is_referenced(self, channel_public_id: UUID) -> bool:
+        return DeliveryRecipient.objects.using(self.using).filter(
+            line_channel__public_id=channel_public_id
+        ).exists()
+
+
 class DjangoAccountRepository:
     """OwnerAccount singleton を全 mutation の線形化点にする adapter。"""
 
     _RETRYABLE_DATABASE_CODES = frozenset((1205, 1213))
 
-    def __init__(self, using: str = "default") -> None:
+    def __init__(
+        self,
+        using: str = "default",
+        reference_fence: ChannelReferenceFence | None = None,
+    ) -> None:
         self.using = using
+        self._reference_fence = reference_fence or DjangoChannelReferenceFence(
+            using=using
+        )
 
     def get_identity(self, public_id: UUID) -> LineIdentityView | None:
         with self._translate_database_errors():
@@ -381,6 +407,15 @@ class DjangoAccountRepository:
         self._require_transaction()
         self._validate_friendship_state(command.friendship_state)
         with self._translate_database_errors():
+            fence_result = self._reference_fence.lock_existing(command.channel_id)
+            if fence_result.status == "channel_not_found":
+                raise AccountStateError("channel_not_found")
+            if fence_result.status == "storage_retryable":
+                raise AccountPersistenceError("retryable")
+            if fence_result.status == "storage_unavailable":
+                raise AccountPersistenceError("storage_unavailable")
+            if fence_result.status != "locked":
+                raise AccountRepositoryProgrammingError("invalid_fence_result")
             stored_owner = self._active_owner_for_identity(owner, command.identity_id)
             channel = (
                 LineChannel.objects.using(self.using)

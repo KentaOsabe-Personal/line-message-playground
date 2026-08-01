@@ -16,6 +16,10 @@ from .rotation import CredentialRotationService, DefaultCredentialRotationServic
 from .rotation_item import DefaultCredentialRotationItemProcessor
 from .rotation_lock import MySQLRotationLock
 from .rotation_repository import DjangoRotationCredentialRepository
+from .reference_fence import (
+    ChannelReferenceDirectory,
+    DjangoChannelReferenceFence,
+)
 from .services import DefaultLineChannelService, LineChannelService
 
 
@@ -33,6 +37,28 @@ def build_webhook_credential_repository() -> WebhookCredentialRepository:
 
 def build_line_channel_directory() -> LineChannelDirectory:
     return DjangoLineChannelDirectory()
+
+
+def build_channel_reference_fence() -> DjangoChannelReferenceFence:
+    return DjangoChannelReferenceFence()
+
+
+def build_channel_reference_directory() -> ChannelReferenceDirectory:
+    from delivery.repositories import DjangoDeliveryReferenceProbe
+    from lineaccounts.repositories import DjangoRecipientReferenceProbe
+    from linefriendships.repositories import DjangoFriendshipReferenceProbe
+    from lineinteractions.repositories import DjangoInteractionReferenceProbe
+    from linewebhooks.repositories import DjangoWebhookReferenceProbe
+
+    return ChannelReferenceDirectory(
+        (
+            DjangoRecipientReferenceProbe(),
+            DjangoDeliveryReferenceProbe(),
+            DjangoWebhookReferenceProbe(),
+            DjangoFriendshipReferenceProbe(),
+            DjangoInteractionReferenceProbe(),
+        )
+    )
 
 
 def build_line_channel_service() -> LineChannelService:

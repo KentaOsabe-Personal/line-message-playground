@@ -89,6 +89,23 @@ class _AuditRepository:
         self.records.append(audit)
         return self.result
 
+    def reserve(self, audit: InteractionAuditRecord) -> str:
+        self.records.append(audit)
+        return self.result
+
+    def replace_reserved(self, audit: InteractionAuditRecord) -> str:
+        self.records[-1] = audit
+        return self.result
+
+
+class _ReservableAuditRepository(_AuditRepository):
+    pass
+
+
+class _RecordOnlyAuditRepository:
+    def record(self, audit: InteractionAuditRecord) -> str:
+        return "recorded"
+
 
 class _ActionHandler:
     def __init__(self, result: object, *, raises: bool = False) -> None:
@@ -171,6 +188,38 @@ class InteractionServiceTests(SimpleTestCase):
         result = self.service().handle(interaction_event(), self.context)
 
         self.assertIsInstance(result, HandlerSucceeded)
+
+    # テストケース: delete先行相当で外部作用前のaudit予約が拒否される
+    # 期待値: credential、reply、actionを開始せず安全なhandler failureになる
+    def test_failed_reference_reservation_stops_reply_and_action(self):
+        audit = _ReservableAuditRepository("channel_not_found")
+
+        command_result = self.service(audit_repository=audit).handle(
+            interaction_event(), self.context
+        )
+        self.assertIsInstance(command_result, HandlerFailed)
+        self.assertEqual(self.credentials.calls, 0)
+        self.assertEqual(len(self.gateway.calls), 0)
+
+        handler = _ActionHandler(ActionSucceeded())
+        registry = StaticPostbackActionRegistry((("confirm", handler),))
+        action_result = self.service(
+            action_registry=registry,
+            audit_repository=_ReservableAuditRepository("channel_not_found"),
+        ).handle(interaction_event(event_type="postback"), self.context)
+        self.assertIsInstance(action_result, HandlerFailed)
+        self.assertEqual(len(handler.commands), 0)
+
+    # テストケース: 旧record-only audit repositoryをcommandへ渡す
+    # 期待値: mandatory予約contract欠落をfail closedしcredentialとreplyを開始しない
+    def test_record_only_repository_cannot_bypass_external_reservation(self):
+        result = self.service(
+            audit_repository=_RecordOnlyAuditRepository()
+        ).handle(interaction_event(), self.context)
+
+        self.assertIsInstance(result, HandlerFailed)
+        self.assertEqual(self.credentials.calls, 0)
+        self.assertEqual(len(self.gateway.calls), 0)
 
     # テストケース: invalid、対象外、未知command、未連携の各no-op
     # 期待値: 安全な分類だけを一回監査し、credentialとreplyを呼ばない
@@ -422,7 +471,7 @@ class InteractionServiceTests(SimpleTestCase):
             interaction_event(), self.context
         )
         self.assertIsInstance(result, HandlerFailed)
-        self.assertEqual(len(self.gateway.calls), 1)
+        self.assertEqual(len(self.gateway.calls), 0)
 
     # テストケース: 未登録postback action
     # 期待値: handlerとreplyを呼ばずunknownをsafe identifierなしで一回監査する

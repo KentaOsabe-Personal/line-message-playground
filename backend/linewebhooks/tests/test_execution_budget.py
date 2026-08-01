@@ -5,6 +5,7 @@ from uuid import UUID
 from django.test import TestCase as DjangoTestCase
 
 from linechannels.types import ChannelSecret, WebhookChannelAvailable
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 from linewebhooks.handlers import StaticHandlerRegistry
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.repositories import DjangoEventReceiptRepository
@@ -282,7 +283,7 @@ class DispatchDeadlineReceiptTests(DjangoTestCase):
     ) -> None:
         from linewebhooks.types import ReceiptCandidate
 
-        repository = DjangoEventReceiptRepository()
+        repository = DjangoEventReceiptRepository(LOCKED_REFERENCE_FENCE)
         candidate = ReceiptCandidate(
             channel_public_id=CHANNEL_ID,
             webhook_event_id=EVENT_IDS[0],

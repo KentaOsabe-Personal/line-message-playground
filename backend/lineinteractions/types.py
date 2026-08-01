@@ -268,10 +268,32 @@ class LineReplyGateway(Protocol):
 
 @runtime_checkable
 class InteractionAuditRepository(Protocol):
-    def record(
+    def reserve(
+        self,
+        audit: InteractionAuditRecord,
+    ) -> Literal[
+        "recorded",
+        "failed",
+        "channel_not_found",
+        "storage_retryable",
+        "storage_unavailable",
+    ]: ...
+
+    def replace_reserved(
         self,
         audit: InteractionAuditRecord,
     ) -> Literal["recorded", "failed"]: ...
+
+    def record(
+        self,
+        audit: InteractionAuditRecord,
+    ) -> Literal[
+        "recorded",
+        "failed",
+        "channel_not_found",
+        "storage_retryable",
+        "storage_unavailable",
+    ]: ...
 
 
 InteractionHandlerOutcome: TypeAlias = HandlerOutcome

@@ -11,6 +11,7 @@ from linechannels.types import (
     CredentialUnavailable,
     WebhookChannelAvailable,
 )
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 from linewebhooks.services import WebhookIngressService
 from linewebhooks.types import (
     HandlerFailed,
@@ -623,7 +624,7 @@ class WebhookIngressServiceIntegrationTests(DjangoTestCase):
     # 期待値: 受付失敗は全件dispatchせず、確定失敗後も後続eventを処理してstorage unavailableを返す
     def test_storage_failures_reject_without_partial_acceptance_or_stopping_batch(self) -> None:
         handler = RecordingHandler()
-        repository = DjangoEventReceiptRepository()
+        repository = DjangoEventReceiptRepository(LOCKED_REFERENCE_FENCE)
         service, _ = build_service(
             handler=handler,
             receipt_repository=repository,

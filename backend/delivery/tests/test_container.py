@@ -61,12 +61,14 @@ class DeliveryContainerTests(SimpleTestCase):
     @patch("delivery.container.build_credential_repository")
     @patch("delivery.container.ReceiptCapabilityFactory")
     @patch("delivery.container.DjangoAttemptRepository")
+    @patch("delivery.container.build_channel_reference_fence")
     @patch("delivery.container.ConfirmationService")
     @patch("delivery.container.DeliveryTargetDirectory")
     def test_delivery_runtime_wires_explicit_service_dependencies(
         self,
         directory_type,
         confirmation_type,
+        fence_builder,
         repository_type,
         receipt_factory_type,
         credential_builder,
@@ -96,7 +98,10 @@ class DeliveryContainerTests(SimpleTestCase):
             service._channel_push_gateway,
             gateway_type.return_value,
         )
-        repository_type.assert_called_once_with(clock=clock)
+        repository_type.assert_called_once_with(
+            clock=clock,
+            reference_fence=fence_builder.return_value,
+        )
         confirmation_type.assert_not_called()
 
     # テストケース: status読取用の最小compositionを構築する
@@ -104,8 +109,10 @@ class DeliveryContainerTests(SimpleTestCase):
     @patch("delivery.container.LINEChannelPushGateway")
     @patch("delivery.container.build_credential_repository")
     @patch("delivery.container.DjangoAttemptRepository")
+    @patch("delivery.container.build_channel_reference_fence")
     def test_status_runtime_wires_only_attempt_repository(
         self,
+        fence_builder,
         repository_type,
         credential_builder,
         gateway_type,
@@ -122,7 +129,10 @@ class DeliveryContainerTests(SimpleTestCase):
         self.assertIsNone(service._receipt_capability_factory)
         self.assertIsNone(service._credential_repository)
         self.assertIsNone(service._channel_push_gateway)
-        repository_type.assert_called_once_with(clock=clock)
+        repository_type.assert_called_once_with(
+            clock=clock,
+            reference_fence=fence_builder.return_value,
+        )
         credential_builder.assert_not_called()
         gateway_type.assert_not_called()
 
@@ -130,8 +140,10 @@ class DeliveryContainerTests(SimpleTestCase):
     # 期待値: clockを共有するrepositoryとhandlerを明示的に接続する
     @patch("delivery.container.ReceiptHandler")
     @patch("delivery.container.DjangoAttemptRepository")
+    @patch("delivery.container.build_channel_reference_fence")
     def test_receipt_handler_wires_repository_and_clock(
         self,
+        fence_builder,
         repository_type,
         handler_type,
     ):
@@ -140,7 +152,10 @@ class DeliveryContainerTests(SimpleTestCase):
         handler = build_receipt_handler(clock=clock)
 
         self.assertIs(handler, handler_type.return_value)
-        repository_type.assert_called_once_with(clock=clock)
+        repository_type.assert_called_once_with(
+            clock=clock,
+            reference_fence=fence_builder.return_value,
+        )
         handler_type.assert_called_once_with(
             attempt_repository=repository_type.return_value,
             clock=clock,

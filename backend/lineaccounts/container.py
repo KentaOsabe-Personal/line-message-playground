@@ -7,6 +7,7 @@ from .runtime import get_line_account_runtime, resolve_liff_linked_channel_polic
 from .session_services import DefaultAccountSessionService
 from .unlink_execution_lock import MySQLUnlinkExecutionLock
 from .unlink_services import DefaultAccountUnlinkService
+from linechannels.container import build_channel_reference_fence
 from linechannels.repositories import DjangoLineChannelDirectory
 
 
@@ -26,7 +27,7 @@ def build_recipient_service() -> DefaultRecipientService:
     policy = resolve_liff_linked_channel_policy(runtime, directory)
     return DefaultRecipientService(
         directory,
-        DjangoAccountRepository(),
+        DjangoAccountRepository(reference_fence=build_channel_reference_fence()),
         HttpxLinePlatformGateway(runtime),
         policy,
     )

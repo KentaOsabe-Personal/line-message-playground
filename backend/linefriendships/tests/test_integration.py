@@ -397,7 +397,7 @@ class SignedFriendshipProjectionIntegrationTests(TestCase):
         occurred_at_ms = self._after_registration()
         with patch.object(
             DjangoFriendshipAuditRepository,
-            "record",
+            "record_after_fence",
             side_effect=RuntimeError("injected safe audit failure"),
         ):
             response = self._post(
