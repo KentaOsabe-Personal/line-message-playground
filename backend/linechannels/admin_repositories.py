@@ -14,6 +14,7 @@ from .admin_types import (
     AdminRepositoryUnavailable,
     ConnectionRevisionResult,
     ConnectionRevisionUnchanged,
+    LockedAdminChannel,
     SnapshotAvailable,
 )
 from .crypto import CredentialCryptoError
@@ -139,6 +140,51 @@ class DjangoAdminChannelRepository:
             return AdminRepositoryFailed("stale_channel")
         return ConnectionRevisionUnchanged()
 
+    def lock_for_delete(
+        self, public_id: UUID, owner_provider_id: str
+    ) -> LockedAdminChannel | None:
+        self._require_transaction()
+        try:
+            row = (
+                LineChannel.objects.using(self.using)
+                .select_for_update()
+                .filter(self._provider_scope(owner_provider_id), public_id=public_id)
+                .values("public_id", "label", "updated_at")
+                .first()
+            )
+        except OperationalError as error:
+            raise self._persistence_error(error) from None
+        except DatabaseError:
+            raise PersistenceError("storage_unavailable") from None
+        if row is None:
+            return None
+        return LockedAdminChannel(
+            public_id=row["public_id"],
+            label=row["label"],
+            updated_at=row["updated_at"],
+        )
+
+    def delete_locked(self, channel: LockedAdminChannel) -> tuple[UUID, str]:
+        self._require_transaction()
+        if not isinstance(channel, LockedAdminChannel):
+            raise RepositoryProgrammingError("invalid_locked_channel")
+        try:
+            LineChannelCredential.objects.using(self.using).filter(
+                line_channel__public_id=channel.public_id
+            ).delete()
+            deleted, _ = (
+                LineChannel.objects.using(self.using)
+                .filter(public_id=channel.public_id)
+                .delete()
+            )
+        except OperationalError as error:
+            raise self._persistence_error(error) from None
+        except DatabaseError:
+            raise PersistenceError("storage_unavailable") from None
+        if deleted < 1:
+            raise PersistenceError("storage_unavailable")
+        return channel.public_id, channel.label
+
     def _safe_projection(self):
         credential_rows = LineChannelCredential.objects.using(self.using).filter(
             line_channel_id=OuterRef("pk")
@@ -169,6 +215,10 @@ class DjangoAdminChannelRepository:
                 "admin_credentials_updated_at",
             )
         )
+
+    def _require_transaction(self) -> None:
+        if not transaction.get_connection(self.using).in_atomic_block:
+            raise RepositoryProgrammingError("transaction_required")
 
     @staticmethod
     def _provider_scope(owner_provider_id: str) -> Q:

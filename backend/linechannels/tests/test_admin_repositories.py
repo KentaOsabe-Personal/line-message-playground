@@ -11,7 +11,7 @@ from django.utils import timezone
 from linechannels.admin_repositories import DjangoAdminChannelRepository
 from linechannels.crypto import CredentialCryptoError
 from linechannels.models import LineChannel, LineChannelCredential
-from linechannels.repositories import RepositoryProgrammingError
+from linechannels.repositories import PersistenceError, RepositoryProgrammingError
 from linechannels.types import AccessToken
 
 
@@ -266,3 +266,66 @@ class AdminConnectionRevisionRepositoryTests(TransactionTestCase):
                 )
             self.assertEqual(result.code, expected)
             self.assertNotIn("raw-canary", repr(result))
+
+
+class AdminDeleteRepositoryTests(TransactionTestCase):
+    # テストケース: owner provider範囲のchannelを削除用にlockする
+    # 期待値: same-providerとlegacyだけをsafe投影で返し、別providerは不在扱いにする
+    def test_delete_lock_is_transactional_and_provider_scoped(self):
+        same, _ = create_channel()
+        legacy, _ = create_channel(provider_id=None)
+        other, _ = create_channel(provider_id="999999")
+        repository = DjangoAdminChannelRepository(RecordingCipher())
+
+        with self.assertRaises(RepositoryProgrammingError):
+            repository.lock_for_delete(same.public_id, "000123")
+        with transaction.atomic():
+            same_locked = repository.lock_for_delete(same.public_id, "000123")
+            legacy_locked = repository.lock_for_delete(legacy.public_id, "000123")
+            hidden = repository.lock_for_delete(other.public_id, "000123")
+
+        self.assertEqual(same_locked.public_id, same.public_id)
+        self.assertEqual(legacy_locked.public_id, legacy.public_id)
+        self.assertIsNone(hidden)
+
+    # テストケース: lock済みの未参照channelと資格情報を削除する
+    # 期待値: 対象pairだけを同じtransactionで削除し、非秘密識別情報だけを返す
+    def test_delete_locked_removes_only_the_target_channel_and_credentials(self):
+        target, _ = create_channel(active=False)
+        survivor, _ = create_channel()
+        repository = DjangoAdminChannelRepository(RecordingCipher())
+
+        with transaction.atomic():
+            locked = repository.lock_for_delete(target.public_id, "000123")
+            deleted = repository.delete_locked(locked)
+
+        self.assertEqual(deleted, (target.public_id, target.label))
+        self.assertFalse(LineChannel.objects.filter(public_id=target.public_id).exists())
+        self.assertFalse(
+            LineChannelCredential.objects.filter(line_channel_id=target.pk).exists()
+        )
+        self.assertTrue(LineChannel.objects.filter(public_id=survivor.public_id).exists())
+
+    # テストケース: 資格情報削除後にchannel削除のstorage失敗が起きる
+    # 期待値: transaction rollbackによりchannelと資格情報の両方が維持される
+    def test_delete_locked_rolls_back_credential_deletion_on_channel_failure(self):
+        target, _ = create_channel(active=False)
+        repository = DjangoAdminChannelRepository(RecordingCipher())
+        original_delete = QuerySet.delete
+
+        def fail_channel_delete(queryset):
+            if queryset.model is LineChannel:
+                raise DatabaseError("raw-canary")
+            return original_delete(queryset)
+
+        with self.assertRaises(PersistenceError), patch.object(
+            QuerySet, "delete", fail_channel_delete
+        ):
+            with transaction.atomic():
+                locked = repository.lock_for_delete(target.public_id, "000123")
+                repository.delete_locked(locked)
+
+        self.assertTrue(LineChannel.objects.filter(public_id=target.public_id).exists())
+        self.assertTrue(
+            LineChannelCredential.objects.filter(line_channel_id=target.pk).exists()
+        )

@@ -104,6 +104,13 @@ class AdminChannelView:
     updated_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class LockedAdminChannel:
+    public_id: UUID
+    label: str
+    updated_at: datetime
+
+
 class AdminConnectionSnapshot(_SerializationDisabled):
     __slots__ = (
         "__access_token",
@@ -193,6 +200,28 @@ AdminConnectionSnapshotResult = (
     SnapshotAvailable | AdminRepositoryUnavailable | AdminRepositoryFailed
 )
 ConnectionRevisionResult = ConnectionRevisionUnchanged | AdminRepositoryFailed
+
+
+BotInfoFailureCode = Literal[
+    "authentication_failed",
+    "rate_limited",
+    "line_unavailable",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class BotIdentityReceived:
+    bot_user_id: str
+    status: Literal["received"] = "received"
+
+
+@dataclass(frozen=True, slots=True)
+class BotInfoFailed:
+    code: BotInfoFailureCode
+    status: Literal["failed"] = "failed"
+
+
+BotInfoResult = BotIdentityReceived | BotInfoFailed
 
 
 AdminServiceFailureCode = Literal[

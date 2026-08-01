@@ -83,46 +83,46 @@
   - _Boundary: ChannelReferenceDirectory_
   - _Depends: 2.2, 2.3, 2.4, 2.5, 2.6_
 
-- [ ] 3. owner向け管理ユースケースを構築する
-- [ ] 3.1 owner保護された一覧・詳細ユースケースを統合する
+- [x] 3. owner向け管理ユースケースを構築する
+- [x] 3.1 owner保護された一覧・詳細ユースケースを統合する
   - owner fenceをtransaction冒頭で取得し、provider proofと同じtransactionで安全な投影をmaterializeする。
   - 別provider、不在、unlink・session失効、storage失敗を情報非開示のsafe結果へ変換する。
   - 完了時には、認証済みownerだけが対象providerの一覧・詳細を取得でき、失効後データを返さない。
   - _Requirements: 1.1, 1.2, 1.5, 1.6, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
   - _Boundary: ChannelAdminService_
-- [ ] 3.2 同一provider限定の完全登録ユースケースを統合する
+- [x] 3.2 同一provider限定の完全登録ユースケースを統合する
   - DB由来owner provider proofと要求providerを比較してからチャネルをlock・保存する。
   - opaque公開ID、metadata、完全資格情報pair、初期状態を一つのtransactionで登録し、duplicate/storage失敗を安全に分類する。
   - 完了時には、異なるproviderや不完全・重複入力で既存データが変わらず、有効入力だけが完全な一件として登録される。
   - _Requirements: 3.1, 3.2, 3.7, 3.8, 3.9_
   - _Boundary: ChannelAdminService_
-- [ ] 3.3 非秘密metadata更新とwrite-only資格情報置換を統合する
+- [x] 3.3 非秘密metadata更新とwrite-only資格情報置換を統合する
   - expected revision、owner provider、provider不変/backfill規則を検証し、指定metadataだけを更新する。
   - 空pairは維持、完全pairは置換、片側入力・暗号・保存失敗は全変更をrollbackする。
   - 完了時には、成功結果が更新後の非秘密情報と設定状態だけを返し、保存済み資格情報を読み戻さない。
   - _Requirements: 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10_
   - _Boundary: ChannelAdminService_
-- [ ] 3.4 有効化・無効化と資格情報修復を統合する
+- [x] 3.4 有効化・無効化と資格情報修復を統合する
   - 現在stateとexpected revisionを比較し、無効化では識別情報・資格情報・履歴を保持する。
   - 有効化前に資格情報を安全に利用できることを確認し、完全pair修復との同時実行を単一transactionにする。
   - 完了時には、欠損・破損・競合時に状態が変わらず、正常時は同じ公開IDで新状態が返る。
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6_
   - _Boundary: ChannelAdminService_
-- [ ] 3.5 参照確認と原子削除を管理ユースケースへ統合する
+- [x] 3.5 参照確認と原子削除を管理ユースケースへ統合する
   - owner/session/channelのlock順、expected revision、全参照directoryの結果を削除直前に検証する。
   - 参照中は無効化案内へ収束し、未参照時だけ資格情報と対象channelを同じtransactionで削除する。
   - 完了時には、削除競合やstorage失敗で部分削除が成功表示されず、完了結果は対象の非秘密識別情報だけになる。
   - _Requirements: 8.2, 8.3, 8.4, 8.5, 8.6, 8.7_
   - _Boundary: ChannelAdminService, ChannelReferenceDirectory_
   - _Depends: 2.7_
-- [ ] 3.6 (P) LINE bot identityを一回だけ取得するread-only gatewayを実装する
+- [x] 3.6 (P) LINE bot identityを一回だけ取得するread-only gatewayを実装する
   - SDK retryを0にし、bounded timeoutでbot infoを一回だけ呼び出す。
   - bot user ID、認証失敗、rate limit、利用不能だけを返し、SDK例外・body・header・request IDを文字列化しない。
   - 完了時には、送信やLINE上の変更なしに全外部結果が固定safe分類へ変換される。
   - _Requirements: 7.1, 7.2, 7.4, 7.6, 7.7, 7.8_
   - _Boundary: LineBotInfoGateway_
   - _Depends: 1.1_
-- [ ] 3.7 snapshot・外部結果・revisionを接続確認ユースケースへ統合する
+- [x] 3.7 snapshot・外部結果・revisionを接続確認ユースケースへ統合する
   - 開始時にowner proofとsnapshotを取得し、DB transaction外でgatewayを一回呼び出す。
   - 応答後にowner/session/channel revisionを再検証し、一致時だけbot ID比較と6分類を確定する。
   - 完了時には、stale・削除・session失効時にLINE分類を破棄し、成功もaccess tokenとbot identityだけの限定scopeで返る。
