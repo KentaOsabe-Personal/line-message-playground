@@ -3,6 +3,9 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from linechannels import container
+from linechannels.admin_gateway import DefaultLineBotInfoGateway
+from linechannels.admin_repositories import DjangoAdminChannelRepository
+from linechannels.admin_services import DefaultChannelAdminService
 from linechannels.crypto import FernetCredentialCipher
 from linechannels.management.prompts import GetPassManageLineChannelPrompts
 from linechannels.repositories import (
@@ -15,6 +18,7 @@ from linechannels.rotation_item import DefaultCredentialRotationItemProcessor
 from linechannels.rotation_lock import MySQLRotationLock
 from linechannels.rotation_repository import DjangoRotationCredentialRepository
 from linechannels.services import DefaultLineChannelService
+from lineaccounts.admin_authorization import DjangoOwnerOperationFence
 
 
 class CompositionRootTests(TestCase):
@@ -61,6 +65,21 @@ class CompositionRootTests(TestCase):
 
         self.assertIsInstance(prompts, GetPassManageLineChannelPrompts)
 
+    # テストケース: owner管理API用serviceをruntime composition rootから構築する
+    # 期待値: owner fence、管理投影、基盤service、参照directory、gatewayが一つのserviceへ合成されcipherを共有する
+    def test_builds_channel_admin_service_with_shared_runtime_dependencies(self):
+        service = container.build_channel_admin_service()
+
+        self.assertIsInstance(service, DefaultChannelAdminService)
+        self.assertIsInstance(service._owner_fence, DjangoOwnerOperationFence)
+        self.assertIsInstance(service._repository, DjangoAdminChannelRepository)
+        self.assertIsInstance(service._foundation_service, DefaultLineChannelService)
+        self.assertIsInstance(service._bot_info_gateway, DefaultLineBotInfoGateway)
+        self.assertIs(
+            service._repository._cipher,
+            service._foundation_service._cipher,
+        )
+
     # テストケース: 各factoryをDB queryなしで構築する
     # 期待値: composition rootは組立てだけを行いreadinessや永続化へ進まない
     def test_factories_construct_dependencies_without_database_queries(self):
@@ -69,3 +88,4 @@ class CompositionRootTests(TestCase):
             container.build_line_channel_service()
             container.build_rotation_service()
             container.build_manage_line_channel_prompts()
+            container.build_channel_admin_service()

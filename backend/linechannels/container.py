@@ -1,6 +1,9 @@
 """Validated runtime stateからLINEチャネル基盤を構築するcomposition root。"""
 
 from . import runtime
+from .admin_gateway import DefaultLineBotInfoGateway
+from .admin_repositories import DjangoAdminChannelRepository
+from .admin_services import DefaultChannelAdminService
 from .crypto import FernetCredentialCipher
 from .management.prompts import GetPassManageLineChannelPrompts, ManageLineChannelPrompts
 from .repositories import (
@@ -79,3 +82,17 @@ def build_rotation_service() -> CredentialRotationService:
 
 def build_manage_line_channel_prompts() -> ManageLineChannelPrompts:
     return GetPassManageLineChannelPrompts()
+
+
+def build_channel_admin_service() -> DefaultChannelAdminService:
+    from lineaccounts.admin_authorization import DjangoOwnerOperationFence
+    from lineaccounts.repositories import DjangoAccountRepository
+
+    cipher = _build_cipher()
+    return DefaultChannelAdminService(
+        DjangoOwnerOperationFence(DjangoAccountRepository()),
+        DjangoAdminChannelRepository(cipher),
+        DefaultLineChannelService(DjangoLineChannelRepository(), cipher),
+        build_channel_reference_directory(),
+        DefaultLineBotInfoGateway(),
+    )

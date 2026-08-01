@@ -130,15 +130,15 @@
   - _Boundary: ChannelAdminService, LineBotInfoGateway_
   - _Depends: 1.3, 1.5, 3.6_
 
-- [ ] 4. 安全なowner管理HTTP APIを公開する
-- [ ] 4.1 write-only資格情報を含む管理request serializerを実装する
+- [x] 4. 安全なowner管理HTTP APIを公開する
+- [x] 4.1 write-only資格情報を含む管理request serializerを実装する
   - create/update/state/delete/checkのexact shape、canonical UUID、timezone-aware expected revision、unknown key拒否を実装する。
   - label、数値ID、bot ID、16KiB上限、完全pair、provider request規則を検証し、資格情報fieldを明示write-onlyにする。
   - 境界値、unknown key、完全pair、write-only representationを単体テストで固定する。
   - 完了時には、入力値やcanary秘密値を応答・field error・serialized representationへ含めず、修正対象だけを示せる。
   - _Requirements: 3.1, 3.3, 3.4, 3.5, 3.6, 4.3, 4.4, 4.5, 4.6, 4.9, 5.3, 5.4, 5.5, 9.5_
   - _Boundary: AdminSerializer_
-- [ ] 4.2 非秘密DTOと主要read/mutation endpointを統合する
+- [x] 4.2 非秘密DTOと主要read/mutation endpointを統合する
   - 全管理項目、資格情報状態、時刻をsafe DTOへ変換し、秘密fieldを出力schemaへ持ち込まない。
   - 検証済み公開origin、reverseされたingress path、canonical公開IDだけから完全Webhook URLを作る。
   - presenter、serializer、serviceを一覧・詳細・登録・更新のcollection/detail HTTP契約へ接続する。
@@ -146,13 +146,13 @@
   - 完了時には、request Host、内部ID、owner/session情報を使わず、認証済みownerの正常応答だけがsafe DTOを返し、失敗時のDB無変更が観測できる。
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 3.7, 3.8, 3.9, 4.2, 4.3, 4.7, 4.8, 4.9, 4.10, 6.1, 6.3, 6.4, 6.5, 7.8, 7.9, 8.6, 9.5_
   - _Boundary: AdminPresenter, AdminAPI Integration_
-- [ ] 4.3 状態変更・削除・接続確認endpointをowner保護境界へ接続する
+- [x] 4.3 状態変更・削除・接続確認endpointをowner保護境界へ接続する
   - state、delete、connection-checkをowner保護Viewへ接続し、固定safe HTTP契約を提供する。
   - connection statusは200 responseへ限定scope付きで返し、stale/認証/storage失敗時は外部分類を含めない。
   - 完了時には、各操作のsafe resultが400/401/403/404/409/422/503または限定された接続分類へ一貫して写像される。
   - _Requirements: 1.1, 1.3, 1.4, 1.5, 5.1, 5.3, 5.4, 5.5, 5.6, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10, 8.2, 8.3, 8.5, 8.6, 8.7, 9.10_
   - _Boundary: AdminAPI_
-- [ ] 4.4 管理APIのrouteとruntime依存を合成する
+- [x] 4.4 管理APIのrouteとruntime依存を合成する
   - collection、detail、state、delete、connection-check routeを相対 `/api` 配下へ登録する。
   - owner fence、reference directory、foundation service、gateway、presenterを管理serviceへ一度だけ合成する。
   - 完了時には、全7 endpointが解決され、既存runtime containerから同じ管理依存を利用できる。
@@ -271,3 +271,4 @@
 ## Implementation Notes
 
 - 管理投影の資格情報状態は、暗号文をPythonへmaterializeせず、資格情報行の存在と両暗号文の非空を別々の相関`EXISTS`で判定する。
+- 管理HTTP境界では暗号化失敗を`storage_unavailable`、保存資格情報の読取不能を`credential_unavailable`へ明示的に縮約し、未知の内部分類も503へfail closedする。
