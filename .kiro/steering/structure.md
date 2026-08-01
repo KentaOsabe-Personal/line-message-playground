@@ -41,6 +41,8 @@ flat 構造でも、UI とイベント接続、状態遷移、HTTP 通信、境�
 
 message／postback の interaction app は、入力解析、静的 command／action registry、外部 reply gateway、PII を含まない監査を一つの機能境界にまとめます。業務 action は interaction app へ動的 import せず、起動時の composition root から typed handler として明示登録します。受付台帳と interaction 監査は event ID で論理相関し、app 間の外部キーで永続化を密結合させません。
 
+既存 app に owner 管理面を加える場合は、一般利用の service／repository と管理用の `admin_*` 境界を分けます。管理境界は owner authorization、write-only 入力、秘密を含まない presenter、revision-aware repository、外部確認 gateway を合成し、通常のチャネル参照や配信経路へ管理用 DTO を漏らしません。Frontend でも管理 Component、`*Api.ts`、`*Dto.ts`、`*State.ts` を同じ責務分離で揃え、秘密入力を共有 state や read model に保存しません。
+
 別 app の永続化詳細へ直接依存せず、公開された型、Protocol、builder を介して連携します。循環 import を避けるため、View が必要な composition root は遅延 import できます。管理用ワークフローは Django management command に置き、対話入力、処理本体、repository をテスト可能な境界へ分離します。
 
 ### コンテナ固有の補助処理
@@ -57,6 +59,7 @@ message／postback の interaction app は、入力解析、静的 command／act
 - Frontend は MySQL や LINE Messaging API へ直接アクセスしない
 - Backend の機能 app は Django project 設定から分離し、ルート URLConf は app の URLConf を合成する
 - Backend app 間は相手 app の Model ではなく、公開型と明示的な adapter／builder を依存境界にする
+- 複数 app の参照整合性を伴う削除は、各 app の公開 reference contract を composition root で束ね、削除側から相手 Model を直接探索しない
 - サービス横断の契約は暗黙の内部 import ではなく HTTP API で表現する
 
 ## 命名規則
@@ -114,4 +117,4 @@ from .views import HealthView
 - 新しいコードが既存パターンに従う限り、この文書へファイル単位の追記を必要としない
 
 ---
-_更新日: 2026-07-23。Webhook interaction の静的 registry、typed action 登録、疎結合監査パターンを反映。配置判断に使えるパターンを記録し、ディレクトリツリーの網羅表にはしない。_
+_更新日: 2026-08-01。owner 管理面の責務分離と app 横断 reference contract のパターンを反映。配置判断に使えるパターンを記録し、ディレクトリツリーの網羅表にはしない。_

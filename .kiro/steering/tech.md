@@ -51,6 +51,8 @@ Frontend は ES Modules、React JSX transform、ES2022 を前提とします。B
 - 外部サービス呼び出しは Backend に閉じ込め、Frontend から LINE API を直接呼ばない
 - owner 向け API はサーバー側 session で本人状態を確認し、状態変更では exact origin と CSRF token の両方を検証する
 - 公開 Webhook は owner session の対象外とし、署名検証前の body や識別情報を信頼しない
+- owner 向けチャネル管理 API は、read を含めて active owner session と同一 provider を transaction 内で再検証する
+- 更新・有効化・無効化・削除は timezone-aware な `updatedAt` を revision として受け取り、stale な操作を明示的に拒否する
 
 ### 秘密情報と環境設定
 
@@ -109,13 +111,19 @@ Backend は MySQL の healthcheck 成功後に起動し、起動時に migration
 
 配信状態は `processing`、`succeeded`、`failed`、`unknown` を区別します。タイムアウト等の結果不明時は自動再送せず、状態確認 API で既存操作を確認してから明示的な再試行を許可します。LINE SDK の生の例外や認証情報、固定宛先は公開 API や通常ログへ出さず、安全なエラー分類へ変換します。
 
-現在の push 送信が参照する秘密値はアクセストークンと固定ユーザー ID です。チャネルシークレットは push 送信では使用せず、Webhook 境界だけが署名検証のために参照します。利用上限確認は将来の運用機能として扱います。
+push 送信は選択された登録済みチャネルのアクセストークンと、本人連携済み配信先の LINE user ID を実行時に解決します。固定設定の宛先やアクセストークンを参照する旧 runtime は使用しません。チャネルシークレットは push 送信では使用せず、Webhook 境界だけが署名検証のために参照します。利用上限確認は将来の運用機能として扱います。
+
+確認トークンにはチャネル・配信先・本文の revision を結び付け、送信直前に live target と再照合します。配信成功後の受取確認は署名済み capability を postback action へ渡し、配信状態とは別の一回限りの transition として確定します。
 
 ### LINE アカウントとチャネル資格情報
 
 LIFF から得た token は Backend の LINE Login 境界で検証し、provider と owner allowlist に一致した identity だけをサーバー側 session へ結び付けます。Frontend は session cookie を直接解釈せず、session API の安全な状態表現を使います。
 
 複数 Messaging API チャネルの資格情報は DB へ暗号化して保存し、復号可能な値を repository 境界の外へ不必要に広げません。keyring の先頭を現用鍵とし、旧鍵を残した再暗号化、検証、撤去の順でローテーションします。鍵を失った DB は復号できないため、バックアップと旧鍵の保持期間を一体で判断します。
+
+owner 向けチャネル管理では、資格情報を create／replace 入力だけの write-only 値とし、read model と API response は設定状態と更新日時だけを返します。read と mutation は active owner と同一 provider を transaction 内で fence し、mutation は `updatedAt` revision による optimistic concurrency を使います。削除時はチャネルを lock した後に配信・配信先・Webhook 等の参照を再確認し、参照中の削除を拒否します。
+
+接続確認は access token と期待 bot user ID の同一 revision snapshotを使う read-only な一回の外部照会です。外部通信中は DB lock を保持せず、戻り時に revision が変化していれば結果を採用しません。token、secret、生の LINE 応答を永続化または公開せず、安全な状態分類だけを返します。
 
 ### Webhook
 
@@ -132,4 +140,4 @@ message／postback handler は、完全一致の静的 command／action registry
 Webhook request は View 入口から単一の monotonic deadline を共有し、handler を local と deadline-managed external の実行プロファイルへ分けます。LINE reply は同一チャネルの資格情報と一回限りの reply token を使い、自動再試行せず、期限不足なら開始しません。accepted、rejected、unknown を区別し、受信内容、token、LINE user ID、access token を保存しない interaction 監査へ収束させます。
 
 ---
-_更新日: 2026-07-23。許可リスト型 interaction、deadline-aware reply、PII-free 監査の実装パターンを反映。技術判断と標準を記録し、依存パッケージ一覧にはしない。_
+_更新日: 2026-08-01。登録済み対象への配信、受取確認、owner 向けチャネル管理の信頼境界と競合契約を反映。技術判断と標準を記録し、依存パッケージ一覧にはしない。_
