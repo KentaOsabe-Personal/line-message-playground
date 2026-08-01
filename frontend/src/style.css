@@ -278,6 +278,161 @@ h1 {
   padding-top: 2rem;
 }
 
+.channel-admin {
+  border-top: 1px solid #dfe7e3;
+  margin-top: 2rem;
+  padding-top: 2rem;
+}
+
+.section-heading,
+.channel-card-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.section-heading h2,
+.channel-card-heading h3 {
+  margin: 0;
+}
+
+.channel-list,
+.channel-editor,
+.channel-editor label,
+.channel-actions,
+.connection-result,
+.confirmation form,
+.confirmation fieldset {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.channel-list {
+  margin-top: 1rem;
+}
+
+.channel-card,
+.channel-editor,
+.confirmation,
+.empty-state {
+  border: 1px solid #c8d5ce;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.channel-editor {
+  background: #f8faf9;
+  margin: 1rem 0;
+}
+
+.channel-editor input,
+.confirmation input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.65rem;
+  border: 1px solid #aebbb5;
+  border-radius: 0.5rem;
+  font: inherit;
+}
+
+.channel-editor .inline-field {
+  display: flex;
+  align-items: center;
+}
+
+.channel-editor .inline-field input {
+  width: auto;
+}
+
+.channel-details,
+.confirmation dl {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.channel-details > div,
+.confirmation dl > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.55fr) minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.channel-details dd,
+.confirmation dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.status.active {
+  color: #075c30;
+  background: #dcf5e6;
+}
+
+.status.inactive {
+  color: #6c4a00;
+  background: #fff0bd;
+}
+
+.channel-admin button {
+  width: fit-content;
+  padding: 0.65rem 0.9rem;
+  border: 0;
+  border-radius: 0.5rem;
+  color: white;
+  background: #087f3e;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.channel-admin button.secondary {
+  color: #17202a;
+  background: #e6ece9;
+}
+
+.channel-admin button.danger {
+  background: #b42318;
+}
+
+.channel-admin button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.confirmation {
+  margin-top: 1rem;
+  border-color: #b07800;
+  background: #fff9e8;
+}
+
+.connection-result {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-left: 0.35rem solid #2878b5;
+  background: #eef7ff;
+}
+
+@media (max-width: 600px) {
+  .section-heading,
+  .channel-card-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .channel-details > div,
+  .confirmation dl > div {
+    grid-template-columns: 1fr;
+  }
+}
+
 .account-console button {
   border: 0;
   border-radius: 0.5rem;

@@ -1,6 +1,7 @@
 import AccountConsole from './AccountConsole'
 import AuthGate from './AuthGate'
 import type { AuthGateContext } from './AuthGate'
+import ChannelAdminConsole from './ChannelAdminConsole'
 import DeliveryForm from './DeliveryForm'
 
 export function OwnerConsole({
@@ -24,7 +25,10 @@ export function OwnerConsole({
         refreshSession={refreshSession}
       />
       {session.state === 'authenticated' && (
-        <DeliveryForm onSessionInvalid={() => { void refreshSession() }} />
+        <>
+          <ChannelAdminConsole onSessionInvalid={() => { void refreshSession() }} />
+          <DeliveryForm onSessionInvalid={() => { void refreshSession() }} />
+        </>
       )}
     </>
   )

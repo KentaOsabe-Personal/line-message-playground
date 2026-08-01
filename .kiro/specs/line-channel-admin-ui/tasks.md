@@ -180,29 +180,29 @@
   - _Requirements: 1.5, 9.1, 9.2, 9.3, 9.4, 9.6, 9.7, 9.8, 9.9, 9.10_
   - _Boundary: ChannelAdminState_
 
-- [ ] 6. owner向けチャネル管理画面を組み立てる
-- [ ] 6.1 (P) 一覧・詳細・空・読込・再取得画面を実装する
+- [x] 6. owner向けチャネル管理画面を組み立てる
+- [x] 6.1 (P) 一覧・詳細・空・読込・再取得画面を実装する
   - authenticated状態だけでconsoleを表示し、loading、empty、safe error、readyを排他的に描画する。
   - active/inactive、credential repair、legacy provider、日時、Webhook URLをチャネルごとに取り違えない構造で表示する。
   - 完了時には、未取得・失敗データを最新と断定せず、明示retryと新規登録導線が利用できる。
   - _Requirements: 1.1, 1.2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 6.1, 6.3, 9.1, 9.2, 9.3_
   - _Boundary: ChannelAdminConsole_
   - _Depends: 5.1, 5.2, 5.3_
-- [ ] 6.2 (P) 登録・編集のwrite-onlyフォームを実装する
+- [x] 6.2 (P) 登録・編集のwrite-onlyフォームを実装する
   - 非秘密項目と初期状態を編集でき、edit時の秘密欄を常に空のuncontrolled inputにする。
   - submit時だけ完全pairを一度読み、成否にかかわらずformをresetし、処理中の重複submitを防ぐ。
   - 完了時には、秘密値がvalue/defaultValue/placeholder/data属性/state/storage/errorへ残らず、metadataのみ更新と完全pair置換が行える。
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 4.1, 4.2, 4.4, 4.5, 4.6, 4.8, 4.9, 9.4, 9.5, 9.8, 9.9_
   - _Boundary: ChannelEditor_
   - _Depends: 5.1, 5.2, 5.3_
-- [ ] 6.3 (P) Webhook URL copyと一時接続確認表示を実装する
+- [x] 6.3 (P) Webhook URL copyと一時接続確認表示を実装する
   - 表示済みDTOのWebhook URLだけをclipboardへ渡し、成功・失敗を通知する。
   - 接続確認の6分類と確認日時を一時表示し、connectedにもaccess tokenとbot identity限定の説明を併記する。
   - 完了時には、inactiveを受付可能・持続connectedと表示せず、再確認はownerの明示clickでだけ開始される。
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 9.4, 9.10_
   - _Boundary: ChannelActions_
   - _Depends: 5.1, 5.2, 5.3_
-- [ ] 6.4 状態変更と削除の確認・回復操作を実装する
+- [x] 6.4 状態変更と削除の確認・回復操作を実装する
   - enable/disable/delete前にlabel、公開ID、現在状態、削除の取消不能性をdialogで再確認する。
   - 資格情報修復付きenableではwrite-only editorから完全pairを一度だけ受け取り、状態変更と同じ一操作として送信する。
   - 参照中削除は無効化案内へ、stale/network unknownは成功推測せずrefresh_requiredへ接続する。
@@ -210,7 +210,7 @@
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 8.1, 8.3, 8.5, 8.6, 8.7, 9.4, 9.6, 9.7, 9.10_
   - _Boundary: ChannelActions_
   - _Depends: 6.2, 6.3_
-- [ ] 6.5 管理consoleを認証済みアプリケーションへ統合する
+- [x] 6.5 管理consoleを認証済みアプリケーションへ統合する
   - console、editor、actions、状態遷移、safe通知をAuthGate配下へ合成する。
   - 管理状態と確認dialogのstyleを既存画面と共存させ、相対API以外へ直接接続しない。
   - 完了時には、認証済みownerが一画面で全操作を完了でき、未認証時は管理情報がmount・表示されない。
