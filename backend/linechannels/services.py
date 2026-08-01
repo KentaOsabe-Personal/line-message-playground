@@ -1,8 +1,10 @@
 import uuid
 from collections.abc import Callable
+from datetime import datetime
 from typing import Protocol
 
 from django.db import transaction
+from django.utils import timezone
 
 from .crypto import CredentialCryptoError
 from .repositories import (
@@ -118,11 +120,40 @@ class DefaultLineChannelService:
                 if locked is None:
                     return ChannelMutationFailed("channel_not_found")
                 if (
+                    validated.required_provider_id is not None
+                    and locked.public.provider_id is not None
+                    and locked.public.provider_id != validated.required_provider_id
+                ):
+                    return ChannelMutationFailed("channel_not_found")
+                if (
+                    validated.expected_updated_at is not None
+                    and locked.public.updated_at != validated.expected_updated_at
+                ):
+                    return ChannelMutationFailed("stale_channel")
+                if (
+                    validated.expected_updated_at is not None
+                    and validated.is_active is not None
+                    and locked.public.is_active == validated.is_active
+                ):
+                    return ChannelMutationFailed("stale_channel")
+                if (
                     validated.provider_id is not None
                     and locked.public.provider_id is not None
                     and validated.provider_id != locked.public.provider_id
                 ):
-                    return ChannelMutationFailed("invalid_transition")
+                    code = (
+                        "provider_immutable"
+                        if validated.required_provider_id is not None
+                        else "invalid_transition"
+                    )
+                    return ChannelMutationFailed(code)
+                if (
+                    locked.public.provider_id is None
+                    and validated.required_provider_id is not None
+                    and validated.provider_id is not None
+                    and validated.provider_id != validated.required_provider_id
+                ):
+                    return ChannelMutationFailed("channel_not_found")
 
                 encrypted = None
                 if validated.credentials is not None:
@@ -208,6 +239,12 @@ class DefaultLineChannelService:
             raise BoundaryValidationError()
         if command.is_active is not None and type(command.is_active) is not bool:
             raise BoundaryValidationError()
+        if command.expected_updated_at is not None:
+            if (
+                not isinstance(command.expected_updated_at, datetime)
+                or timezone.is_naive(command.expected_updated_at)
+            ):
+                raise BoundaryValidationError()
         return UpdateLineChannel(
             channel_public_id=validate_public_id(command.channel_public_id),
             messaging_api_channel_id=(
@@ -230,6 +267,12 @@ class DefaultLineChannelService:
             provider_id=(
                 validate_provider_id(command.provider_id)
                 if command.provider_id is not None
+                else None
+            ),
+            expected_updated_at=command.expected_updated_at,
+            required_provider_id=(
+                validate_provider_id(command.required_provider_id)
+                if command.required_provider_id is not None
                 else None
             ),
         )

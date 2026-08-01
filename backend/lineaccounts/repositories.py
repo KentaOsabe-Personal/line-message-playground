@@ -81,6 +81,16 @@ class OwnerSessionView:
 
 
 @dataclass(frozen=True, slots=True)
+class LockedOwnerSession:
+    public_id: UUID
+    owner_slot: int
+    identity_id: UUID
+    provider_id: str
+    owner_state: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class RecipientView:
     public_id: UUID
     identity_id: UUID
@@ -127,6 +137,14 @@ class AccountRepository(Protocol):
     def get_session(
         self, public_id: UUID, now: datetime
     ) -> OwnerSessionView | None: ...
+
+    def lock_owner_session(
+        self,
+        owner: LockedOwnerAccount,
+        session_public_id: UUID,
+        identity_public_id: UUID,
+        now: datetime,
+    ) -> LockedOwnerSession | None: ...
 
     def delete_owner_session(self, public_id: UUID) -> bool: ...
 
@@ -301,6 +319,41 @@ class DjangoAccountRepository:
                 OwnerSession.objects.using(self.using).filter(pk=session.pk).delete()
                 return None
             return self._session_view(session, session.owner)
+
+    def lock_owner_session(
+        self,
+        owner: LockedOwnerAccount,
+        session_public_id: UUID,
+        identity_public_id: UUID,
+        now: datetime,
+    ) -> LockedOwnerSession | None:
+        self._require_transaction()
+        if timezone.is_naive(now):
+            raise AccountRepositoryProgrammingError("invalid_command")
+        with self._translate_database_errors():
+            stored_owner = self._locked_owner(owner)
+            session = (
+                OwnerSession.objects.using(self.using)
+                .select_for_update()
+                .select_related("owner__identity")
+                .filter(public_id=session_public_id, owner=stored_owner)
+                .first()
+            )
+            if (
+                session is None
+                or session.expires_at <= now
+                or stored_owner.identity is None
+                or stored_owner.identity.public_id != identity_public_id
+            ):
+                return None
+            return LockedOwnerSession(
+                public_id=session.public_id,
+                owner_slot=stored_owner.slot,
+                identity_id=stored_owner.identity.public_id,
+                provider_id=stored_owner.identity.provider_id,
+                owner_state=stored_owner.state,
+                expires_at=session.expires_at,
+            )
 
     def delete_owner_session(self, public_id: UUID) -> bool:
         self._require_transaction()

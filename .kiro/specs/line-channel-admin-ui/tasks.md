@@ -1,32 +1,32 @@
 # Implementation Plan
 
-- [ ] 1. 管理基盤と安全なデータ境界を整備する
-- [ ] 1.1 管理ユースケースのコマンドと安全な結果契約を定義する
+- [x] 1. 管理基盤と安全なデータ境界を整備する
+- [x] 1.1 管理ユースケースのコマンドと安全な結果契約を定義する
   - 登録、更新、状態変更、削除、接続確認の入力と、固定された成功・失敗分類を既存チャネル基盤と互換な形で表現する。
   - 公開識別子、期待更新日時、provider、資格情報ペアを安全な値として扱い、秘密値を文字列表現や例外へ含めない。
   - 完了時には、後続のrepository、service、HTTP境界が秘密値を応答型へ持ち込まず同じ契約を利用できる。
   - _Requirements: 3.1, 3.2, 4.2, 5.3, 7.2, 8.6_
   - _Boundary: ChannelAdminService_
-- [ ] 1.2 既存チャネル基盤へrevision・provider・資格情報修復の原子契約を追加する
+- [x] 1.2 既存チャネル基盤へrevision・provider・資格情報修復の原子契約を追加する
   - channel lock後に期待更新日時、provider不変条件、同一状態要求を検証し、競合を安全な結果へ変換する。
   - 資格情報は両方なしなら維持、完全pairなら置換し、欠損行の修復と有効化を単一transactionで完了させる。
   - 境界値、暗号失敗、欠損credential修復、修復+enable rollback、時刻round-tripを単体テストで固定する。
   - 完了時には、失敗時にmetadata、状態、資格情報が一切変わらず、既存管理コマンドの互換動作も維持される。
   - _Requirements: 3.2, 3.7, 3.8, 3.9, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.10, 5.1, 5.3, 5.4, 5.5, 5.6_
   - _Boundary: FoundationChannelService_
-- [ ] 1.3 owner/session状態を線形化する管理操作fenceを実装する
+- [x] 1.3 owner/session状態を線形化する管理操作fenceを実装する
   - owner、sessionの順にlockし、identity、provider、active状態、有効期限をDBから再検証する。
   - 一覧・詳細の投影完了まで同じ短いtransactionを維持し、unlinkやsession失効との前後関係を確定する。
   - 完了時には、認証失敗またはunlink中の要求がチャネルを読まず変更せず、安全な認証・利用不可結果へ収束する。
   - _Requirements: 1.1, 1.2, 1.5, 1.6, 3.9, 4.10_
   - _Boundary: OwnerOperationFence_
-- [ ] 1.4 owner provider範囲の安全な一覧・詳細投影を実装する
+- [x] 1.4 owner provider範囲の安全な一覧・詳細投影を実装する
   - 同一providerとlegacy provider未設定のチャネルをactive/inactiveを含めて投影し、別providerを除外する。
   - 資格情報は暗号文をmaterializeせずconfigured/repair_requiredと更新日時だけを導出する。
   - 完了時には、一覧・詳細が全非秘密項目を返し、不在・削除済み対象は他チャネルを漏らさず、一覧queryが定数回かつ暗号文非取得であることをテストできる。
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
   - _Boundary: AdminChannelRepository_
-- [ ] 1.5 接続確認snapshotと完了revision検証を実装する
+- [x] 1.5 接続確認snapshotと完了revision検証を実装する
   - active状態に依存せず、token、bot user ID、更新revisionを単一queryから一貫して取得する。
   - 資格情報欠損・破損をLINE未接続の安全な結果へし、完了時はprovider範囲のchannelをlockしてrevisionを比較する。
   - 完了時には、tokenが直列化・文字列化されず、設定変更済みの外部結果がstaleとして破棄できる。
@@ -267,3 +267,7 @@
   - 完了時には、Frontend test suiteとproduction buildが成功し、残るowner journeyが安全な画面状態で完了する。
   - _Requirements: 1.1, 1.2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 6.1, 6.2, 6.3, 6.4, 6.5, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10, 9.1, 9.2, 9.3, 9.4, 9.6, 9.7, 9.10_
   - _Boundary: ChannelAdminConsole, ChannelActions Connection Tests, App Build_
+
+## Implementation Notes
+
+- 管理投影の資格情報状態は、暗号文をPythonへmaterializeせず、資格情報行の存在と両暗号文の非空を別々の相関`EXISTS`で判定する。
