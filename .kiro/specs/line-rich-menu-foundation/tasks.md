@@ -1,0 +1,335 @@
+# Implementation Plan
+
+- [ ] 1. 実行時とアプリケーションの基盤を整える
+- [ ] 1.1 画像生成依存と固定フォント資産を導入する
+  - Pillowの固定版、Noto Sans JPの固定資産、ライセンスをBackend buildへ組み込み、版・digest・ライセンスを起動時に検証する。
+  - 検証失敗時はプレビューと適用をfail closedにし、画像binaryや資格情報を診断出力へ含めない。
+  - 完了時には、正しい資産ではsystem checkが成功し、版・digest・ライセンスのいずれかが違う環境では機能が利用可能にならないことを確認できる。
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.7_
+  - _Boundary: DeterministicRenderer_
+- [ ] 1.2 Django appとmutation readiness契約を準備する
+  - 新しいBackend appを登録し、read_only・recovery_only・enabledのreadiness値とoperation kindごとの認可契約を定義する。
+  - probe・purge・integration markerが不足する構成をfail closedな安全結果へ分類する。
+  - 完了時には、各readiness modeとoperation kindの組合せが、外部作用を開始する前に許可またはintegration_not_readyへ決定的に分類される。
+  - _Requirements: 10.12, 11.6, 11.7, 11.8, 11.9, 11.10_
+  - _Boundary: MutationReadiness_
+- [ ] 1.3 共通の不変コマンド・結果・安全エラー契約を定義する
+  - template、preview、operation、resource、observation、履歴、next allowed actionを表す不変値を、秘密や外部SDK型を含めず定義する。
+  - owner API、headless、repository、gatewayが同じoperation kind・stage・safe result分類を共有できる契約にする。
+  - 完了時には、全境界が生のLINE応答や資格情報なしで状態と結果を受け渡せ、未定義variantを型境界で扱えない。
+  - _Requirements: 5.1, 5.8, 8.1, 8.8, 10.7, 10.8, 10.9, 10.10, 11.10_
+- [ ] 1.4 リッチメニュー用の独立schemaを追加する
+  - channel state、operation、managed resource、append-only transitionの4モデルと、relation・lifecycle・index・一意性・CHECK制約をmigrationへ定義する。
+  - 既存テーブルや既存行を更新しない空schema migrationとし、channel public IDを集約境界にする。
+  - 完了時には、空DBと既存データ入りDBの双方で4テーブルだけが追加され、無効なoperation relationとresource lifecycleがDB制約で拒否される。
+  - _Requirements: 6.1, 6.3, 6.4, 7.1, 8.1, 9.8, 10.1, 10.2, 10.6, 10.12_
+  - _Boundary: RichMenuStateMachine, RichMenuRepository_
+
+- [ ] 2. テンプレート・画像・確認のドメイン能力を実装する
+- [ ] 2.1 3種類の版付きテンプレートカタログを実装する
+  - 安定IDとversion、2500×843の領域、表示情報、required fields、20/1000文字上限をimmutableに公開する。
+  - 既存版の意味を上書きせず、1・2・3分割の座標に重複、gap、canvas外がないことを保証する。
+  - 完了時には、3種類だけが安定した順序と説明で列挙され、未知ID/versionは別版へfallbackしない。
+  - _Requirements: 2.1, 2.2, 2.7, 2.8_
+  - _Boundary: TemplateCatalog_
+- [ ] 2.2 テンプレート入力のstrict normalizationを実装する
+  - 必須・余剰field、trim＋NFC後の表示名、absolute HTTPS URI、host、userinfo、control文字、文字数上限をfield単位で検証する。
+  - URI action以外、画像upload、任意座標・色・font・custom templateを入力契約から排除する。
+  - 完了時には、有効入力だけがordered normalized fieldsへ変換され、各不正入力ではプレビュー生成前に安全な項目別理由が返る。
+  - _Requirements: 2.3, 2.4, 2.5, 2.6, 2.7, 2.8_
+  - _Boundary: TemplateCatalog_
+- [ ] 2.3 決定的な日本語画像rendererを実装する
+  - 固定palette・padding・font size・wrapとcmap全code point検証を使い、fallbackなしでcanonical RGBAからmetadataなしPNGを生成する。
+  - template/version・寸法・canonical pixel bytesからdigestを求め、format・寸法・aspect・1MB上限をencode後にも検証する。
+  - binaryの寿命をrender結果、preview応答、LINE uploadに限定し、repr・model・token・log・errorへ流さない。
+  - 完了時には、同じ正規化入力が環境や時刻によらず同じpixel digestになり、未対応glyphまたはLINE画像制約違反は外部通信前に拒否される。
+  - _Depends: 1.1, 1.3, 2.1, 2.2_
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
+  - _Boundary: DeterministicRenderer_
+- [ ] 2.4 (P) 10分間の確認bindingを実装する
+  - owner・provider・channel/revision・default観測・template/version・全正規化入力・pixel digestをsnapshot fingerprintへ束ねる。
+  - purpose・version・時刻・random nonce・fingerprintだけを署名tokenへ含め、改変、未来時刻、期限切れ、別軸利用を拒否する。
+  - token digestを別operationへの再利用防止keyとして扱い、同一snapshotから新規nonceを発行できる契約にする。
+  - 完了時には、発行後10分以内の完全一致snapshotだけが検証を通り、token payloadにURL、画像、資格情報、外部IDが含まれない。
+  - _Depends: 1.3_
+  - _Requirements: 4.2, 4.3, 4.4, 4.6, 4.7, 4.9, 6.1, 6.2, 6.3, 10.7, 10.9_
+  - _Boundary: RichMenuConfirmation_
+
+- [ ] 3. 状態機械と永続化を実装する
+- [ ] 3.1 operationと管理資源の許可遷移を実装する
+  - accepted・processing・failed・unknown・cleanup required・recovery active・succeededと具体stageの遷移を純粋関数で定義する。
+  - candidate→applied→old/cleanup→deletedとapplied→releasedだけを許し、unlinkとreleaseを別操作として扱う。
+  - 完了時には、全許可遷移が一意な結果になり、不正なstage、relation、resource lifecycleは状態変更前に拒否される。
+  - _Depends: 1.3_
+  - _Requirements: 6.4, 6.7, 6.8, 6.9, 7.1, 7.5, 7.6, 7.7, 7.8, 7.9, 8.1, 8.2, 8.7, 8.9, 9.6, 9.8_
+  - _Boundary: RichMenuStateMachine_
+- [ ] 3.2 channel単位のoperation受付と冪等予約を実装する
+  - reference fenceとchannel stateを同一transactionでlockし、global operation ID、request fingerprint、confirmation usage digestを原子的に予約する。
+  - 同一ID・同一fingerprintは保存済み状態へ収束させ、異fingerprint、競合operation、別subject/targetを外部作用前に拒否する。
+  - 完了時には、並行受付でも一行・一候補だけが予約され、同一要求の再送は新しいLINE作用を作らない。
+  - _Depends: 1.4, 3.1_
+  - _Requirements: 6.1, 6.2, 6.3, 6.4, 7.1, 7.9, 8.2, 8.9, 9.8_
+  - _Boundary: RichMenuRepository_
+- [ ] 3.3 stage claim・CAS・外部I/O後fenceを実装する
+  - DB lockを外部I/O前に解放し、戻り時にowner/provider/channel revisionとoperation stageをexactに再lockしてCASする。
+  - staleな応答が現在状態を上書きしないようunknownまたはrecheck_requiredへ安全に収束し、次stageでは新しいsnapshotを要求する。
+  - 完了時には、外部I/O中に各fence軸を変更しても古い応答が確定状態を上書きせず、回復可能なblockerが保存される。
+  - _Depends: 3.2_
+  - _Requirements: 1.3, 1.6, 1.7, 6.4, 8.1, 8.2, 11.3_
+  - _Boundary: RichMenuRepository_
+- [ ] 3.4 blockerとrecoveryのatomic claim・handoffを実装する
+  - blocking operationとactive operationを分離し、許可されたsubject/targetを持つrecheckまたはcleanup一件だけをclaimする。
+  - 観測成功時にchild確定と元operationの次未開始stageへのhandoffを一transactionで行い、cleanup delete unknownだけを新blockerへ移す。
+  - 完了時には、二重recovery、異channel、自己参照、循環、異subject/targetが拒否され、成功したrecoveryで同じ外部作用を再実行せず元操作が進む。
+  - _Depends: 3.3_
+  - _Requirements: 7.9, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 9.7, 9.8_
+  - _Boundary: RichMenuRepository_
+- [ ] 3.5 owner scopeの状態・operation・履歴queryを実装する
+  - 保存済み状態、blocking/active operation、resource、cleanup、最新観測、next actionsを一貫したprojectionで取得する。
+  - 履歴をowner/provider/channelでscopeし、新しい順、limit 1〜50、opaque cursor、immutable configuration snapshotで返す。
+  - 完了時には、件数に依存しないquery数で対象ownerの履歴だけがページングされ、別scopeの存在や完全URLが漏れない。
+  - _Depends: 3.2_
+  - _Requirements: 1.1, 1.4, 1.5, 5.1, 5.8, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.9_
+  - _Boundary: RichMenuRepository_
+- [ ] 3.6 reference probeとrollback-only履歴purgeを実装する
+  - applied・processing・unknown・cleanup待ちを削除阻止参照とし、terminal history-onlyを阻止対象から外す。
+  - purgeをchannel削除transaction内だけで許可し、blocker・storage failure・部分失敗ではrollback-onlyにしてnullable recovery relationを安全に解除する。
+  - 完了時には、呼出側が失敗結果を無視しても参照中channelや部分purgeをcommitできず、history-only channelだけが同じ完了単位で削除できる。
+  - _Depends: 3.4, 3.5_
+  - _Requirements: 9.8, 10.12, 11.7, 11.8, 11.9_
+  - _Boundary: HeadlessReferenceContracts_
+
+- [ ] 4. チャネル資格情報境界とLINE観測を実装する
+- [ ] 4.1 (P) exact-providerのチャネル操作snapshot portを追加する
+  - owner・本人関係・provider完全一致・active状態・revision・資格情報を一つの非serialize snapshotとして取得する。
+  - 外部I/O後に同じ軸を再lock検証するportを追加し、provider nullを許すlegacy scopeから分離する。
+  - 完了時には、provider未設定・不一致・inactive・stale・credential読取不能がLINE call前に安全に拒否され、別provider tokenを選ばない。
+  - _Depends: 1.3_
+  - _Requirements: 1.1, 1.3, 1.4, 1.5, 1.6, 1.7, 11.3_
+  - _Boundary: OwnerChannelOperationPort_
+- [ ] 4.2 LINE rich menu JSON・default gatewayを実装する
+  - validate・create・list・get・set/get/clear default・deleteをchannel-scoped context必須、SDK retry 0で提供する。
+  - 2xx、作用なしを確認できる4xx、401/403/404/415、429、5xx、timeout、connection、malformed responseをsafe unionへ縮約する。
+  - 完了時には、JSON/default endpointが資格情報・LINE ID・raw bodyを例外やlogへ出さず、曖昧な結果を成功や不存在と推測しない。
+  - _Depends: 4.1_
+  - _Requirements: 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 6.5, 6.6, 6.8, 6.11, 7.2, 7.3, 7.4, 7.5, 8.1, 8.8, 9.2, 9.3, 9.4, 9.7, 10.7, 10.10_
+  - _Boundary: RichMenuGateway_
+- [ ] 4.3 LINE画像upload・download gatewayを実装する
+  - 画像content type・sizeを制約したuploadとdownloadを同じchannel-scoped contextで提供し、blobの確実なcloseとdigest照合を行う。
+  - timeout、connection、429、5xx、malformed content、close failureを安全な拒否または結果不明へ分類する。
+  - 完了時には、画像binaryがgateway callの寿命を越えず、upload/downloadの曖昧な作用と観測を成功扱いしない。
+  - _Depends: 2.3, 4.1_
+  - _Requirements: 3.5, 3.7, 5.5, 5.6, 6.5, 6.11, 8.1, 8.8, 10.8, 10.10_
+  - _Boundary: RichMenuGateway_
+- [ ] 4.4 保存状態と現在defaultの保守的な分類を実装する
+  - defaultなし、管理対象一致、外部・別管理対象、認可/不存在/通信/解釈不能によるunknownを分類する。
+  - 管理対象資源の一時非観測だけで作成失敗、削除済み、所有権喪失と確定せず、アプリ外資源の内容や所有権を推測しない。
+  - 完了時には、各観測が安全な実状態分類とnext actionsになり、external resourceを取込み・編集・削除する経路が存在しない。
+  - _Depends: 3.5, 4.2_
+  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 7.3, 7.4, 7.8_
+  - _Boundary: RichMenuReconciler_
+- [ ] 4.5 unknown stageとcleanup対象のrecheck観測を実装する
+  - marker 0/1/複数、個別取得、download digest、default、delete非観測quorumから元operationと一意な資源関係を検証する。
+  - 観測不能・複数候補・関係未検証では採用も削除もせず、元blockerと明示的next actionを維持する。
+  - 完了時には、create/upload/set/clear/deleteの各unknownを同じ外部作用なしで照合し、確認できた段階だけを元operationへ反映できる。
+  - _Depends: 3.4, 4.3, 4.4_
+  - _Requirements: 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7_
+  - _Boundary: RichMenuReconciler_
+
+- [ ] 5. owner操作のapplication workflowを実装する
+- [ ] 5.1 確認済みプレビューworkflowを実装する
+  - exact scope確認、strict入力、render、LINE object validate、現在default観測を順に実行し、安全に分類できる場合だけ確認tokenを発行する。
+  - channel運用名、template/version、ordered display name/完全URL、PNG情報とbase64、実状態、外部default置換警告、URL保存警告、10分expiryを返す。
+  - 完了時には、previewだけがtoken・完全URL・画像を返し、inactiveまたはdefault unknown・検証失敗ではLINE変更もtoken発行も起きない。
+  - _Depends: 2.2, 2.3, 2.4, 4.4_
+  - _Requirements: 1.3, 1.4, 1.5, 2.3, 3.6, 3.7, 4.1, 4.2, 4.3, 4.4, 4.5, 4.8_
+  - _Boundary: RichMenuService_
+- [ ] 5.2 owner向け状態・operation・履歴参照workflowを実装する
+  - active channelでは安全な最新観測を保存projectionへ合成し、inactive channelではLINEを呼ばず保存済みprojectionだけを返す。
+  - operation単体とowner専用履歴をscopeし、blocking recovery、cleanup、nextAllowedActionsを安定した結果にする。
+  - 完了時には、ownerが現在状態と許可操作を判断でき、別owner/provider/channelの存在を区別しない参照結果になる。
+  - _Depends: 3.5, 4.4_
+  - _Requirements: 1.1, 1.4, 1.5, 5.1, 5.8, 10.1, 10.2, 10.3, 10.4, 10.5_
+  - _Boundary: RichMenuService_
+- [ ] 5.3 適用の受付・候補作成・画像設定workflowを実装する
+  - 既存operation IDを先に同一fingerprintで照合し、一致時はtoken期限にかかわらず保存済み結果を返す。新規operationだけconfirmation expiryとusage keyを検証する。
+  - confirmation全軸を検証し、一件のcandidate/markerを予約してcreate→uploadをstage単位で進める。
+  - 明示拒否とunknownを区別し、create後に残ったcandidateは自動削除せずcleanup requiredへ保存する。
+  - 完了時には、再送・連打・各段階失敗でも一候補を超えず、unknown後に同じcreate/uploadを自動再実行しない。
+  - _Depends: 2.4, 3.3, 4.2, 4.3, 5.1_
+  - _Requirements: 4.6, 4.7, 4.9, 6.1, 6.2, 6.3, 6.4, 6.5, 6.11, 8.1, 8.2, 8.9_
+  - _Boundary: RichMenuService_
+- [ ] 5.4 default設定・確認・置換完了workflowを実装する
+  - set直前にpreview時defaultを再観測し、差分時はcandidateをcleanup対象へ残してsetを開始しない。
+  - candidateだけをdefaultへ設定し、一致観測後にappliedへ確定してから旧管理資源をold/cleanupへ移す。
+  - 外部defaultを置換してもその外部資源を編集・削除せず、確認不能時は適用済みにしない。
+  - 完了時には、新default確認前は旧resourceがappliedのまま保護され、確認後だけ履歴・適用日時・cleanup関係が更新される。
+  - _Depends: 5.3_
+  - _Requirements: 4.7, 6.6, 6.7, 6.8, 6.9, 6.10, 6.11, 8.1, 9.1_
+  - _Boundary: RichMenuService_
+- [ ] 5.5 管理対象defaultの適用解除workflowを実装する
+  - 対象一致時だけclearし、none・外部・別管理資源では現在defaultを変更せず対象が非defaultである事実へ収束する。
+  - 非default確認後にcleanup対象へ移し、確認不能時はunknownを保存して再確認を要求する。
+  - 完了時には、外部defaultを解除せず、確定解除だけが下流へclear_to_disableを返し、削除前にも解除確認を保持する。
+  - _Depends: 3.3, 4.4_
+  - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.9, 11.2, 11.4, 11.5_
+  - _Boundary: RichMenuService_
+- [ ] 5.6 LINEを変更しない管理終了workflowを実装する
+  - 対象管理資源をreleasedへ移し、管理・削除対象から外して終了日時と安全な履歴を記録する。
+  - 以後同じLINE IDを観測しても自動再取得せずアプリ外defaultとして分類する。
+  - 完了時には、release中のLINE callが0件で、対象資源の現在defaultを変えずcleanup対象にも戻さない。
+  - _Depends: 3.3, 4.4_
+  - _Requirements: 7.7, 7.8, 7.9, 9.5, 10.1, 10.2_
+  - _Boundary: RichMenuService_
+- [ ] 5.7 結果不明操作の明示recheck workflowを実装する
+  - subject operationを持つ一意なrecheckを受付け、観測だけで元stageの成功・失敗・継続unknownを判定する。
+  - 成功観測時はchild確定と元operationの完了または次未開始stageへのhandoffを行い、自動polling/retryをしない。
+  - 完了時には、各unknown stageが同じoperation IDの履歴へ収束し、別operationによる同等適用を許可可能と報告しない。
+  - _Depends: 3.4, 4.5, 5.3, 5.4, 5.5_
+  - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 11.2, 11.3, 11.5_
+  - _Boundary: RichMenuService_
+- [ ] 5.8 候補・旧資源の明示cleanup workflowを実装する
+  - subject operationとtarget resourceを必須にし、強い所有権、origin relation、現在default非一致を再確認して一件だけdeleteする。
+  - released・外部・ownership不明・現在defaultは削除せず、失敗・429・unknownを自動再試行なしでblockerへ保存する。
+  - 完了時には、削除確認済み対象だけがdeletedになり、他の管理資源と現在defaultは変化せず、元操作履歴へ結果が結び付く。
+  - _Depends: 3.4, 4.5, 5.4, 5.5_
+  - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 10.1, 10.2_
+  - _Boundary: RichMenuService_
+
+- [ ] 6. owner API・headless・runtime統合を公開する
+- [ ] 6.1 secret-freeなrequest/response境界を実装する
+  - operation kindごとのstrict serializerでunknown key、variant外field、不正ID、relation不一致、limit範囲を拒否する。
+  - preview、state、operation、history、safe errorのpresenterを分離し、preview以外からtoken・画像・完全URLを除外する。
+  - 完了時には、各DTOが設計どおりのfieldだけを受理・返却し、canary secretやraw responseがerror/reprを含む全responseへ現れない。
+  - _Depends: 5.1, 5.2, 5.3, 5.5, 5.6, 5.7, 5.8_
+  - _Requirements: 2.5, 4.3, 4.4, 4.5, 6.3, 10.3, 10.4, 10.7, 10.8, 10.9, 10.10, 11.1, 11.10_
+  - _Boundary: OwnerRichMenuAPI_
+- [ ] 6.2 owner専用の参照・preview HTTP APIを公開する
+  - template一覧、channel preview/state/history、operation取得routeをactive owner session、同一provider scope、安全な404で公開する。
+  - preview requestにはexact-origin CSRFを適用し、inactive state/historyは保存projectionだけを返す。
+  - 完了時には、設計された参照routeがscope内で応答し、無効session・別owner/provider/channel・stale revisionで秘密や対象存在を漏らさない。
+  - _Depends: 6.1_
+  - _Requirements: 1.1, 1.2, 1.4, 1.5, 1.6, 4.1, 4.5, 5.1, 10.3, 10.4, 11.1_
+  - _Boundary: OwnerRichMenuAPI_
+- [ ] 6.3 owner専用のoperation HTTP APIを公開する
+  - apply・unlink・release・recheck・cleanupを一つのstrict operation endpointへ接続し、CSRF、revision、readiness、競合、relationを外部作用前に検証する。
+  - operation IDの同一request再送では保存済みOperationResponseを返し、受け付け不能variantを安定したHTTP/safe codeへ対応させる。
+  - 完了時には、全mutation kindが同じ状態機械へ到達し、無効scope・inactive・stale・integration未完了ではLINE call 0件となる。
+  - _Depends: 6.1, 6.2_
+  - _Requirements: 1.2, 1.3, 1.4, 1.5, 1.6, 6.1, 6.2, 6.3, 6.4, 7.9, 8.2, 9.8, 11.1, 11.10_
+  - _Boundary: OwnerRichMenuAPI_
+- [ ] 6.4 (P) 下流向けlifecycle・reference・purge契約を公開する
+  - guard state、headless unlink/recheck、reference probe、transaction-required history purgeをowner操作と同じ状態機械へ接続する。
+  - headless commandでもowner/provider/revision/operation ID、readiness、競合、safe result、自動再試行禁止を強制する。
+  - 完了時には、確定unlink時だけdisable続行が可能となり、未解決参照やpurge失敗時はdisable/deleteを続行可能と報告しない。
+  - _Depends: 3.6, 5.2, 5.5, 5.7_
+  - _Requirements: 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10_
+  - _Boundary: HeadlessReferenceContracts_
+- [ ] 6.5 readinessとconcrete dependencyを統合する
+  - owner fence、exact channel port、catalog、renderer、confirmation、repository、gateway、reconciler、service、headless、APIを一つのcomposition rootで合成する。
+  - read_onlyではreadだけ、recovery_onlyではunlink/release/recheck/cleanupだけ、enabledでは全mutationを許可し、integration marker欠落をfail closedにする。
+  - 完了時には、foundation単独を含む各readiness modeで設計どおりのroute/headless操作だけが実行され、どの入口からもguardを迂回できない。
+  - _Depends: 1.2, 4.2, 4.3, 6.2, 6.3, 6.4_
+  - _Requirements: 1.1, 1.2, 1.3, 1.5, 11.1, 11.2, 11.3, 11.6, 11.7, 11.8, 11.9, 11.10_
+  - _Boundary: CompositionRoot_
+
+- [ ] 7. 機能・統合・安全性を検証する
+- [ ] 7.1 (P) runtime・template・rendererのunit/golden検証を追加する
+  - 依存版/font digest/OFL、3 template geometry、strict field/URL、NFC、日本語golden pixel、glyph、PNG制約、binary非reprを検証する。
+  - 各Backend test定義直前に日本語の「テストケース:」「期待値:」コメントを置く。
+  - 完了時には、固定環境でgolden digestが再現し、資産差替え・不正入力・未対応glyphがLINE call前に失敗するsuiteが通る。
+  - _Depends: 1.1, 2.1, 2.2, 2.3_
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
+  - _Boundary: test_templates_renderer.py_
+- [ ] 7.2 (P) confirmationとpreviewのbinding検証を追加する
+  - 全snapshot軸の一軸変更、tamper、未来時刻、10分expiry、nonce、同token別operation再利用、default unknown時token非発行を検証する。
+  - response/token/history/logへのURL・画像・secret混入をcanaryで検出する。
+  - 完了時には、確認した設定と完全一致する一回の新規適用だけが通り、同一operation replayとpreview以外の機密除外を確認するsuiteが通る。
+  - _Depends: 2.4, 5.1, 5.3_
+  - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 6.2, 10.7, 10.8, 10.9_
+  - _Boundary: test_confirmation.py_
+- [ ] 7.3 (P) state・model・migrationのinvariant検証を追加する
+  - 全許可遷移、relation/lifecycle制約、空schema migration、既存channel/recipient/delivery/webhook/interaction履歴の非変更を検証する。
+  - migration前後の既存行とtable差分を観測し、data migrationや外部作用がないことを確認する。
+  - 完了時には、無効状態がdomainとDBの両方で拒否され、既存保存状態が同一に維持されるsuiteが通る。
+  - _Depends: 1.4, 3.1_
+  - _Requirements: 6.4, 7.1, 7.6, 7.7, 7.8, 7.9, 8.1, 8.2, 8.9, 9.8, 10.12_
+  - _Boundary: test_state_models.py, test_migrations.py_
+- [ ] 7.4 (P) repositoryの冪等性・lock・CAS・recovery競合を検証する
+  - operation/fingerprint/confirmation一意性、channel lock、stage CAS、recovery claim/handoff、MySQL lock errorを並行実行と失敗注入で検証する。
+  - 外部I/O中のowner/provider/revision/stage変更で旧応答が現在状態を上書きしないことを確認する。
+  - 完了時には、一意なoperation/blocker/active pointerとatomic handoffを維持するconcurrency suiteが通る。
+  - _Depends: 3.2, 3.3, 3.4_
+  - _Requirements: 1.7, 6.1, 6.2, 6.3, 6.4, 7.9, 8.2, 8.3, 8.4, 8.7, 9.8_
+  - _Boundary: test_repository_concurrency.py_
+- [ ] 7.5 (P) 履歴query・reference・rollback-only purgeを検証する
+  - owner/provider/channel scope、新しい順、limit 1〜50、opaque cursor、snapshot不変、件数非依存queryを検証する。
+  - transaction外purge、blocker、storage/途中失敗でrollback-onlyとなり、失敗結果を無視してもchannel deleteをcommitできないことを検証する。
+  - 完了時には、history-onlyだけを同じ完了単位で削除でき、部分purgeを残さないrepository suiteが通る。
+  - _Depends: 3.5, 3.6_
+  - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.6, 11.7, 11.8, 11.9_
+  - _Boundary: test_repositories.py_
+- [ ] 7.6 (P) JSON・blob gatewayの全結果分類を検証する
+  - 全endpointの成功、各4xx、429、5xx、timeout、connection、malformed、blob close failure、retry 0、token非露出を検証する。
+  - scoped context以外の資格情報利用、画像制約違反、raw responseやbinaryの寿命超過を拒否することを確認する。
+  - 完了時には、明示拒否とunknownを混同せず、秘密を公開しないgateway suiteが通る。
+  - _Depends: 4.1, 4.2, 4.3_
+  - _Requirements: 3.5, 3.7, 5.5, 6.11, 8.1, 8.8, 9.7, 10.7, 10.8, 10.10_
+  - _Boundary: test_gateway.py_
+- [ ] 7.7 (P) reconcilerのdefault・marker・digest・delete quorumを検証する
+  - default 403/404/managed/unknown、marker 0/1/複数、download digest、delete観測quorum、一時非観測をtable-drivenで検証する。
+  - 外部またはreleased resourceの内容・所有権を推測せず、採用・編集・削除しないことを確認する。
+  - 完了時には、曖昧な観測を成功・不存在へ誤分類しないreconciliation suiteが通る。
+  - _Depends: 4.4, 4.5_
+  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 8.3, 8.4, 8.5, 8.6, 8.8, 9.2, 9.3, 9.4, 9.5, 9.6_
+  - _Boundary: test_reconciliation.py_
+- [ ] 7.8 (P) apply・置換sagaの段階別挙動を検証する
+  - create→upload→set→observe、set直前default差分、各stageの拒否・unknown、候補一意性、旧資源保護を検証する。
+  - 同一operation replayは期限切れtokenでも保存済み結果を返し、新規operationだけconfirmationを消費することを確認する。
+  - 完了時には、新default確認後だけapplied/old/historyが確定し、自動retryしないapply suiteが通る。
+  - _Depends: 5.3, 5.4_
+  - _Requirements: 4.6, 4.7, 4.9, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 6.10, 6.11, 9.1_
+  - _Boundary: test_services.py apply workflow_
+- [ ] 7.9 unlink・releaseの外部default保護を検証する
+  - unlinkが対象一致時だけclearし、none・外部・別管理資源では現在defaultを変えないことを検証する。
+  - releaseはLINE call 0件で管理終了し、同じ外部資源を自動再取得またはcleanupしないことを確認する。
+  - 完了時には、解除と管理終了が別の許可遷移・履歴・next actionへ収束するsuiteが通る。
+  - _Depends: 5.5, 5.6, 7.8_
+  - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 9.5_
+  - _Boundary: test_services.py unlink/release workflow_
+- [ ] 7.10 recheck・cleanup handoffと外部I/O後fenceを検証する
+  - recheckが不明stageを再実行せず観測し、成功時だけ元operationへatomic handoffすることを検証する。
+  - cleanupが強い所有権とdefault非一致を満たす一件だけを削除し、unknown時だけ新blockerへ移ることを確認する。
+  - 各外部I/O中にfence軸を変更し、旧応答が確定状態を上書きしないことを検証する。
+  - 完了時には、unknown・recovery・cleanupの全経路が一意なblockerと履歴へ収束するsuiteが通る。
+  - _Depends: 5.7, 5.8, 7.9_
+  - _Requirements: 1.3, 1.6, 1.7, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8_
+  - _Boundary: test_services.py recovery/cleanup workflow_
+- [ ] 7.11 (P) owner APIのscope・CSRF・strict DTOを検証する
+  - session/provider/channel scope、exact-origin CSRF、stale revision、安全な404、unknown field、operation variant、paginationを検証する。
+  - previewだけがtoken・URL・画像を返し、operation/state/history/errorから除外されることを確認する。
+  - 完了時には、全owner routeが同じ認証・scope・安全エラー規則を満たすAPI suiteが通る。
+  - _Depends: 6.1, 6.2, 6.3_
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 4.3, 4.4, 4.5, 10.3, 10.4, 11.1, 11.10_
+  - _Boundary: test_api.py_
+- [ ] 7.12 (P) headless・reference・purge・readiness契約を検証する
+  - headless unlink/recheck、guard state、reference probe、transactional purgeがowner APIと同じfence・state・safe resultを使うことを検証する。
+  - read_only・recovery_only・enabledで許可操作が一致し、integration marker不足ではowner/headless mutationともLINE call 0件になることを確認する。
+  - 完了時には、未解決参照やpurge失敗を無視してdisable/deleteを継続できないcontract suiteが通る。
+  - _Depends: 6.4, 6.5_
+  - _Requirements: 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10_
+  - _Boundary: test_headless_reference.py_
+- [ ] 7.13 (P) 秘密・URL・token・画像・生応答の非露出を横断検証する
+  - access token、secret、owner identity、完全URL、confirmation token、画像binary、LINE ID/raw bodyをcanaryとしてresponse・history・log・error・reprへ注入する。
+  - previewで許可された値とowner履歴の完全URLだけを例外として、全境界で安全分類へ縮約されることを確認する。
+  - 完了時には、禁止値の露出を境界横断で継続検出できるsecurity suiteが通る。
+  - _Depends: 6.1, 6.5_
+  - _Requirements: 3.7, 4.4, 4.5, 10.7, 10.8, 10.9, 10.10, 11.10_
+  - _Boundary: test_security.py_
+- [ ] 7.14 (P) query・rate・画像budgetと非pollingを検証する
+  - state/history query数を履歴件数に依存しないbudgetへ固定し、明示recheck一回につきlist最大一回であることを検証する。
+  - 自動polling/retryがなく、create/deleteとlistの設計上限、request内画像一件1MB以内を守ることを確認する。
+  - 完了時には、resource・rate・query budgetの退行を検出するperformance suiteが通る。
+  - _Depends: 6.5_
+  - _Requirements: 3.4, 5.5, 6.2, 8.8, 10.11_
+  - _Boundary: test_performance.py_
