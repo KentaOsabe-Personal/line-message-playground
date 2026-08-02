@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from unittest.mock import call
 from uuid import uuid4
 
 from django.db import DatabaseError, transaction
@@ -8,9 +9,24 @@ from linechannels.models import LineChannel
 from linechannels.reference_fence import ReferenceFenceResult
 from linerichmenus.headless import (
     DjangoHeadlessReferenceContracts,
+    DefaultRichMenuLifecyclePort,
+    HeadlessCommand,
     HeadlessContractProgrammingError,
 )
 from linerichmenus.models import ManagedRichMenu, RichMenuChannelState, RichMenuOperation
+from linerichmenus.services import OperationSucceeded, ServiceFailed, StateSucceeded
+from linerichmenus.types import (
+    ChannelStateView,
+    DefaultObservation,
+    HistorySummary,
+    ObservationKind,
+    OperationCommand,
+    OperationKind,
+    OperationStatus,
+    OperationView,
+    SafeResultCode,
+)
+from lineaccounts.admin_authorization import OwnerOperationContext
 
 
 NOW = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
@@ -20,6 +36,101 @@ class FailingPurgeContracts(DjangoHeadlessReferenceContracts):
     def _delete_operations(self, state):
         super()._delete_operations(state)
         raise DatabaseError("injected after partial purge")
+
+
+class HeadlessLifecyclePortTests(TransactionTestCase):
+    # テストケース: default解除確認済みでblockerのないchannelをdisable前に照合する。
+    # 期待値: guardだけがclear_to_disableを返し、同じserviceへowner contextを渡す。
+    def test_guard_is_clear_only_after_confirmed_unlink_without_blockers(self):
+        channel_id = uuid4()
+        owner = OwnerOperationContext(uuid4(), uuid4())
+        service = self._service()
+        service.get_state.return_value = StateSucceeded(
+            ChannelStateView(
+                channel_public_id=channel_id,
+                current_resource=None,
+                blocking_operation=None,
+                active_operation=None,
+                cleanup_resources=(),
+                latest_observation=DefaultObservation(
+                    ObservationKind.DEFAULT_NONE, NOW, "a" * 64, None
+                ),
+                history_summary=HistorySummary(0, None, None),
+                next_allowed_actions=(),
+            )
+        )
+
+        result = DefaultRichMenuLifecyclePort(service).get_guard_state(
+            HeadlessCommand(
+                owner=owner,
+                channel_public_id=channel_id,
+                expected_channel_revision=NOW,
+            )
+        )
+
+        self.assertEqual(result.status, "clear_to_disable")
+        service.get_state.assert_called_once_with(
+            owner, channel_id, expected_channel_revision=NOW
+        )
+
+    # テストケース: headless guardのchannel revisionがstaleと判定される。
+    # 期待値: clear_to_disableへ進めずstale理由のunavailableへ縮約する。
+    def test_guard_blocks_stale_channel_revision(self):
+        channel_id = uuid4()
+        owner = OwnerOperationContext(uuid4(), uuid4())
+        service = self._service()
+        service.get_state.return_value = ServiceFailed(SafeResultCode.STALE_CHANNEL)
+
+        result = DefaultRichMenuLifecyclePort(service).get_guard_state(
+            HeadlessCommand(owner, channel_id, NOW)
+        )
+
+        self.assertEqual(result.status, "unavailable")
+        self.assertEqual(result.reason, "stale_channel")
+        service.get_state.assert_called_once_with(
+            owner, channel_id, expected_channel_revision=NOW
+        )
+
+    # テストケース: headless unlink/recheckを下流lifecycleから開始する。
+    # 期待値: readinessを迂回せずowner APIと同じstart_operationへそのまま委譲する。
+    def test_unlink_and_recheck_delegate_to_same_operation_service(self):
+        channel_id = uuid4()
+        owner = OwnerOperationContext(uuid4(), uuid4())
+        service = self._service()
+        unlink = OperationCommand(
+            uuid4(), channel_id, NOW, OperationKind.UNLINK,
+            None, uuid4(),
+        )
+        recheck = OperationCommand(
+            uuid4(), channel_id, NOW, OperationKind.RECHECK,
+            uuid4(), None,
+        )
+        operation = OperationView(
+            unlink.operation_id, OperationKind.UNLINK, OperationStatus.SUCCEEDED,
+            None, SafeResultCode.SUCCEEDED, None, unlink.target_resource_id,
+            NOW, NOW, (),
+        )
+        service.start_operation.return_value = OperationSucceeded(operation)
+        port = DefaultRichMenuLifecyclePort(service)
+
+        self.assertIsInstance(
+            port.start_unlink(HeadlessCommand(owner, channel_id, NOW, unlink)),
+            OperationSucceeded,
+        )
+        self.assertIsInstance(
+            port.recheck(HeadlessCommand(owner, channel_id, NOW, recheck)),
+            OperationSucceeded,
+        )
+        self.assertEqual(
+            service.start_operation.call_args_list,
+            [call(owner, unlink), call(owner, recheck)],
+        )
+
+    @staticmethod
+    def _service():
+        from unittest.mock import Mock
+
+        return Mock()
 
 
 class HeadlessReferenceContractTests(TransactionTestCase):

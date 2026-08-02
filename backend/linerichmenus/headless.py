@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from django.db import DatabaseError, transaction
+from django.utils import timezone
 
 from linechannels.reference_fence import ChannelReferenceFence, DjangoChannelReferenceFence
+from lineaccounts.admin_authorization import OwnerOperationContext
 
 from .models import ManagedRichMenu, RichMenuChannelState, RichMenuOperation
+from .services import OperationResult, ServiceFailed, StateSucceeded
+from .types import ObservationKind, OperationCommand, OperationKind
 
 
 class HeadlessContractProgrammingError(RuntimeError):
@@ -26,6 +31,91 @@ class HistoryPurgeResult:
             "storage_unavailable",
         }:
             raise ValueError("invalid purge result")
+
+
+@dataclass(frozen=True, slots=True)
+class HeadlessCommand:
+    owner: OwnerOperationContext
+    channel_public_id: UUID
+    expected_channel_revision: datetime
+    operation: OperationCommand | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.owner, OwnerOperationContext):
+            raise ValueError("invalid owner context")
+        if not isinstance(self.channel_public_id, UUID):
+            raise ValueError("invalid channel public id")
+        if (
+            not isinstance(self.expected_channel_revision, datetime)
+            or timezone.is_naive(self.expected_channel_revision)
+        ):
+            raise ValueError("invalid channel revision")
+        if self.operation is not None:
+            if not isinstance(self.operation, OperationCommand):
+                raise ValueError("invalid operation")
+            if self.operation.channel_public_id != self.channel_public_id:
+                raise ValueError("operation channel mismatch")
+            if (
+                self.operation.expected_channel_revision
+                != self.expected_channel_revision
+            ):
+                raise ValueError("operation revision mismatch")
+
+
+@dataclass(frozen=True, slots=True)
+class HeadlessGuardResult:
+    status: str
+    reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.status not in {"clear_to_disable", "blocked", "unavailable"}:
+            raise ValueError("invalid guard result")
+
+
+class DefaultRichMenuLifecyclePort:
+    def __init__(self, service) -> None:
+        self._service = service
+
+    def get_guard_state(self, command: HeadlessCommand) -> HeadlessGuardResult:
+        if not isinstance(command, HeadlessCommand) or command.operation is not None:
+            raise HeadlessContractProgrammingError("invalid_guard_command")
+        result = self._service.get_state(
+            command.owner,
+            command.channel_public_id,
+            expected_channel_revision=command.expected_channel_revision,
+        )
+        if isinstance(result, ServiceFailed):
+            return HeadlessGuardResult("unavailable", result.code.value)
+        if not isinstance(result, StateSucceeded):
+            return HeadlessGuardResult("unavailable", "storage_unavailable")
+        state = result.state
+        clear = (
+            state.current_resource is None
+            and state.blocking_operation is None
+            and state.active_operation is None
+            and not state.cleanup_resources
+            and state.latest_observation is not None
+            and state.latest_observation.kind is ObservationKind.DEFAULT_NONE
+        )
+        return HeadlessGuardResult(
+            "clear_to_disable" if clear else "blocked",
+            None if clear else "rich_menu_state_unresolved",
+        )
+
+    def start_unlink(self, command: HeadlessCommand) -> OperationResult:
+        return self._start(command, OperationKind.UNLINK)
+
+    def recheck(self, command: HeadlessCommand) -> OperationResult:
+        return self._start(command, OperationKind.RECHECK)
+
+    def _start(self, command: HeadlessCommand, kind: OperationKind) -> OperationResult:
+        if (
+            not isinstance(command, HeadlessCommand)
+            or command.operation is None
+            or command.operation.kind is not kind
+        ):
+            raise HeadlessContractProgrammingError("invalid_operation_command")
+        return self._service.start_operation(command.owner, command.operation)
 
 
 class DjangoHeadlessReferenceContracts:

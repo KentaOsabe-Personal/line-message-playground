@@ -277,6 +277,29 @@ OperationResult = OperationSucceeded | ServiceFailed
 HistoryResult = HistorySucceeded | ServiceFailed
 
 
+@dataclass(frozen=True, slots=True)
+class TemplateListSucceeded:
+    templates: tuple
+    status: str = "succeeded"
+
+
+@dataclass(frozen=True, slots=True)
+class HistoryRequest:
+    channel_public_id: UUID
+    limit: int = 20
+    cursor: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.channel_public_id, UUID):
+            raise ValueError("invalid history channel")
+        if type(self.limit) is not int or not 1 <= self.limit <= 50:
+            raise ValueError("invalid history limit")
+        if self.cursor is not None and (
+            not isinstance(self.cursor, str) or not self.cursor
+        ):
+            raise ValueError("invalid history cursor")
+
+
 class RichMenuRepositoryPort(Protocol):
     def list_managed_resources(
         self, scope: OwnerChannelScope
@@ -437,6 +460,12 @@ class DefaultRichMenuService:
             image=rendered,
         )
 
+    def list_templates(self, owner: OwnerOperationContext):
+        _, failure = self._lock_owner(owner)
+        if failure is not None:
+            return failure
+        return TemplateListSucceeded(tuple(self._catalog.list_templates()))
+
     def get_state(
         self,
         owner: OwnerOperationContext,
@@ -533,14 +562,26 @@ class DefaultRichMenuService:
         if failure is not None:
             return failure
         try:
-            scope = query.scope
-            if (
-                not isinstance(scope, OwnerChannelScope)
-                or scope.owner_identity_public_id != proof.identity_public_id
-                or scope.provider_id != proof.provider_id
-            ):
-                return ServiceFailed(SafeResultCode.CHANNEL_UNAVAILABLE)
-            history = self._repository.list_history(query)
+            if isinstance(query, HistoryRequest):
+                scope = OwnerChannelScope(
+                    owner_identity_public_id=proof.identity_public_id,
+                    provider_id=proof.provider_id,
+                    channel_public_id=query.channel_public_id,
+                )
+                from .repository import HistoryQuery
+                repository_query = HistoryQuery(
+                    scope=scope, limit=query.limit, cursor=query.cursor
+                )
+            else:
+                scope = query.scope
+                if (
+                    not isinstance(scope, OwnerChannelScope)
+                    or scope.owner_identity_public_id != proof.identity_public_id
+                    or scope.provider_id != proof.provider_id
+                ):
+                    return ServiceFailed(SafeResultCode.CHANNEL_UNAVAILABLE)
+                repository_query = query
+            history = self._repository.list_history(repository_query)
         except (TypeError, ValueError):
             return ServiceFailed(SafeResultCode.INVALID_INPUT)
         except Exception:
