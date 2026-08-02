@@ -50,6 +50,47 @@ LINE Message Playground を、固定設定の自分宛て配信から、LIFF／L
 
 - line-webhook-interaction -- Requirements前のサイズゲートで`SPLIT_REQUIRED`となり、`line-webhook-ingress`、`line-friendship-sync`、`line-webhook-command-dispatch`へ置換した。既存ファイルは判断履歴として保持し、以後の一括spec生成対象にしない
 
+## Phase 2: LINEリッチメニュー
+
+### Overview
+
+完了済みの複数チャネル管理とowner認証の上へ、アプリ組み込みテンプレートからチャネル既定リッチメニューを生成し、安全に適用・照合・解除できる機能を追加する。初期版はURI actionだけを扱い、アプリ外リッチメニューや利用者別リッチメニューの所有権を侵害しない。
+
+上流でテンプレート、決定的画像生成、確認済みプレビュー、LINE資源の状態機械、履歴、結果不明からの照合を提供する。下流ではその契約をowner向け管理画面へ接続し、チャネル無効化・再有効化・物理削除と一貫した操作へ統合する。
+
+### Approach Decision
+
+- **Chosen**: 新機能を`line-rich-menu-foundation`と`line-rich-menu-admin-lifecycle`の2つの新規Specへ分割する。既存Specは再オープンせず、完了済みの公開境界を上流依存・統合接点として扱う
+- **Why**: 画像生成とLINE資源管理は一つの「確認済み設定を追跡可能なチャネル既定資源へ収束させる」Backend成果へまとまる。owner UIとチャネル状態変更は、その成果を利用する管理体験として別にレビューできる。2分割なら利用者成果を過度に細分化せず、各Specを40件未満に保てる
+- **Rejected alternatives**: 単一Specは50〜70タスクと複数の補償状態を抱える。3分割は画像プレビューと資源適用をさらに分けられるが、初期版では常に同じ適用フローで統合されるためSpec間契約と承認工程が増える。既存`line-channel-admin-ui`の再オープンは、コード変更先と新機能の責任境界を混同する
+
+### Scope
+
+- **In**: 3種類の組み込みテンプレート、表示名とHTTPSリンク検証、日本語画像生成、10分間のプレビュー、チャネル既定リッチメニューの適用・置換・解除、LINE実状態照合、外部変更警告、管理終了、履歴、結果不明の再確認、明示的な後片付け、owner向け管理UI、チャネル無効化・再有効化・物理削除との統合
+- **Out**: 利用者別リッチメニュー、URI以外のaction、ownerによる画像アップロード、自由レイアウト・配色・フォント編集、カスタムテンプレート、統計、日時予約、過去メニューへのロールバック、生成画像履歴、アプリ外リッチメニューの編集または削除
+
+### Constraints
+
+- owner session、同一provider確認、exact-origin CSRF、暗号化チャネル資格情報、`updatedAt` revisionを再利用する
+- LINEへの外部通信中は長時間のDB lockを保持せず、戻り時にowner・provider・チャネルrevisionと操作状態を再検証する
+- LINEのrich-menu mutationにはretry keyがないため、結果不明時に新規作成を自動再試行せず、所有権を証明できる情報とLINE実状態から既存操作へ収束させる
+- アプリ外リッチメニューは内容を編集せず資源を削除しない。Messaging APIから完全な内容を取得できない状態も安全な分類へ縮約する
+- 画像はLINEの寸法・形式・アスペクト比と1MB上限を作成前に満たす。uploadは`api-data.line.me`と明示的なContent-Typeを扱う
+- PillowはPython 3.14対応版を候補とし、同梱日本語フォントは版・ファイル・weight・digest・OFL-1.1表示をDesignで固定する
+- 429、タイムアウト、結果不明、候補または旧資源の削除失敗を自動再試行しない
+
+### Boundary Strategy
+
+- **Why this split**: foundationはテンプレートからLINE資源・履歴までの整合性とheadless operation契約を所有する。admin-lifecycleはその契約を使う画面状態と、チャネル無効化・再有効化・削除のorchestrationを所有する
+- **Shared seams to watch**: owner／provider／channel revisionを結ぶプレビュー、操作IDと所有権marker、管理対象IDとLINE実状態、`unknown`／`cleanup_required`時の操作禁止、無効化の開始・照合・完了契約、適用中資源のreference probe、履歴だけを伴うチャネル削除cleanup
+
+### Spec Size Assessment
+
+- **Verdict**: SPLIT_REQUIRED
+- **Projected executable tasks before split**: 50〜70件（依存・font asset、migration、画像golden test、LINE gateway、複数段階の外部作用、競合・回復、API、UI、チャネルライフサイクル、統合・セキュリティテストを含む）
+- **Independent responsibility seams**: 6（テンプレート／画像生成、プレビュー、LINE gateway、資源操作／履歴／照合、owner管理UI、チャネルライフサイクル統合）
+- **Rationale**: 40件基準を超え、さらに結果不明、候補・旧資源cleanup、無効化要確認という複数の補償状態、上流基盤と下流利用機能、反復する境界横断統合が重なるため、単一Specではbounded reviewが安定しない
+
 ## Specs (dependency order)
 
 - [x] line-channel-foundation -- 複数Messaging APIチャネルと暗号化資格情報をDBで管理し、安全な取得・初期登録・鍵ローテーション境界を提供する。Dependencies: ngrok-compose-development-tunnel
@@ -59,6 +100,8 @@ LINE Message Playground を、固定設定の自分宛て配信から、LIFF／L
 - [x] line-webhook-command-dispatch -- 検証済みmessage／postbackを許可リストから処理し、限定replyと後続actionの安全な拡張契約を提供する。Dependencies: line-webhook-ingress, line-channel-foundation, line-account-linking
 - [x] linked-recipient-delivery -- 登録済みチャネルと配信先を選び、既存の確認・冪等性・監査を維持してpushし、明示的な受取確認を追跡する。Dependencies: line-channel-foundation, line-account-linking, line-friendship-sync, line-webhook-command-dispatch
 - [x] line-channel-admin-ui -- 自分専用の認証済み画面からチャネルとwrite-only資格情報を登録・更新・無効化する。Dependencies: line-channel-foundation, line-account-linking, line-webhook-ingress, linked-recipient-delivery
+- [ ] line-rich-menu-foundation -- 組み込みテンプレートと決定的画像生成から、チャネル既定リッチメニューの冪等な適用・照合・解除・履歴・後片付けまでを提供する。Dependencies: line-channel-foundation, line-account-linking
+- [ ] line-rich-menu-admin-lifecycle -- foundationの契約をowner向け管理画面へ接続し、状態・履歴・回復操作とチャネル無効化・再有効化・物理削除を統合する。Dependencies: line-rich-menu-foundation, line-channel-admin-ui
 
 ---
-_更新日: 2026-08-01。line-channel-admin-ui の完了を反映。_
+_更新日: 2026-08-02。LINEリッチメニュー新機能の2 SpecをPhase 2として追加。_
