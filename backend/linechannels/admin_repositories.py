@@ -12,9 +12,17 @@ from .admin_types import (
     AdminConnectionSnapshotResult,
     AdminRepositoryFailed,
     AdminRepositoryUnavailable,
+    ChannelRevisionProof,
+    ChannelRevisionResult,
+    ChannelRevisionUnchanged,
+    ChannelSnapshotCommand,
     ConnectionRevisionResult,
     ConnectionRevisionUnchanged,
+    ExactChannelSnapshotAvailable,
+    ExactChannelSnapshotRejected,
+    ExactChannelSnapshotResult,
     LockedAdminChannel,
+    RichMenuChannelSnapshot,
     SnapshotAvailable,
 )
 from .crypto import CredentialCryptoError
@@ -140,6 +148,99 @@ class DjangoAdminChannelRepository:
             return AdminRepositoryFailed("stale_channel")
         return ConnectionRevisionUnchanged()
 
+    def snapshot_exact(
+        self, command: ChannelSnapshotCommand
+    ) -> ExactChannelSnapshotResult:
+        """Rich-menu専用のexact-provider snapshotを取得する。
+
+        既存admin画面のlegacy互換scopeは変更せず、provider完全一致をこの
+        専用portだけで保証する。access tokenは復号後もsnapshot境界から外へ
+        出ず、channel secretはこの読取経路へ含めない。
+        """
+        if not isinstance(command, ChannelSnapshotCommand):
+            raise TypeError("invalid channel snapshot command")
+        try:
+            row = (
+                LineChannel.objects.using(self.using)
+                .filter(
+                    public_id=command.channel_public_id,
+                    provider_id=command.provider_id,
+                )
+                .values(
+                    "public_id",
+                    "provider_id",
+                    "label",
+                    "is_active",
+                    "updated_at",
+                    "credential__access_token_ciphertext",
+                )
+                .first()
+            )
+        except OperationalError as error:
+            return ExactChannelSnapshotRejected(self._storage_code(error))
+        except DatabaseError:
+            return ExactChannelSnapshotRejected("storage_unavailable")
+
+        if row is None:
+            return ExactChannelSnapshotRejected("channel_unavailable")
+        if not row["is_active"]:
+            return ExactChannelSnapshotRejected("channel_inactive")
+        if row["updated_at"] != command.expected_channel_revision:
+            return ExactChannelSnapshotRejected("stale_channel")
+        ciphertext = row["credential__access_token_ciphertext"]
+        if not ciphertext:
+            return ExactChannelSnapshotRejected("credential_unavailable")
+        try:
+            access_token = self._cipher.decrypt(
+                EncryptedCredential(bytes(ciphertext)),
+                CredentialContext(command.channel_public_id, "access_token"),
+            )
+        except Exception:
+            return ExactChannelSnapshotRejected("credential_unreadable")
+        if not isinstance(access_token, AccessToken):
+            return ExactChannelSnapshotRejected("credential_unreadable")
+        try:
+            snapshot = RichMenuChannelSnapshot(
+                owner_identity_public_id=command.owner_identity_public_id,
+                provider_id=row["provider_id"],
+                channel_public_id=row["public_id"],
+                channel_label=row["label"],
+                is_active=row["is_active"],
+                channel_revision=row["updated_at"],
+                access_token=access_token,
+            )
+        except (TypeError, ValueError):
+            return ExactChannelSnapshotRejected("storage_unavailable")
+        return ExactChannelSnapshotAvailable(snapshot)
+
+    def lock_unchanged(self, proof: ChannelRevisionProof) -> ChannelRevisionResult:
+        """外部I/O後にexact provider・active・revisionをrow lockで再検証する。"""
+        if not isinstance(proof, ChannelRevisionProof):
+            raise TypeError("invalid channel revision proof")
+        self._require_transaction()
+        try:
+            row = (
+                LineChannel.objects.using(self.using)
+                .select_for_update()
+                .filter(
+                    public_id=proof.channel_public_id,
+                    provider_id=proof.provider_id,
+                )
+                .values("is_active", "updated_at")
+                .first()
+            )
+        except OperationalError as error:
+            return ExactChannelSnapshotRejected(self._storage_code(error))
+        except DatabaseError:
+            return ExactChannelSnapshotRejected("storage_unavailable")
+        if row is None:
+            return ExactChannelSnapshotRejected("channel_unavailable")
+        if not row["is_active"]:
+            return ExactChannelSnapshotRejected("channel_inactive")
+        if row["updated_at"] != proof.channel_revision:
+            return ExactChannelSnapshotRejected("stale_channel")
+        return ChannelRevisionUnchanged()
+
     def lock_for_delete(
         self, public_id: UUID, owner_provider_id: str
     ) -> LockedAdminChannel | None:
@@ -255,3 +356,9 @@ class DjangoAdminChannelRepository:
             if code in self._RETRYABLE_DATABASE_CODES
             else "storage_unavailable"
         )
+
+
+# The exact-provider port deliberately lives alongside the legacy admin adapter
+# so the downstream rich-menu composition can inject the same credential cipher
+# without changing the existing compatibility methods.
+DjangoOwnerChannelOperationPort = DjangoAdminChannelRepository
