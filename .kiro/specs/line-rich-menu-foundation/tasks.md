@@ -136,22 +136,22 @@
   - _Requirements: 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7_
   - _Boundary: RichMenuReconciler_
 
-- [ ] 5. owner操作のapplication workflowを実装する
-- [ ] 5.1 確認済みプレビューworkflowを実装する
+- [x] 5. owner操作のapplication workflowを実装する
+- [x] 5.1 確認済みプレビューworkflowを実装する
   - exact scope確認、strict入力、render、LINE object validate、現在default観測を順に実行し、安全に分類できる場合だけ確認tokenを発行する。
   - channel運用名、template/version、ordered display name/完全URL、PNG情報とbase64、実状態、外部default置換警告、URL保存警告、10分expiryを返す。
   - 完了時には、previewだけがtoken・完全URL・画像を返し、inactiveまたはdefault unknown・検証失敗ではLINE変更もtoken発行も起きない。
   - _Depends: 2.2, 2.3, 2.4, 4.4_
   - _Requirements: 1.3, 1.4, 1.5, 2.3, 3.6, 3.7, 4.1, 4.2, 4.3, 4.4, 4.5, 4.8_
   - _Boundary: RichMenuService_
-- [ ] 5.2 owner向け状態・operation・履歴参照workflowを実装する
+- [x] 5.2 owner向け状態・operation・履歴参照workflowを実装する
   - active channelでは安全な最新観測を保存projectionへ合成し、inactive channelではLINEを呼ばず保存済みprojectionだけを返す。
   - operation単体とowner専用履歴をscopeし、blocking recovery、cleanup、nextAllowedActionsを安定した結果にする。
   - 完了時には、ownerが現在状態と許可操作を判断でき、別owner/provider/channelの存在を区別しない参照結果になる。
   - _Depends: 3.5, 4.4_
   - _Requirements: 1.1, 1.4, 1.5, 5.1, 5.8, 10.1, 10.2, 10.3, 10.4, 10.5_
   - _Boundary: RichMenuService_
-- [ ] 5.3 適用の受付・候補作成・画像設定workflowを実装する
+- [x] 5.3 適用の受付・候補作成・画像設定workflowを実装する
   - 既存operation IDを先に同一fingerprintで照合し、一致時はtoken期限にかかわらず保存済み結果を返す。新規operationだけconfirmation expiryとusage keyを検証する。
   - confirmation全軸を検証し、一件のcandidate/markerを予約してcreate→uploadをstage単位で進める。
   - 明示拒否とunknownを区別し、create後に残ったcandidateは自動削除せずcleanup requiredへ保存する。
@@ -159,7 +159,7 @@
   - _Depends: 2.4, 3.3, 4.2, 4.3, 5.1_
   - _Requirements: 4.6, 4.7, 4.9, 6.1, 6.2, 6.3, 6.4, 6.5, 6.11, 8.1, 8.2, 8.9_
   - _Boundary: RichMenuService_
-- [ ] 5.4 default設定・確認・置換完了workflowを実装する
+- [x] 5.4 default設定・確認・置換完了workflowを実装する
   - set直前にpreview時defaultを再観測し、差分時はcandidateをcleanup対象へ残してsetを開始しない。
   - candidateだけをdefaultへ設定し、一致観測後にappliedへ確定してから旧管理資源をold/cleanupへ移す。
   - 外部defaultを置換してもその外部資源を編集・削除せず、確認不能時は適用済みにしない。
@@ -167,28 +167,28 @@
   - _Depends: 5.3_
   - _Requirements: 4.7, 6.6, 6.7, 6.8, 6.9, 6.10, 6.11, 8.1, 9.1_
   - _Boundary: RichMenuService_
-- [ ] 5.5 管理対象defaultの適用解除workflowを実装する
+- [x] 5.5 管理対象defaultの適用解除workflowを実装する
   - 対象一致時だけclearし、none・外部・別管理資源では現在defaultを変更せず対象が非defaultである事実へ収束する。
   - 非default確認後にcleanup対象へ移し、確認不能時はunknownを保存して再確認を要求する。
   - 完了時には、外部defaultを解除せず、確定解除だけが下流へclear_to_disableを返し、削除前にも解除確認を保持する。
   - _Depends: 3.3, 4.4_
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.9, 11.2, 11.4, 11.5_
   - _Boundary: RichMenuService_
-- [ ] 5.6 LINEを変更しない管理終了workflowを実装する
+- [x] 5.6 LINEを変更しない管理終了workflowを実装する
   - 対象管理資源をreleasedへ移し、管理・削除対象から外して終了日時と安全な履歴を記録する。
   - 以後同じLINE IDを観測しても自動再取得せずアプリ外defaultとして分類する。
   - 完了時には、release中のLINE callが0件で、対象資源の現在defaultを変えずcleanup対象にも戻さない。
   - _Depends: 3.3, 4.4_
   - _Requirements: 7.7, 7.8, 7.9, 9.5, 10.1, 10.2_
   - _Boundary: RichMenuService_
-- [ ] 5.7 結果不明操作の明示recheck workflowを実装する
+- [x] 5.7 結果不明操作の明示recheck workflowを実装する
   - subject operationを持つ一意なrecheckを受付け、観測だけで元stageの成功・失敗・継続unknownを判定する。
   - 成功観測時はchild確定と元operationの完了または次未開始stageへのhandoffを行い、自動polling/retryをしない。
   - 完了時には、各unknown stageが同じoperation IDの履歴へ収束し、別operationによる同等適用を許可可能と報告しない。
   - _Depends: 3.4, 4.5, 5.3, 5.4, 5.5_
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 11.2, 11.3, 11.5_
   - _Boundary: RichMenuService_
-- [ ] 5.8 候補・旧資源の明示cleanup workflowを実装する
+- [x] 5.8 候補・旧資源の明示cleanup workflowを実装する
   - subject operationとtarget resourceを必須にし、強い所有権、origin relation、現在default非一致を再確認して一件だけdeleteする。
   - released・外部・ownership不明・現在defaultは削除せず、失敗・429・unknownを自動再試行なしでblockerへ保存する。
   - 完了時には、削除確認済み対象だけがdeletedになり、他の管理資源と現在defaultは変化せず、元操作履歴へ結果が結び付く。
