@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from types import MappingProxyType
+from typing import Mapping
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -124,6 +126,138 @@ class TemplateReference:
             raise ValueError("invalid template version")
 
 
+@dataclass(frozen=True, slots=True)
+class TemplateArea:
+    field_name: str
+    description: str
+    x: int
+    y: int
+    width: int
+    height: int
+
+    def __post_init__(self) -> None:
+        if not self.field_name or not self.description:
+            raise ValueError("invalid template area metadata")
+        if any(type(value) is not int for value in (self.x, self.y, self.width, self.height)):
+            raise ValueError("invalid template area geometry")
+        if self.x < 0 or self.y < 0 or self.width <= 0 or self.height <= 0:
+            raise ValueError("invalid template area geometry")
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateDescriptor:
+    reference: TemplateReference
+    display_name: str
+    width: int
+    height: int
+    areas: tuple[TemplateArea, ...]
+    display_name_limit: int
+    uri_limit: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reference, TemplateReference) or not self.display_name:
+            raise ValueError("invalid template descriptor")
+        if type(self.width) is not int or type(self.height) is not int:
+            raise ValueError("invalid template canvas")
+        if self.width <= 0 or self.height <= 0:
+            raise ValueError("invalid template canvas")
+        _require_tuple_of(self.areas, TemplateArea, "template areas")
+        if not self.areas:
+            raise ValueError("template areas required")
+        if self.display_name_limit != 20 or self.uri_limit != 1000:
+            raise ValueError("invalid template input limits")
+
+    @property
+    def required_fields(self) -> tuple[str, ...]:
+        return tuple(area.field_name for area in self.areas)
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class TemplateInput:
+    reference: TemplateReference
+    fields: Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reference, TemplateReference):
+            raise ValueError("invalid template reference")
+        if not isinstance(self.fields, Mapping):
+            raise ValueError("invalid template input")
+        copied: dict[str, object] = {}
+        for key, value in self.fields.items():
+            if isinstance(value, Mapping):
+                copied[key] = MappingProxyType(dict(value))
+            else:
+                copied[key] = value
+        object.__setattr__(self, "fields", MappingProxyType(copied))
+
+    def __repr__(self) -> str:
+        return f"<TemplateInput reference={self.reference!r} fields=redacted>"
+
+
+@dataclass(frozen=True, slots=True)
+class InputFieldError:
+    field: str
+    reason: str
+
+    def __post_init__(self) -> None:
+        if not self.field or self.reason not in {
+            "required",
+            "unexpected",
+            "invalid",
+            "too_long",
+            "invalid_uri",
+            "unknown",
+            "unsupported_glyph",
+        }:
+            raise ValueError("invalid input field error")
+
+
+@dataclass(frozen=True, slots=True)
+class InputRejected:
+    errors: tuple[InputFieldError, ...]
+
+    def __post_init__(self) -> None:
+        _require_tuple_of(self.errors, InputFieldError, "input errors")
+        if not self.errors:
+            raise ValueError("input errors required")
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class RenderedImage:
+    content_type: str
+    width: int
+    height: int
+    pixel_digest: str
+    binary: bytes
+
+    def __post_init__(self) -> None:
+        if self.content_type != "image/png":
+            raise ValueError("invalid rendered content type")
+        if type(self.width) is not int or type(self.height) is not int:
+            raise ValueError("invalid rendered dimensions")
+        _require_sha256(self.pixel_digest, "pixel digest")
+        if not isinstance(self.binary, bytes) or not self.binary:
+            raise ValueError("rendered binary required")
+
+    def __repr__(self) -> str:
+        return (
+            f"<RenderedImage content_type={self.content_type!r} "
+            f"width={self.width} height={self.height} "
+            f"pixel_digest={self.pixel_digest} binary=redacted>"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RenderRejected:
+    code: SafeResultCode
+    errors: tuple[InputFieldError, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.code is not SafeResultCode.IMAGE_INVALID:
+            raise ValueError("invalid render rejection code")
+        _require_tuple_of(self.errors, InputFieldError, "render errors")
+
+
 @dataclass(frozen=True, slots=True, repr=False)
 class TemplateFieldValue:
     display_name: str
@@ -159,6 +293,70 @@ class NormalizedTemplate:
             f"<NormalizedTemplate reference={self.reference!r} "
             f"field_count={len(self.fields)} values=redacted>"
         )
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class PreviewSnapshot:
+    owner_identity: UUID
+    provider_id: str
+    channel_public_id: UUID
+    channel_revision: datetime
+    default_observation_fingerprint: str
+    template: NormalizedTemplate
+    pixel_digest: str
+
+    def __post_init__(self) -> None:
+        _require_uuid(self.owner_identity, "owner identity")
+        if not isinstance(self.provider_id, str) or not self.provider_id:
+            raise ValueError("invalid provider id")
+        _require_uuid(self.channel_public_id, "channel id")
+        _require_aware_datetime(self.channel_revision, "channel revision")
+        _require_sha256(
+            self.default_observation_fingerprint,
+            "default observation fingerprint",
+        )
+        if not isinstance(self.template, NormalizedTemplate):
+            raise ValueError("invalid snapshot template")
+        _require_sha256(self.pixel_digest, "pixel digest")
+
+    def __repr__(self) -> str:
+        return "<PreviewSnapshot axes=redacted>"
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class IssuedConfirmation:
+    token: str
+    expires_at: datetime
+    usage_digest: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.token, str) or not self.token:
+            raise ValueError("confirmation token required")
+        _require_aware_datetime(self.expires_at, "confirmation expiry")
+        _require_sha256(self.usage_digest, "confirmation usage digest")
+
+    def __repr__(self) -> str:
+        return (
+            f"<IssuedConfirmation expires_at={self.expires_at.isoformat()} "
+            f"usage_digest={self.usage_digest} token=redacted>"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ConfirmationAccepted:
+    usage_digest: str
+
+    def __post_init__(self) -> None:
+        _require_sha256(self.usage_digest, "confirmation usage digest")
+
+
+@dataclass(frozen=True, slots=True)
+class ConfirmationRejected:
+    reason: str
+
+    def __post_init__(self) -> None:
+        if self.reason not in {"preview_expired", "preview_invalid", "preview_changed"}:
+            raise ValueError("invalid confirmation rejection")
 
 
 @dataclass(frozen=True, slots=True)

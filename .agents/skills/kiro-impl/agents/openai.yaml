@@ -1,6 +1,7 @@
 interface:
   display_name: "Implementation"
-  short_description: "Implement approved tasks using TDD with subagent dispatch"
+  short_description: "Implement child tasks, then review each parent task"
+  default_prompt: "Use $kiro-impl to implement approved child tasks with one bounded review per parent task."
 
 policy:
   allow_implicit_invocation: false

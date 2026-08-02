@@ -1,6 +1,7 @@
 interface:
-  display_name: "Review Task"
-  short_description: "Review task implementation against spec, design, and evidence"
+  display_name: "Review Implementation Unit"
+  short_description: "Review child tasks together within a parent boundary"
+  default_prompt: "Use $kiro-review to review a bounded parent-task implementation unit against its approved spec."
 
 policy:
   allow_implicit_invocation: false

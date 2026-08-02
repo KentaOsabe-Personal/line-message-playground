@@ -25,20 +25,20 @@
   - _Requirements: 6.1, 6.3, 6.4, 7.1, 8.1, 9.8, 10.1, 10.2, 10.6, 10.12_
   - _Boundary: RichMenuStateMachine, RichMenuRepository_
 
-- [ ] 2. テンプレート・画像・確認のドメイン能力を実装する
-- [ ] 2.1 3種類の版付きテンプレートカタログを実装する
+- [x] 2. テンプレート・画像・確認のドメイン能力を実装する
+- [x] 2.1 3種類の版付きテンプレートカタログを実装する
   - 安定IDとversion、2500×843の領域、表示情報、required fields、20/1000文字上限をimmutableに公開する。
   - 既存版の意味を上書きせず、1・2・3分割の座標に重複、gap、canvas外がないことを保証する。
   - 完了時には、3種類だけが安定した順序と説明で列挙され、未知ID/versionは別版へfallbackしない。
   - _Requirements: 2.1, 2.2, 2.7, 2.8_
   - _Boundary: TemplateCatalog_
-- [ ] 2.2 テンプレート入力のstrict normalizationを実装する
+- [x] 2.2 テンプレート入力のstrict normalizationを実装する
   - 必須・余剰field、trim＋NFC後の表示名、absolute HTTPS URI、host、userinfo、control文字、文字数上限をfield単位で検証する。
   - URI action以外、画像upload、任意座標・色・font・custom templateを入力契約から排除する。
   - 完了時には、有効入力だけがordered normalized fieldsへ変換され、各不正入力ではプレビュー生成前に安全な項目別理由が返る。
   - _Requirements: 2.3, 2.4, 2.5, 2.6, 2.7, 2.8_
   - _Boundary: TemplateCatalog_
-- [ ] 2.3 決定的な日本語画像rendererを実装する
+- [x] 2.3 決定的な日本語画像rendererを実装する
   - 固定palette・padding・font size・wrapとcmap全code point検証を使い、fallbackなしでcanonical RGBAからmetadataなしPNGを生成する。
   - template/version・寸法・canonical pixel bytesからdigestを求め、format・寸法・aspect・1MB上限をencode後にも検証する。
   - binaryの寿命をrender結果、preview応答、LINE uploadに限定し、repr・model・token・log・errorへ流さない。
@@ -46,7 +46,7 @@
   - _Depends: 1.1, 1.3, 2.1, 2.2_
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
   - _Boundary: DeterministicRenderer_
-- [ ] 2.4 (P) 10分間の確認bindingを実装する
+- [x] 2.4 (P) 10分間の確認bindingを実装する
   - owner・provider・channel/revision・default観測・template/version・全正規化入力・pixel digestをsnapshot fingerprintへ束ねる。
   - purpose・version・時刻・random nonce・fingerprintだけを署名tokenへ含め、改変、未来時刻、期限切れ、別軸利用を拒否する。
   - token digestを別operationへの再利用防止keyとして扱い、同一snapshotから新規nonceを発行できる契約にする。
@@ -333,3 +333,7 @@
   - _Depends: 6.5_
   - _Requirements: 3.4, 5.5, 6.2, 8.8, 10.11_
   - _Boundary: test_performance.py_
+
+## Implementation Notes
+
+- 2.3: 固定font layoutはcmap内の最大advance glyphを入力上限まで描画して検証し、PNG再読込ではdecompression bombを含むparser例外を`image_invalid`へ縮約する。

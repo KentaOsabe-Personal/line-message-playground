@@ -1,12 +1,12 @@
 ---
 name: kiro-review
-description: Review a task implementation against approved specs, task boundaries, and verification evidence. Use after an implementer finishes a task, after remediation, or before accepting a task as complete.
+description: Review a bounded implementation unit against approved specs, child-task boundaries, and verification evidence. Use after one child task or all selected children of a parent task are implemented, after remediation, or before accepting the unit as complete.
 ---
 
 # kiro-review
 
 <background_information>
-This skill performs task-local adversarial review. It verifies that the implementation is real, complete, bounded, aligned with approved requirements and design, and supported by mechanical verification evidence.
+This skill performs bounded adversarial review. The review unit may be one child task or multiple selected children under one parent-task header. It verifies every child and their interactions are real, complete, bounded, aligned with approved requirements and design, and supported by mechanical evidence.
 
 Boundary terminology continuity:
 - discovery identifies `Boundary Candidates`
@@ -18,22 +18,21 @@ Boundary terminology continuity:
 <instructions>
 ## When to Use
 
-- After an implementer reports `READY_FOR_REVIEW`
-- After remediation for a rejected review
-- Before marking a task `[x]`
-- Before accepting a task into feature-level validation
+- After every selected child in a bounded review unit reports `READY_FOR_REVIEW`
+- After remediation for a rejected child or parent-unit review
+- Before marking any child in the unit `[x]`
+- Before accepting a review unit into feature-level validation
 
 Do not use this skill to invent missing requirements or silently reinterpret the spec.
 
 ## Inputs
 
 Provide:
-- Task ID and exact task text from `tasks.md`
-- Relevant requirement section numbers
-- Relevant design section numbers
+- Parent review-unit ID/header and every selected child ID with exact task text from `tasks.md`
+- Relevant requirement and design section numbers for each child
 - Spec file paths (`requirements.md`, `design.md`, optionally `tasks.md`)
-- The implementer's status report
-- The task `_Boundary:_` scope constraints
+- Every child implementer's status report
+- Every child task's `_Boundary:_` scope constraints
 - Validation commands discovered by the controller
 - Relevant steering excerpts when applicable
 - Relevant `## Implementation Notes` entries when applicable
@@ -58,7 +57,7 @@ Run `git diff` to inspect the actual code changes. If the diff is large or ambig
 
 ## Core Principle
 
-Read the spec yourself. Read the diff yourself. Verify mechanically where possible. Reject on concrete failures rather than interpretive optimism.
+Read the spec yourself. Read the aggregate diff yourself. Verify each child mechanically where possible, then audit interactions across the parent unit. Reject on concrete failures rather than interpretive optimism.
 The main review question is not just "does it work?" but "does it stay inside the approved responsibility boundary without hiding new coupling?"
 
 ## Mechanical Checks
@@ -78,13 +77,13 @@ Run these checks and use the result as primary signal.
 - Reject if concrete secret patterns are introduced.
 
 ### 4. Boundary Respect
-- Compare changed files against the task `_Boundary:_` scope.
+- Assign changed files to child ownership and compare them against each child `_Boundary:_` scope.
 - Reject if the change spills outside the approved boundary without explicit justification.
 - Reject if the implementation introduces hidden cross-boundary coordination inside what should be a local task.
 
 ### 5. RED Phase Evidence
-- For behavioral tasks, verify that the implementer status report includes `RED_PHASE_OUTPUT`.
-- Reject if RED evidence is missing, empty, or unrelated to the task's acceptance criteria.
+- For every behavioral child, verify its implementer status report includes relevant `RED_PHASE_OUTPUT`.
+- Reject if any child's RED evidence is missing, empty, or unrelated to that child's acceptance criteria.
 
 ### 6. Runtime-Sensitive Static Checks
 - If the project already has lint or equivalent static analysis for the touched stack, run the relevant command for the task boundary.
@@ -98,7 +97,8 @@ Run these checks and use the result as primary signal.
 - Confirm the implementation is real production code, not a placeholder, stub, fake path, or deferred-work shell.
 
 ### 8. Acceptance Criteria Coverage
-- Read the task description and confirm all aspects are implemented, not only the primary happy path.
+- Read every selected child description and confirm all aspects are implemented, not only primary happy paths.
+- For a parent unit, confirm child contracts compose without gaps or conflicting assumptions.
 
 ### 9. Requirements Alignment
 - Read the referenced sections in `requirements.md`.
@@ -114,7 +114,7 @@ Run these checks and use the result as primary signal.
 - Compare the implementation against the design's boundary commitments and out-of-boundary statements.
 - Reject if downstream-specific behavior is pushed into an upstream boundary for convenience.
 - Reject if the implementation creates new hidden dependencies, shared ownership, or undeclared coupling across adjacent boundaries.
-- Reject if a task that is not an explicit integration task now behaves like one.
+- Reject if a child that is not an explicit integration task now behaves like one.
 
 ### 11. Test Quality
 - Confirm tests prove the required behavior rather than only scaffolding.
@@ -154,7 +154,7 @@ Escalate instead of papering over the issue when:
 ```md
 ## Review Verdict
 - VERDICT: APPROVED | REJECTED
-- TASK: <task-id>
+- TASK: <review-unit-id; include child IDs when reviewing a parent unit>
 - MECHANICAL_RESULTS:
   - Tests: PASS | FAIL (command and exit code)
   - TBD/TODO grep: CLEAN | <count> matches
@@ -164,7 +164,7 @@ Escalate instead of papering over the issue when:
   - Boundary audit: CLEAN | <spillover / hidden dependency findings>
   - RED phase: VERIFIED | MISSING | N/A
 - FINDINGS:
-  1. <specific finding with exact files/spec refs>
+  1. <affected child task ID>: <specific finding with exact files/spec refs>
 - REMEDIATION: <mandatory if REJECTED>
 - SUMMARY: <one sentence>
 ```
