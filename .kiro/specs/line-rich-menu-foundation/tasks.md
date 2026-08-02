@@ -233,71 +233,71 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.5, 11.1, 11.2, 11.3, 11.6, 11.7, 11.8, 11.9, 11.10_
   - _Boundary: CompositionRoot_
 
-- [ ] 7. 機能・統合・安全性を検証する
-- [ ] 7.1 (P) runtime・template・rendererのunit/golden検証を追加する
+- [x] 7. 機能・統合・安全性を検証する
+- [x] 7.1 (P) runtime・template・rendererのunit/golden検証を追加する
   - 依存版/font digest/OFL、3 template geometry、strict field/URL、NFC、日本語golden pixel、glyph、PNG制約、binary非reprを検証する。
   - 各Backend test定義直前に日本語の「テストケース:」「期待値:」コメントを置く。
   - 完了時には、固定環境でgolden digestが再現し、資産差替え・不正入力・未対応glyphがLINE call前に失敗するsuiteが通る。
   - _Depends: 1.1, 2.1, 2.2, 2.3_
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
   - _Boundary: test_templates_renderer.py_
-- [ ] 7.2 (P) confirmationとpreviewのbinding検証を追加する
+- [x] 7.2 (P) confirmationとpreviewのbinding検証を追加する
   - 全snapshot軸の一軸変更、tamper、未来時刻、10分expiry、nonce、同token別operation再利用、default unknown時token非発行を検証する。
   - response/token/history/logへのURL・画像・secret混入をcanaryで検出する。
   - 完了時には、確認した設定と完全一致する一回の新規適用だけが通り、同一operation replayとpreview以外の機密除外を確認するsuiteが通る。
   - _Depends: 2.4, 5.1, 5.3_
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 6.2, 10.7, 10.8, 10.9_
   - _Boundary: test_confirmation.py_
-- [ ] 7.3 (P) state・model・migrationのinvariant検証を追加する
+- [x] 7.3 (P) state・model・migrationのinvariant検証を追加する
   - 全許可遷移、relation/lifecycle制約、空schema migration、既存channel/recipient/delivery/webhook/interaction履歴の非変更を検証する。
   - migration前後の既存行とtable差分を観測し、data migrationや外部作用がないことを確認する。
   - 完了時には、無効状態がdomainとDBの両方で拒否され、既存保存状態が同一に維持されるsuiteが通る。
   - _Depends: 1.4, 3.1_
   - _Requirements: 6.4, 7.1, 7.6, 7.7, 7.8, 7.9, 8.1, 8.2, 8.9, 9.8, 10.12_
   - _Boundary: test_state_models.py, test_migrations.py_
-- [ ] 7.4 (P) repositoryの冪等性・lock・CAS・recovery競合を検証する
+- [x] 7.4 (P) repositoryの冪等性・lock・CAS・recovery競合を検証する
   - operation/fingerprint/confirmation一意性、channel lock、stage CAS、recovery claim/handoff、MySQL lock errorを並行実行と失敗注入で検証する。
   - 外部I/O中のowner/provider/revision/stage変更で旧応答が現在状態を上書きしないことを確認する。
   - 完了時には、一意なoperation/blocker/active pointerとatomic handoffを維持するconcurrency suiteが通る。
   - _Depends: 3.2, 3.3, 3.4_
   - _Requirements: 1.7, 6.1, 6.2, 6.3, 6.4, 7.9, 8.2, 8.3, 8.4, 8.7, 9.8_
   - _Boundary: test_repository_concurrency.py_
-- [ ] 7.5 (P) 履歴query・reference・rollback-only purgeを検証する
+- [x] 7.5 (P) 履歴query・reference・rollback-only purgeを検証する
   - owner/provider/channel scope、新しい順、limit 1〜50、opaque cursor、snapshot不変、件数非依存queryを検証する。
   - transaction外purge、blocker、storage/途中失敗でrollback-onlyとなり、失敗結果を無視してもchannel deleteをcommitできないことを検証する。
   - 完了時には、history-onlyだけを同じ完了単位で削除でき、部分purgeを残さないrepository suiteが通る。
   - _Depends: 3.5, 3.6_
   - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.6, 11.7, 11.8, 11.9_
   - _Boundary: test_repositories.py_
-- [ ] 7.6 (P) JSON・blob gatewayの全結果分類を検証する
+- [x] 7.6 (P) JSON・blob gatewayの全結果分類を検証する
   - 全endpointの成功、各4xx、429、5xx、timeout、connection、malformed、blob close failure、retry 0、token非露出を検証する。
   - scoped context以外の資格情報利用、画像制約違反、raw responseやbinaryの寿命超過を拒否することを確認する。
   - 完了時には、明示拒否とunknownを混同せず、秘密を公開しないgateway suiteが通る。
   - _Depends: 4.1, 4.2, 4.3_
   - _Requirements: 3.5, 3.7, 5.5, 6.11, 8.1, 8.8, 9.7, 10.7, 10.8, 10.10_
   - _Boundary: test_gateway.py_
-- [ ] 7.7 (P) reconcilerのdefault・marker・digest・delete quorumを検証する
+- [x] 7.7 (P) reconcilerのdefault・marker・digest・delete quorumを検証する
   - default 403/404/managed/unknown、marker 0/1/複数、download digest、delete観測quorum、一時非観測をtable-drivenで検証する。
   - 外部またはreleased resourceの内容・所有権を推測せず、採用・編集・削除しないことを確認する。
   - 完了時には、曖昧な観測を成功・不存在へ誤分類しないreconciliation suiteが通る。
   - _Depends: 4.4, 4.5_
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 8.3, 8.4, 8.5, 8.6, 8.8, 9.2, 9.3, 9.4, 9.5, 9.6_
   - _Boundary: test_reconciliation.py_
-- [ ] 7.8 (P) apply・置換sagaの段階別挙動を検証する
+- [x] 7.8 (P) apply・置換sagaの段階別挙動を検証する
   - create→upload→set→observe、set直前default差分、各stageの拒否・unknown、候補一意性、旧資源保護を検証する。
   - 同一operation replayは期限切れtokenでも保存済み結果を返し、新規operationだけconfirmationを消費することを確認する。
   - 完了時には、新default確認後だけapplied/old/historyが確定し、自動retryしないapply suiteが通る。
   - _Depends: 5.3, 5.4_
   - _Requirements: 4.6, 4.7, 4.9, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 6.10, 6.11, 9.1_
   - _Boundary: test_services.py apply workflow_
-- [ ] 7.9 unlink・releaseの外部default保護を検証する
+- [x] 7.9 unlink・releaseの外部default保護を検証する
   - unlinkが対象一致時だけclearし、none・外部・別管理資源では現在defaultを変えないことを検証する。
   - releaseはLINE call 0件で管理終了し、同じ外部資源を自動再取得またはcleanupしないことを確認する。
   - 完了時には、解除と管理終了が別の許可遷移・履歴・next actionへ収束するsuiteが通る。
   - _Depends: 5.5, 5.6, 7.8_
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 9.5_
   - _Boundary: test_services.py unlink/release workflow_
-- [ ] 7.10 recheck・cleanup handoffと外部I/O後fenceを検証する
+- [x] 7.10 recheck・cleanup handoffと外部I/O後fenceを検証する
   - recheckが不明stageを再実行せず観測し、成功時だけ元operationへatomic handoffすることを検証する。
   - cleanupが強い所有権とdefault非一致を満たす一件だけを削除し、unknown時だけ新blockerへ移ることを確認する。
   - 各外部I/O中にfence軸を変更し、旧応答が確定状態を上書きしないことを検証する。
@@ -305,28 +305,28 @@
   - _Depends: 5.7, 5.8, 7.9_
   - _Requirements: 1.3, 1.6, 1.7, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8_
   - _Boundary: test_services.py recovery/cleanup workflow_
-- [ ] 7.11 (P) owner APIのscope・CSRF・strict DTOを検証する
+- [x] 7.11 (P) owner APIのscope・CSRF・strict DTOを検証する
   - session/provider/channel scope、exact-origin CSRF、stale revision、安全な404、unknown field、operation variant、paginationを検証する。
   - previewだけがtoken・URL・画像を返し、operation/state/history/errorから除外されることを確認する。
   - 完了時には、全owner routeが同じ認証・scope・安全エラー規則を満たすAPI suiteが通る。
   - _Depends: 6.1, 6.2, 6.3_
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 4.3, 4.4, 4.5, 10.3, 10.4, 11.1, 11.10_
   - _Boundary: test_api.py_
-- [ ] 7.12 (P) headless・reference・purge・readiness契約を検証する
+- [x] 7.12 (P) headless・reference・purge・readiness契約を検証する
   - headless unlink/recheck、guard state、reference probe、transactional purgeがowner APIと同じfence・state・safe resultを使うことを検証する。
   - read_only・recovery_only・enabledで許可操作が一致し、integration marker不足ではowner/headless mutationともLINE call 0件になることを確認する。
   - 完了時には、未解決参照やpurge失敗を無視してdisable/deleteを継続できないcontract suiteが通る。
   - _Depends: 6.4, 6.5_
   - _Requirements: 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10_
   - _Boundary: test_headless_reference.py_
-- [ ] 7.13 (P) 秘密・URL・token・画像・生応答の非露出を横断検証する
+- [x] 7.13 (P) 秘密・URL・token・画像・生応答の非露出を横断検証する
   - access token、secret、owner identity、完全URL、confirmation token、画像binary、LINE ID/raw bodyをcanaryとしてresponse・history・log・error・reprへ注入する。
   - previewで許可された値とowner履歴の完全URLだけを例外として、全境界で安全分類へ縮約されることを確認する。
   - 完了時には、禁止値の露出を境界横断で継続検出できるsecurity suiteが通る。
   - _Depends: 6.1, 6.5_
   - _Requirements: 3.7, 4.4, 4.5, 10.7, 10.8, 10.9, 10.10, 11.10_
   - _Boundary: test_security.py_
-- [ ] 7.14 (P) query・rate・画像budgetと非pollingを検証する
+- [x] 7.14 (P) query・rate・画像budgetと非pollingを検証する
   - state/history query数を履歴件数に依存しないbudgetへ固定し、明示recheck一回につきlist最大一回であることを検証する。
   - 自動polling/retryがなく、create/deleteとlistの設計上限、request内画像一件1MB以内を守ることを確認する。
   - 完了時には、resource・rate・query budgetの退行を検出するperformance suiteが通る。

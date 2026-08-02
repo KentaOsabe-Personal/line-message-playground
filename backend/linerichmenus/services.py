@@ -8,7 +8,7 @@ from hashlib import sha256
 from typing import Callable, Protocol, runtime_checkable
 from uuid import UUID
 
-from django.db import transaction
+from django.db import OperationalError, transaction
 from django.utils import timezone
 
 from lineaccounts.admin_authorization import (
@@ -92,9 +92,17 @@ from .types import (
     SafeResultCode,
     TemplateInput,
     ResourceLifecycle,
+    IntegrationNotReady,
+    MutationReady,
 )
 
-from .types import IntegrationNotReady, MutationReady
+
+def _storage_error_code(error: BaseException) -> SafeResultCode:
+    if isinstance(error, OperationalError) and error.args:
+        code = error.args[0]
+        if code in {1205, 1213}:
+            return SafeResultCode.STORAGE_RETRYABLE
+    return SafeResultCode.STORAGE_UNAVAILABLE
 
 
 @runtime_checkable
@@ -718,22 +726,25 @@ class DefaultRichMenuService:
         if not isinstance(confirmation, ConfirmationAccepted):
             return ServiceFailed(SafeResultCode.TEMPLATE_CHANGED)
 
-        accepted = self._repository.accept(
-            AcceptedOperation(
-                operation_id=command.operation_id,
-                channel_public_id=command.channel_public_id,
-                owner_identity_public_id=proof.identity_public_id,
-                provider_id=proof.provider_id,
-                expected_channel_revision=command.expected_channel_revision,
-                kind=OperationKind.APPLY,
-                subject_operation_id=None,
-                target_resource_id=None,
-                request_fingerprint=request_fingerprint,
-                confirmation_usage_digest=confirmation.usage_digest,
-                configuration_snapshot=configuration,
-                candidate_image_digest=rendered.pixel_digest,
+        try:
+            accepted = self._repository.accept(
+                AcceptedOperation(
+                    operation_id=command.operation_id,
+                    channel_public_id=command.channel_public_id,
+                    owner_identity_public_id=proof.identity_public_id,
+                    provider_id=proof.provider_id,
+                    expected_channel_revision=command.expected_channel_revision,
+                    kind=OperationKind.APPLY,
+                    subject_operation_id=None,
+                    target_resource_id=None,
+                    request_fingerprint=request_fingerprint,
+                    confirmation_usage_digest=confirmation.usage_digest,
+                    configuration_snapshot=configuration,
+                    candidate_image_digest=rendered.pixel_digest,
+                )
             )
-        )
+        except Exception as error:
+            return ServiceFailed(_storage_error_code(error))
         if isinstance(accepted, OperationReplay):
             return OperationSucceeded(accepted.operation)
         if isinstance(accepted, OperationConflict):
@@ -981,8 +992,8 @@ class DefaultRichMenuService:
                 )
         except (TypeError, ValueError):
             return None, None, ServiceFailed(SafeResultCode.INVALID_INPUT)
-        except Exception:
-            return None, None, ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
+        except Exception as error:
+            return None, None, ServiceFailed(_storage_error_code(error))
         if isinstance(result, ExactChannelSnapshotRejected):
             return None, None, self._map_snapshot_failure(result.code)
         snapshot = (
@@ -1053,8 +1064,8 @@ class DefaultRichMenuService:
                     request_fingerprint=fingerprint,
                 )
             )
-        except Exception:
-            return ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
+        except Exception as error:
+            return ServiceFailed(_storage_error_code(error))
         if isinstance(accepted, OperationReplay):
             return OperationSucceeded(accepted.operation)
         if isinstance(accepted, OperationConflict):
@@ -1087,8 +1098,8 @@ class DefaultRichMenuService:
                     request_fingerprint=fingerprint,
                 )
             )
-        except Exception:
-            return ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
+        except Exception as error:
+            return ServiceFailed(_storage_error_code(error))
         if isinstance(accepted, OperationReplay):
             return OperationSucceeded(accepted.operation)
         if isinstance(accepted, OperationConflict):

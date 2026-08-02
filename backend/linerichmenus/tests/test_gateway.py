@@ -241,6 +241,53 @@ class GatewayContractTests(SimpleTestCase):
                 self.assertNotIn("connection-canary", rendered)
                 self.assertNotIn("malformed-response-canary", rendered)
 
+    # テストケース: 全JSON endpointへ4xx・429・5xx・timeout・connection・malformed・close失敗を注入する。
+    # 期待値: endpoint固有契約でrejected/unknown/special observationを分類し、生失敗を公開しない。
+    def test_every_json_endpoint_failure_matrix(self):
+        cases = (
+            ("validate_rich_menu_object", lambda gateway: gateway.validate(self.context, self.request), None, False),
+            ("create_rich_menu", lambda gateway: gateway.create(self.context, self.request), {"richMenuId": "id"}, True),
+            ("get_rich_menu_list", lambda gateway: gateway.list_resources(self.context), {"richmenus": []}, True),
+            ("get_rich_menu", lambda gateway: gateway.get_resource(self.context, "id"), {"richMenuId": "id", "name": "marker"}, True),
+            ("set_default_rich_menu", lambda gateway: gateway.set_default(self.context, "id"), None, False),
+            ("get_default_rich_menu", lambda gateway: gateway.get_default(self.context), {"richMenuId": "id"}, True),
+            ("cancel_default_rich_menu", lambda gateway: gateway.clear_default(self.context), None, False),
+            ("delete_rich_menu", lambda gateway: gateway.delete(self.context, "id"), None, False),
+        )
+        failures = (
+            ("4xx", ApiError(400), "rejected"),
+            ("429", ApiError(429), "unknown"),
+            ("5xx", ApiError(500), "unknown"),
+            ("timeout", TimeoutError("matrix-timeout-canary"), "unknown"),
+            ("connection", ConnectionError("matrix-connection-canary"), "unknown"),
+        )
+        for method, invoke, success, response_bearing in cases:
+            for category, failure, expected in failures:
+                with self.subTest(method=method, category=category):
+                    factory = FakeFactory()
+                    factory.json.responses[method] = failure
+                    result = invoke(DefaultRichMenuGateway(factory))
+                    self.assertEqual(getattr(result, "status", None), expected)
+                    self.assertNotIn("canary", repr(result))
+                    self.assertEqual(factory.close_calls, 1)
+
+            with self.subTest(method=method, category="malformed"):
+                factory = FakeFactory()
+                factory.json.responses[method] = {"malformed": "matrix-canary"}
+                malformed = invoke(DefaultRichMenuGateway(factory))
+                self.assertEqual(
+                    getattr(malformed, "status", None),
+                    "unknown" if response_bearing else "accepted",
+                )
+
+            with self.subTest(method=method, category="close"):
+                factory = FakeFactory()
+                factory.json.responses[method] = success
+                factory.close_error = RuntimeError("matrix-close-canary")
+                closed = invoke(DefaultRichMenuGateway(factory))
+                self.assertEqual(getattr(closed, "status", None), "unknown")
+                self.assertNotIn("matrix-close-canary", repr(closed))
+
     # テストケース: default endpointの404と403を観測する。
     # 期待値: 404はdefaultなし、403は外部manager管理として分類する。
     def test_default_404_is_none_and_403_is_external_manager_default(self):
@@ -337,3 +384,58 @@ class GatewayImageContractTests(SimpleTestCase):
         closed = self.gateway.set_default(self.context, "rich-menu-id-canary")
         self.assertIsInstance(closed, GatewayUnknown)
         self.assertNotIn("close-failure-canary", repr(closed))
+
+    # テストケース: upload/downloadへ4xx・429・5xx・timeout・connection・malformed・close失敗を注入する。
+    # 期待値: blob endpointもJSONと同じ安全分類を使い、binaryやLINE IDを露出しない。
+    def test_blob_endpoint_failure_matrix(self):
+        from io import BytesIO
+
+        from PIL import Image
+
+        from linerichmenus.types import RenderedImage
+
+        output = BytesIO()
+        Image.new("RGBA", (800, 550), (20, 90, 120, 255)).save(output, format="PNG")
+        image = RenderedImage("image/png", 800, 550, "b" * 64, output.getvalue())
+        for category, failure, expected in (
+            ("4xx", ApiError(400), "rejected"),
+            ("429", ApiError(429), "unknown"),
+            ("5xx", ApiError(500), "unknown"),
+            ("timeout", TimeoutError("blob-timeout-canary"), "unknown"),
+            ("connection", ConnectionError("blob-connection-canary"), "unknown"),
+        ):
+            for method in ("set_rich_menu_image", "get_rich_menu_image"):
+                with self.subTest(method=method, category=category):
+                    factory = FakeFactory()
+                    factory.blob.responses[method] = failure
+                    gateway = DefaultRichMenuGateway(factory)
+                    result = (
+                        gateway.upload(self.context, "id", image)
+                        if method == "set_rich_menu_image"
+                        else gateway.download(self.context, "id")
+                    )
+                    self.assertEqual(result.status, expected)
+                    self.assertNotIn("canary", repr(result))
+                    self.assertEqual(factory.calls, [("access-token-canary", 0)])
+
+        malformed_upload = self.gateway.upload(self.context, "id", image)
+        self.factory.blob.responses["get_rich_menu_image"] = b"malformed-blob-canary"
+        malformed_download = self.gateway.download(self.context, "id")
+        self.assertEqual(malformed_upload.status, "accepted")
+        self.assertEqual(malformed_download.status, "unknown")
+
+        for method, success in (
+            ("set_rich_menu_image", None),
+            ("get_rich_menu_image", BytesIO(output.getvalue())),
+        ):
+            with self.subTest(method=method, category="close"):
+                factory = FakeFactory()
+                factory.blob.responses[method] = success
+                factory.close_error = RuntimeError("blob-close-canary")
+                gateway = DefaultRichMenuGateway(factory)
+                result = (
+                    gateway.upload(self.context, "id", image)
+                    if method == "set_rich_menu_image"
+                    else gateway.download(self.context, "id")
+                )
+                self.assertEqual(result.status, "unknown")

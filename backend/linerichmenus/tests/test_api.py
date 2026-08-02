@@ -1,11 +1,17 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
+from django.db import transaction
 from django.test import SimpleTestCase
-from rest_framework.test import APIRequestFactory, force_authenticate
+from django.utils import timezone as django_timezone
+from rest_framework.test import APIClient, APIRequestFactory, APITestCase, force_authenticate
 
-from lineaccounts.authentication import OwnerPrincipal
+from lineaccounts.authentication import OWNER_SESSION_KEY, OwnerPrincipal
+from lineaccounts.gateway import VerifiedLineIdentity
+from lineaccounts.models import OwnerAccount
+from lineaccounts.repositories import DjangoAccountRepository
+from lineaccounts.types import LineSubject
 from linerichmenus.services import OperationSucceeded, ServiceFailed, StateSucceeded
 from linerichmenus.services import TemplateListSucceeded
 from linerichmenus.catalog import DefaultTemplateCatalog
@@ -240,3 +246,66 @@ class OwnerRichMenuAPITests(SimpleTestCase):
             completed_at=NOW,
             next_allowed_actions=(NextAllowedAction.RECHECK,),
         )
+
+
+class OwnerRichMenuSessionBoundaryTests(APITestCase):
+    def setUp(self):
+        OwnerAccount.objects.get_or_create(slot=1)
+        repository = DjangoAccountRepository()
+        with transaction.atomic():
+            owner = repository.lock_owner_account()
+            identity = repository.upsert_identity(
+                VerifiedLineIdentity(
+                    "0012345678", LineSubject("U" + uuid4().hex), "Rich menu owner"
+                )
+            )
+            owner = repository.bind_owner_identity(owner, identity.public_id)
+            self.owner_session = repository.create_owner_session(
+                owner, django_timezone.now() + timedelta(hours=1)
+            )
+        self.identity = identity
+
+    def _owner_client(self):
+        client = APIClient(enforce_csrf_checks=True)
+        session = client.session
+        session[OWNER_SESSION_KEY] = str(self.owner_session.public_id)
+        session.save()
+        bootstrap = client.get("/api/account/session/")
+        return client, bootstrap.cookies["csrftoken"].value
+
+    # テストケース: 実owner sessionでtemplate routeを参照し、匿名sessionでも同routeを要求する。
+    # 期待値: session由来identityだけがserviceへ渡り、匿名要求はservice前に401となる。
+    def test_real_owner_session_scopes_route_and_anonymous_is_rejected(self):
+        service = Mock()
+        service.list_templates.return_value = TemplateListSucceeded(
+            DefaultTemplateCatalog().list_templates()
+        )
+        owner_client, _ = self._owner_client()
+        with patch("linerichmenus.views.build_rich_menu_service", return_value=service):
+            allowed = owner_client.get("/api/line/rich-menus/templates/")
+            denied = APIClient().get("/api/line/rich-menus/templates/")
+
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(denied.status_code, 401)
+        context = service.list_templates.call_args.args[0]
+        self.assertEqual(context.owner_session_id, self.owner_session.public_id)
+        self.assertEqual(context.identity_public_id, self.identity.public_id)
+
+    # テストケース: CSRFを有効にした実owner sessionでoperation routeへ別originからPOSTする。
+    # 期待値: serializer・service・LINEより先にexact-origin CSRFが403で拒否する。
+    def test_operation_route_enforces_exact_origin_with_real_session(self):
+        client, csrf = self._owner_client()
+        service = Mock()
+        with patch("linerichmenus.views.build_rich_menu_service", return_value=service):
+            response = client.post(
+                f"/api/line/rich-menus/channels/{uuid4()}/operations/",
+                {"secretCanary": "csrf-secret-canary"},
+                format="json",
+                HTTP_ORIGIN="https://evil.example",
+                HTTP_X_CSRFTOKEN=csrf,
+            )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"]["code"], "csrf_failed")
+        self.assertNotIn("csrf-secret-canary", str(response.json()))
+        service.start_operation.assert_not_called()
