@@ -1,24 +1,24 @@
 # Implementation Plan
 
-- [ ] 1. 実行時とアプリケーションの基盤を整える
-- [ ] 1.1 画像生成依存と固定フォント資産を導入する
+- [x] 1. 実行時とアプリケーションの基盤を整える
+- [x] 1.1 画像生成依存と固定フォント資産を導入する
   - Pillowの固定版、Noto Sans JPの固定資産、ライセンスをBackend buildへ組み込み、版・digest・ライセンスを起動時に検証する。
   - 検証失敗時はプレビューと適用をfail closedにし、画像binaryや資格情報を診断出力へ含めない。
   - 完了時には、正しい資産ではsystem checkが成功し、版・digest・ライセンスのいずれかが違う環境では機能が利用可能にならないことを確認できる。
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.7_
   - _Boundary: DeterministicRenderer_
-- [ ] 1.2 Django appとmutation readiness契約を準備する
+- [x] 1.2 Django appとmutation readiness契約を準備する
   - 新しいBackend appを登録し、read_only・recovery_only・enabledのreadiness値とoperation kindごとの認可契約を定義する。
   - probe・purge・integration markerが不足する構成をfail closedな安全結果へ分類する。
   - 完了時には、各readiness modeとoperation kindの組合せが、外部作用を開始する前に許可またはintegration_not_readyへ決定的に分類される。
   - _Requirements: 10.12, 11.6, 11.7, 11.8, 11.9, 11.10_
   - _Boundary: MutationReadiness_
-- [ ] 1.3 共通の不変コマンド・結果・安全エラー契約を定義する
+- [x] 1.3 共通の不変コマンド・結果・安全エラー契約を定義する
   - template、preview、operation、resource、observation、履歴、next allowed actionを表す不変値を、秘密や外部SDK型を含めず定義する。
   - owner API、headless、repository、gatewayが同じoperation kind・stage・safe result分類を共有できる契約にする。
   - 完了時には、全境界が生のLINE応答や資格情報なしで状態と結果を受け渡せ、未定義variantを型境界で扱えない。
   - _Requirements: 5.1, 5.8, 8.1, 8.8, 10.7, 10.8, 10.9, 10.10, 11.10_
-- [ ] 1.4 リッチメニュー用の独立schemaを追加する
+- [x] 1.4 リッチメニュー用の独立schemaを追加する
   - channel state、operation、managed resource、append-only transitionの4モデルと、relation・lifecycle・index・一意性・CHECK制約をmigrationへ定義する。
   - 既存テーブルや既存行を更新しない空schema migrationとし、channel public IDを集約境界にする。
   - 完了時には、空DBと既存データ入りDBの双方で4テーブルだけが追加され、無効なoperation relationとresource lifecycleがDB制約で拒否される。
