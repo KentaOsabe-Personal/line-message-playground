@@ -15,6 +15,20 @@ ALLOWED_HOSTS = [
 CSRF_TRUSTED_ORIGINS = [build_trusted_https_origin(PUBLIC_HOST)]
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 LINE_USER_ID = os.getenv("LINE_USER_ID", "")
+LINE_RICH_MENU_MUTATION_MODE = os.getenv(
+    "LINE_RICH_MENU_MUTATION_MODE", "read_only"
+)
+LINE_RICH_MENU_REFERENCE_PROBE_INTEGRATED = (
+    os.getenv("LINE_RICH_MENU_REFERENCE_PROBE_INTEGRATED", "false").lower()
+    == "true"
+)
+LINE_RICH_MENU_HISTORY_PURGE_INTEGRATED = (
+    os.getenv("LINE_RICH_MENU_HISTORY_PURGE_INTEGRATED", "false").lower()
+    == "true"
+)
+LINE_RICH_MENU_INTEGRATION_MARKER = os.getenv(
+    "LINE_RICH_MENU_INTEGRATION_MARKER", ""
+)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -31,6 +45,7 @@ INSTALLED_APPS = [
     "linefriendships.apps.LineFriendshipsConfig",
     "linewebhooks.apps.LineWebhooksConfig",
     "lineinteractions.apps.LineInteractionsConfig",
+    "linerichmenus.apps.LineRichMenusConfig",
 ]
 
 MIDDLEWARE = [
