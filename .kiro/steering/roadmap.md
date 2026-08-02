@@ -100,7 +100,7 @@ LINE Message Playground を、固定設定の自分宛て配信から、LIFF／L
 - [x] line-webhook-command-dispatch -- 検証済みmessage／postbackを許可リストから処理し、限定replyと後続actionの安全な拡張契約を提供する。Dependencies: line-webhook-ingress, line-channel-foundation, line-account-linking
 - [x] linked-recipient-delivery -- 登録済みチャネルと配信先を選び、既存の確認・冪等性・監査を維持してpushし、明示的な受取確認を追跡する。Dependencies: line-channel-foundation, line-account-linking, line-friendship-sync, line-webhook-command-dispatch
 - [x] line-channel-admin-ui -- 自分専用の認証済み画面からチャネルとwrite-only資格情報を登録・更新・無効化する。Dependencies: line-channel-foundation, line-account-linking, line-webhook-ingress, linked-recipient-delivery
-- [ ] line-rich-menu-foundation -- 組み込みテンプレートと決定的画像生成から、チャネル既定リッチメニューの冪等な適用・照合・解除・履歴・後片付けまでを提供する。Dependencies: line-channel-foundation, line-account-linking
+- [x] line-rich-menu-foundation -- 組み込みテンプレートと決定的画像生成から、チャネル既定リッチメニューの冪等な適用・照合・解除・履歴・後片付けまでを提供する。Dependencies: line-channel-foundation, line-account-linking
 - [ ] line-rich-menu-admin-lifecycle -- foundationの契約をowner向け管理画面へ接続し、状態・履歴・回復操作とチャネル無効化・再有効化・物理削除を統合する。Dependencies: line-rich-menu-foundation, line-channel-admin-ui
 
 ---

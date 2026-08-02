@@ -25,6 +25,7 @@ ngrokは通常のDocker Composeサービスとして他のサービスと一緒�
 - **Runtime**: Docker、Docker Compose
 - **LINE integration**: LIFF SDK、LINE Bot SDK、HTTPX
 - **Credential encryption**: `cryptography` の Fernet／MultiFernet
+- **Deterministic image generation**: Pillow と版・digest を固定した同梱日本語フォント
 
 Frontend は ES Modules、React JSX transform、ES2022 を前提とします。Backend は日本語、Asia/Tokyo、timezone-aware datetime を既定とします。
 
@@ -139,5 +140,13 @@ message／postback handler は、完全一致の静的 command／action registry
 
 Webhook request は View 入口から単一の monotonic deadline を共有し、handler を local と deadline-managed external の実行プロファイルへ分けます。LINE reply は同一チャネルの資格情報と一回限りの reply token を使い、自動再試行せず、期限不足なら開始しません。accepted、rejected、unknown を区別し、受信内容、token、LINE user ID、access token を保存しない interaction 監査へ収束させます。
 
+### LINE リッチメニュー資源
+
+リッチメニュー画像は、版付きテンプレート、固定 geometry、同梱日本語フォントから決定的に生成します。入力文字の glyph、寸法、比率、形式、1 MB 上限を LINE への外部作用前に検証し、画像内容は encoder の偶然に依存しない canonical pixel digest で結び付けます。フォントの版、ライセンス、digest と画像生成依存は repository に固定し、起動時とテストで差し替えや欠落を検出します。
+
+LINE の rich-menu mutation には retry key がないため、タイムアウト、5xx、429、解釈不能な応答を自動再試行しません。operation、管理資源、段階遷移、ownership marker を永続化し、list／get／default／画像 download の保守的な観測から既存操作へ収束させます。`unknown` や `cleanup_required` は成功・失敗へ推測せず、明示的な recheck または cleanup まで新規変更を禁止します。保存済み ID または強い所有権証明がない外部資源は削除しません。
+
+外部通信中はデータベース lock を保持せず、戻り時に owner、provider、チャネル revision、operation stage を再検証します。段階導入は `read_only`、`recovery_only`、`enabled` を区別し、下流の reference probe、履歴 purge、承認済み統合 marker が揃わない限り mutation を fail-closed で拒否します。
+
 ---
-_更新日: 2026-08-01。登録済み対象への配信、受取確認、owner 向けチャネル管理の信頼境界と競合契約を反映。技術判断と標準を記録し、依存パッケージ一覧にはしない。_
+_更新日: 2026-08-02。決定的画像生成、リッチメニュー資源の照合・回復、fail-closed な段階導入を反映。技術判断と標準を記録し、依存パッケージ一覧にはしない。_

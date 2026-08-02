@@ -35,7 +35,7 @@ flat 構造でも、UI とイベント接続、状態遷移、HTTP 通信、境�
 
 複数の責務を持つ app では、View と Serializer は HTTP 境界、Service はユースケースと transaction、Model は永続化、Gateway は外部 API 境界を担当します。外部 SDK の型や例外を View や Model まで伝播させません。
 
-複雑な app では、`types.py` に immutable な値・結果型、`repositories.py` に `Protocol` と Django adapter、`services.py` にユースケース、`container.py` に実行時の依存合成を置きます。この分割は必要な境界がある app にだけ適用し、小さな app へ空の層を増やしません。
+複雑な app では、`types.py` に immutable な値・結果型、`repository.py` または `repositories.py` に `Protocol` と Django adapter、`services.py` にユースケース、`container.py` に実行時の依存合成を置きます。純粋な状態遷移、外部状態との照合、表示変換などが独立して複雑な場合は、責務名の module へ切り出します。この分割は必要な境界がある app にだけ適用し、固定ファイル一式として小さな app へ空の層を増やしません。
 
 検証済み Webhook の拡張では、受付 app が immutable event と最小の handler 契約、event type ごとの registry を所有します。下流の機能 app はその契約を実装し、受付の composition root が handler を明示登録します。受付 service に個別イベントの業務処理を追加せず、状態 projection、reply、配信をそれぞれ独立した handler 責任に保ちます。
 
@@ -44,6 +44,17 @@ message／postback の interaction app は、入力解析、静的 command／act
 既存 app に owner 管理面を加える場合は、一般利用の service／repository と管理用の `admin_*` 境界を分けます。管理境界は owner authorization、write-only 入力、秘密を含まない presenter、revision-aware repository、外部確認 gateway を合成し、通常のチャネル参照や配信経路へ管理用 DTO を漏らしません。Frontend でも管理 Component、`*Api.ts`、`*Dto.ts`、`*State.ts` を同じ責務分離で揃え、秘密入力を共有 state や read model に保存しません。
 
 別 app の永続化詳細へ直接依存せず、公開された型、Protocol、builder を介して連携します。循環 import を避けるため、View が必要な composition root は遅延 import できます。管理用ワークフローは Django management command に置き、対話入力、処理本体、repository をテスト可能な境界へ分離します。
+
+同一 Backend 内の app 横断ライフサイクルは、`headless.py` 等で公開する typed port、reference probe、cleanup contract を `container.py` から合成できます。HTTP View を経由せず、呼び出し先 app の Model や非公開 repository を直接 import しないことを境界とします。
+
+app の実行に必要な固定フォント等の資産は `/backend/<app>/assets/` に所有させ、ライセンスを隣接配置します。生成物や利用者 upload と混在させず、版・digest・実行可能性を app の起動境界で検証します。
+
+### アーキテクチャ決定記録
+
+**場所**: `/docs/adr/`
+**目的**: 複数機能へ影響する長期的な制約や、不可逆な外部資源の扱いを短い決定記録として残す
+
+ADR は連番付きファイル名を使い、実装の網羅説明ではなく、判断の背景、採用した原則、結果を記録します。
 
 ### コンテナ固有の補助処理
 
@@ -60,7 +71,7 @@ message／postback の interaction app は、入力解析、静的 command／act
 - Backend の機能 app は Django project 設定から分離し、ルート URLConf は app の URLConf を合成する
 - Backend app 間は相手 app の Model ではなく、公開型と明示的な adapter／builder を依存境界にする
 - 複数 app の参照整合性を伴う削除は、各 app の公開 reference contract を composition root で束ね、削除側から相手 Model を直接探索しない
-- サービス横断の契約は暗黙の内部 import ではなく HTTP API で表現する
+- Frontend と Backend など実行サービス間の契約は HTTP API で表現し、同一 Backend 内の app 間は公開 typed contract を composition root で合成する
 
 ## 命名規則
 
@@ -117,4 +128,4 @@ from .views import HealthView
 - 新しいコードが既存パターンに従う限り、この文書へファイル単位の追記を必要としない
 
 ---
-_更新日: 2026-08-01。owner 管理面の責務分離と app 横断 reference contract のパターンを反映。配置判断に使えるパターンを記録し、ディレクトリツリーの網羅表にはしない。_
+_更新日: 2026-08-02。責務名 module、app-owned assets、ADR、headless typed port のパターンを反映。配置判断に使えるパターンを記録し、ディレクトリツリーの網羅表にはしない。_

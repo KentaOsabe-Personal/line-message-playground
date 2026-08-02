@@ -8,15 +8,15 @@ description: Implement approved tasks using TDD with subagent dispatch. Runs all
 
 <background_information>
 You operate in two modes:
-- **Autonomous mode** (no task numbers): Dispatch a fresh sub-agent per task, with independent review after each
-- **Manual mode** (task numbers provided): Execute selected tasks directly in the main context
+- **Autonomous mode** (no task numbers): Dispatch a fresh sub-agent per child task, then independently review the completed parent-task group once
+- **Manual mode** (task numbers provided): Execute selected child tasks directly in the main context, then review once per selected parent-task group
 
 - **Success Criteria**:
   - All tests written before implementation code
   - Code passes all tests with no regressions
   - Tasks marked as completed in tasks.md
   - Implementation aligns with design and requirements
-  - Independent reviewer approves each task before completion
+  - Independent reviewer approves each bounded review unit and covers every child task in it before completion
 </background_information>
 
 <instructions>
@@ -60,23 +60,28 @@ After all parallel research completes, synthesize implementation brief before st
 - If task numbers provided in `$2` (e.g., "1.1" or "1,2,3"): **manual mode**
 - If no task numbers: **autonomous mode** (all pending tasks)
 
-**Build task queue**:
-- Read tasks.md, identify actionable sub-tasks (X.Y numbering like 1.1, 2.3)
-- Major tasks (1., 2.) are grouping headers, not execution units
+**Build task queue and review units**:
+- Read tasks.md and identify actionable child tasks (`X.Y`, such as `1.1`, `2.3`)
+- Treat major tasks (`1.`, `2.`) as review-unit headers, not implementation units
+- When the selector is a major task such as `2`, expand it to its pending child tasks and create one parent review unit
+- When selectors name child tasks, group the selected children by parent number; each group is one bounded review unit
+- With no selector, process pending children in parent-task groups, preserving dependency order
 - Skip tasks with `_Blocked:_` annotation
 - For each selected task, check `_Depends:_` annotations -- verify referenced tasks are `[x]`
-- If prerequisites incomplete, execute them first or warn the user
+- Within the current review unit, an implemented child in `READY_FOR_REVIEW` state satisfies a later child's dependency even though its checkbox remains unchecked until parent review approval
+- In autonomous mode, order parent units so prerequisites are implemented first
+- In manual mode, if an incomplete dependency is outside the selected review unit, stop before edits and report the exact prerequisite; do not silently expand the user's selected scope
 - Use `_Boundary:_` annotations to understand the task's component scope
 
 ## Step 3: Execute Implementation
 
 ### Autonomous Mode (sub-agent dispatch)
 
-**Iteration discipline**: Process exactly ONE sub-task (e.g., 1.1) per iteration. Do NOT batch multiple sub-tasks into a single sub-agent dispatch. Each iteration follows the full cycle: dispatch implementer → review → commit → re-read tasks.md → next.
+**Iteration discipline**: Process exactly ONE child task (for example `1.1`) per implementer iteration. Do not batch child tasks into one implementer dispatch. Within a parent review unit, follow: implement child → verify task-local readiness → retain report → re-read tasks.md → next child. After every selected child in the unit is `READY_FOR_REVIEW`, run one parent-unit review, one completion gate, and one selective commit.
 
-**Context management**: At the start of each iteration, re-read `tasks.md` to determine the next actionable sub-task. Do NOT rely on accumulated memory of previous iterations. After completing each iteration, retain only a one-line summary (e.g., "1.1: READY_FOR_REVIEW, 3 files changed") and discard the full status report and reviewer details.
+**Context management**: At the start of each implementation iteration, re-read `tasks.md` to determine the next actionable child. Do not rely on accumulated memory for task selection. Until the parent review finishes, retain each child's exact status report, RED evidence, validation results, and changed-file list; the parent reviewer needs them. After approval and commit, retain only a one-line parent summary.
 
-If multi-agent capability is available, for each task (one at a time):
+If multi-agent capability is available, for each child task (one at a time):
 
 **a) Dispatch implementer**:
 - Read `templates/implementer-prompt.md` from this skill's directory
@@ -93,36 +98,37 @@ If multi-agent capability is available, for each task (one at a time):
 **b) Handle implementer status**:
 - Parse implementer status only from the exact `## Status Report` block and `- STATUS:` field.
 - If `STATUS` is missing, ambiguous, or replaced with prose, re-dispatch the implementer once requesting the exact structured status block only. Do NOT proceed to review without a parseable `READY_FOR_REVIEW | BLOCKED | NEEDS_CONTEXT` value.
-- **READY_FOR_REVIEW** → proceed to review
+- **READY_FOR_REVIEW** → record the child as implemented-pending-parent-review; do not mark, review, or commit it yet; proceed to the next child in the review unit
 - **BLOCKED** → dispatch debug subagent (see section below); do NOT immediately skip
 - **NEEDS_CONTEXT** → re-dispatch once with the requested additional context; if still unresolved → dispatch debug subagent
 
-**c) Dispatch reviewer**:
+**c) Dispatch one reviewer after the review unit is implemented**:
 - Read `templates/reviewer-prompt.md` from this skill's directory
 - Construct a review prompt with:
-  - The task description and relevant spec section numbers
+  - The parent task header and every selected child task's exact text, dependency, `_Boundary:_`, and relevant spec section numbers
   - Paths to spec files (requirements.md, design.md) so the reviewer can read them directly
-  - The implementer's status report (for reference only — reviewer must verify independently)
-- The reviewer must apply the `kiro-review` protocol to this task-local review.
-- Preserve the existing task-specific context: task text, spec refs, `_Boundary:_` scope, validation commands, implementer report, and the actual `git diff` as the primary source of truth.
+  - Every child implementer's exact status report (for reference only — reviewer must verify independently)
+- The reviewer must apply the `kiro-review` protocol to this bounded parent-task review.
+- Preserve each child's task text, spec refs, boundary scope, validation commands, RED evidence, implementer report, and changed-file list. The actual aggregate `git diff` remains the primary source of truth.
+- Require findings to identify the affected child task ID. Also review interactions among children in the same parent unit.
 - The reviewer sub-agent will run `git diff` itself to read the actual code changes and verify against the spec
 - Spawn a fresh sub-agent with this prompt
 
 **d) Handle reviewer verdict**:
 - Parse reviewer verdict only from the exact `## Review Verdict` block and `- VERDICT:` field.
-- If `VERDICT` is missing, ambiguous, or replaced with prose, re-dispatch the reviewer once requesting the exact structured verdict only. Do NOT mark the task complete, commit, or continue to the next task without a parseable `APPROVED | REJECTED` value.
-- **APPROVED** → before marking the task `[x]` or making any success claim, apply `kiro-verify-completion` using fresh evidence from the current code state; then mark task `[x]` in tasks.md and perform selective git commit
-- **REJECTED (round 1-2)** → re-dispatch implementer with review feedback
-- **REJECTED (round 3)** → dispatch debug subagent (see section below)
+- If `VERDICT` is missing, ambiguous, or replaced with prose, re-dispatch the reviewer once requesting the exact structured verdict only. Do not mark the review unit complete, commit, or continue to the next parent unit without a parseable `APPROVED | REJECTED` value.
+- **APPROVED** → apply `kiro-verify-completion` to the entire review unit using fresh aggregate and task-local evidence; then mark every approved child `[x]`; mark the parent `[x]` only when all of its children are complete; perform one selective parent-unit commit
+- **REJECTED (initial review or after first remediation)** → re-dispatch implementers only for child IDs named by concrete findings, then re-run the entire parent-unit review so interactions are checked again. If a finding cannot be assigned safely, remediate at the parent-unit boundary without inventing ownership
+- **REJECTED (after second remediation)** → dispatch a debug subagent with the parent review findings and affected child boundaries
 
 **e) Commit** (parent-only, selective staging):
-- Stage only the files actually changed for this task, plus tasks.md
+- Stage only files actually changed for the approved review unit, plus tasks.md
 - **NEVER** use `git add -A` or `git add .`
 - Use `git add <file1> <file2> ...` with explicit file paths
-- Commit message format: `feat(<feature-name>): <task description>`
+- Commit message format: `feat(<feature-name>): complete task <parent-number> <parent description>`
 
 **f) Record learnings**:
-- If this task revealed cross-cutting insights, append a one-line note to the `## Implementation Notes` section at the bottom of tasks.md
+- If the review unit revealed cross-cutting insights, append a one-line note to the `## Implementation Notes` section at the bottom of tasks.md
 
 **g) Debug subagent** (triggered by BLOCKED, NEEDS_CONTEXT unresolved, or REJECTED after 2 remediation rounds):
 
@@ -144,18 +150,18 @@ The debug subagent runs in a **fresh context** — it receives only the error in
 - If `NEXT_ACTION: STOP_FOR_HUMAN` → append `_Blocked: <ROOT_CAUSE>_` to tasks.md, stop the feature run, and report that human review is required before continuing
 - If `NEXT_ACTION: BLOCK_TASK` → append `_Blocked: <ROOT_CAUSE>_` to tasks.md, skip to next task
 - If `NEXT_ACTION: RETRY_TASK` → preserve the current worktree; do NOT reset or discard unrelated changes. Spawn a **new** implementer sub-agent with the debug report's `FIX_PLAN`, `NOTES`, and the current `git diff`, and require it to repair the task with explicit edits only
-  - If the new implementer succeeds (READY_FOR_REVIEW → reviewer APPROVED) → normal flow
+  - If the new implementer succeeds (`READY_FOR_REVIEW`) → return it to the parent review unit and re-run the aggregate reviewer → normal flow
   - If the new implementer also fails → repeat debug cycle (max 2 debug rounds total). After 2 failed debug rounds → append `_Blocked: debug attempted twice, still failing — <ROOT_CAUSE>_` to tasks.md, skip
 - **Max 2 debug rounds per task**. Each round: fresh debug subagent → fresh implementer. If still failing after 2 rounds, the task is blocked.
 - Record debug findings in `## Implementation Notes` (this helps subsequent tasks avoid the same issue)
 
-**`(P)` markers**: Tasks marked `(P)` in tasks.md indicate they have no inter-dependencies and could theoretically run in parallel. However, kiro-impl processes them sequentially (one at a time) to avoid git conflicts and simplify review. The `(P)` marker is informational for task planning, not an execution directive.
+**`(P)` markers**: Tasks marked `(P)` in tasks.md indicate they have no inter-dependencies and could theoretically run in parallel. However, kiro-impl implements them sequentially within the parent review unit to avoid git conflicts. The `(P)` marker is informational, not an execution directive.
 
-**Fallback**: If multi-agent is not available, fall back to manual mode execution for all tasks.
+**Fallback**: If implementer sub-agents are unavailable, execute child tasks in the main context using the manual TDD procedure. Independent review remains mandatory: if no fresh reviewer can be dispatched, stop before completion, leave checkboxes unchanged, and report `MANUAL_VERIFY_REQUIRED` rather than self-approving.
 
 ### Manual Mode (main context)
 
-For each selected task:
+For each selected child task:
 
 **1. Build Task Brief**:
 Before writing any code, read the relevant sections of requirements.md and design.md for this task and clarify:
@@ -169,8 +175,15 @@ Before writing any code, read the relevant sections of requirements.md and desig
 - **GREEN**: Implement simplest solution to make test pass, following the design constraints.
 - **REFACTOR**: Improve code structure, remove duplication. All tests must still pass.
 - **VERIFY**: All tests pass (new and existing), no regressions. Confirm verification method passes.
-- **REVIEW**: Apply `kiro-review` before marking the task complete. If the host supports fresh sub-agents in manual mode, use a fresh reviewer; otherwise perform the review in the main context using the `kiro-review` protocol. Do NOT continue until the verdict is parseably `APPROVED`.
-- **MARK COMPLETE**: Only after review returns `APPROVED`, apply `kiro-verify-completion`, then update the checkbox from `- [ ]` to `- [x]` in tasks.md.
+- **QUEUE FOR REVIEW**: Create a controller-owned `READY_FOR_REVIEW` record containing the child ID, Task Brief, RED output, fresh task-local verification, and changed files. Do not update its checkbox yet. This record satisfies later dependencies inside the same review unit.
+
+After every selected child in the same parent-task group is implemented:
+
+- **REVIEW**: Apply `kiro-review` once to the bounded parent review unit using a fresh independent reviewer. Require one parseable `APPROVED | REJECTED` verdict and child IDs on findings. If no fresh reviewer is available, return `MANUAL_VERIFY_REQUIRED`; do not self-approve or mark tasks.
+- **REMEDIATE**: On rejection, repair only the named child boundaries, then re-run the whole parent-unit review. Preserve the bounded review/debug limits.
+- **DEBUG**: If a manual child is blocked, still needs context after one retry, or the parent unit exhausts review remediation, use the same fresh debugger protocol and structured `NEXT_ACTION` handling defined above. If a fresh debugger is unavailable, stop with checkboxes unchanged and report the blocker.
+- **MARK COMPLETE**: Only after `APPROVED`, apply `kiro-verify-completion` with fresh evidence for the entire unit, mark approved children `[x]`, and mark the parent `[x]` only when all children are complete.
+- **NO AUTOMATIC COMMIT**: Preserve manual mode behavior: do not stage or commit unless the user separately requests it. The parent-unit selective commit procedure applies to autonomous mode only.
 
 ## Step 4: Final Validation
 
@@ -189,7 +202,7 @@ Before writing any code, read the relevant sections of requirements.md and desig
 
 For tasks that add or change behavior, enforce RED → GREEN with a feature flag:
 
-1. **Add flag** (OFF by default): Introduce a toggle appropriate to the codebase (env var, config constant, boolean, conditional)
+1. **Add flag** (OFF by default): Introduce only the toggle scaffolding appropriate to the codebase (env var, config constant, boolean, conditional). This setup is allowed before the RED test; do not add the new behavior yet
 2. **RED -- flag OFF**: Write tests for the new behavior. Run tests → must FAIL. If tests pass with flag OFF, the tests are not testing the right thing. Rewrite.
 3. **GREEN -- flag ON + implement**: Enable the flag, write implementation. Run tests → must PASS.
 4. **Remove flag**: Make the code unconditional. Run tests → must still PASS.
@@ -202,15 +215,15 @@ For tasks that add or change behavior, enforce RED → GREEN with a feature flag
 - **Strict Handoff Parsing**: Never infer implementer `STATUS` or reviewer `VERDICT` from surrounding prose; only the exact structured fields count
 - **No Destructive Reset**: Never use `git checkout .`, `git reset --hard`, or similar destructive rollback inside the implementation loop
 - **Selective Staging**: NEVER use `git add -A` or `git add .`; always stage explicit file paths
-- **Bounded Review Rounds**: Max 2 implementer re-dispatch rounds per reviewer rejection, then debug
+- **Bounded Review Rounds**: Run one initial parent review, then at most 2 remediation-and-re-review rounds. A rejection after the second remediation triggers debug
 - **Bounded Debug**: Max 2 debug rounds per task (debug + re-implementation per round); if still failing → BLOCKED
 - **Bounded Remediation**: Cap final-validation remediation at 3 rounds
 
 ## Output Description
 
-**Autonomous mode**: For each task, report: task ID, implementer status, reviewer verdict, files changed, commit hash. After all tasks: final validation result.
+**Autonomous mode**: For each parent review unit, report child task IDs and implementer statuses, aggregate reviewer verdict, files changed, and commit hash. After all tasks: final validation result.
 
-**Manual mode**: Tasks executed with test results. Status of completed/remaining tasks.
+**Manual mode**: Child tasks executed with test results, parent-unit reviewer verdicts, and completed/remaining status.
 
 **Format**: Concise, in the language specified in spec.json.
 
@@ -223,8 +236,8 @@ For tasks that add or change behavior, enforce RED → GREEN with a feature flag
 - **Suggested Action**: "Complete previous phases: `$kiro-spec-requirements`, `$kiro-spec-design`, `$kiro-spec-tasks`"
 
 **Test Failures**:
-- **Stop Implementation**: Fix failing tests before continuing
-- **Action**: Debug and fix, then re-run
+- Expected failures in the RED phase are evidence, not blockers
+- If GREEN, REFACTOR, VERIFY, reviewer, or regression tests fail unexpectedly, stop advancing to later children or review units; diagnose and fix within the current child boundary, then re-run before continuing
 
 **All Tasks Blocked**:
 - Stop and report all blocked tasks with reasons; human review needed
@@ -240,5 +253,6 @@ For tasks that add or change behavior, enforce RED → GREEN with a feature flag
 - If debug returns `NEXT_ACTION: STOP_FOR_HUMAN` because of task ordering, boundary, or decomposition problems, stop and return for human review of `tasks.md` or the approved plan instead of forcing a code workaround
 
 **Session Interrupted**:
-- Safe to re-run `$kiro-impl $1` — completed tasks are already `[x]` in tasks.md and committed to git
-- The controller re-reads tasks.md on each iteration, so it will pick up where it left off automatically
+- Completed parent review units are checked; autonomous units are also committed, while manual-mode changes remain uncommitted unless the user requested a commit
+- For an unchecked unit with existing changes, inspect the diff and re-run each child's task-local validation to reconstruct `implemented-pending-parent-review`; do not blindly re-implement or discard it
+- Resume remaining children, or dispatch the parent reviewer immediately when all selected children have fresh readiness evidence
