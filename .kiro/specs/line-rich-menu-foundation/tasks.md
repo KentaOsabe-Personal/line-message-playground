@@ -196,36 +196,36 @@
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 10.1, 10.2_
   - _Boundary: RichMenuService_
 
-- [ ] 6. owner API・headless・runtime統合を公開する
-- [ ] 6.1 secret-freeなrequest/response境界を実装する
+- [x] 6. owner API・headless・runtime統合を公開する
+- [x] 6.1 secret-freeなrequest/response境界を実装する
   - operation kindごとのstrict serializerでunknown key、variant外field、不正ID、relation不一致、limit範囲を拒否する。
   - preview、state、operation、history、safe errorのpresenterを分離し、preview以外からtoken・画像・完全URLを除外する。
   - 完了時には、各DTOが設計どおりのfieldだけを受理・返却し、canary secretやraw responseがerror/reprを含む全responseへ現れない。
   - _Depends: 5.1, 5.2, 5.3, 5.5, 5.6, 5.7, 5.8_
   - _Requirements: 2.5, 4.3, 4.4, 4.5, 6.3, 10.3, 10.4, 10.7, 10.8, 10.9, 10.10, 11.1, 11.10_
   - _Boundary: OwnerRichMenuAPI_
-- [ ] 6.2 owner専用の参照・preview HTTP APIを公開する
+- [x] 6.2 owner専用の参照・preview HTTP APIを公開する
   - template一覧、channel preview/state/history、operation取得routeをactive owner session、同一provider scope、安全な404で公開する。
   - preview requestにはexact-origin CSRFを適用し、inactive state/historyは保存projectionだけを返す。
   - 完了時には、設計された参照routeがscope内で応答し、無効session・別owner/provider/channel・stale revisionで秘密や対象存在を漏らさない。
   - _Depends: 6.1_
   - _Requirements: 1.1, 1.2, 1.4, 1.5, 1.6, 4.1, 4.5, 5.1, 10.3, 10.4, 11.1_
   - _Boundary: OwnerRichMenuAPI_
-- [ ] 6.3 owner専用のoperation HTTP APIを公開する
+- [x] 6.3 owner専用のoperation HTTP APIを公開する
   - apply・unlink・release・recheck・cleanupを一つのstrict operation endpointへ接続し、CSRF、revision、readiness、競合、relationを外部作用前に検証する。
   - operation IDの同一request再送では保存済みOperationResponseを返し、受け付け不能variantを安定したHTTP/safe codeへ対応させる。
   - 完了時には、全mutation kindが同じ状態機械へ到達し、無効scope・inactive・stale・integration未完了ではLINE call 0件となる。
   - _Depends: 6.1, 6.2_
   - _Requirements: 1.2, 1.3, 1.4, 1.5, 1.6, 6.1, 6.2, 6.3, 6.4, 7.9, 8.2, 9.8, 11.1, 11.10_
   - _Boundary: OwnerRichMenuAPI_
-- [ ] 6.4 (P) 下流向けlifecycle・reference・purge契約を公開する
+- [x] 6.4 (P) 下流向けlifecycle・reference・purge契約を公開する
   - guard state、headless unlink/recheck、reference probe、transaction-required history purgeをowner操作と同じ状態機械へ接続する。
   - headless commandでもowner/provider/revision/operation ID、readiness、競合、safe result、自動再試行禁止を強制する。
   - 完了時には、確定unlink時だけdisable続行が可能となり、未解決参照やpurge失敗時はdisable/deleteを続行可能と報告しない。
   - _Depends: 3.6, 5.2, 5.5, 5.7_
   - _Requirements: 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10_
   - _Boundary: HeadlessReferenceContracts_
-- [ ] 6.5 readinessとconcrete dependencyを統合する
+- [x] 6.5 readinessとconcrete dependencyを統合する
   - owner fence、exact channel port、catalog、renderer、confirmation、repository、gateway、reconciler、service、headless、APIを一つのcomposition rootで合成する。
   - read_onlyではreadだけ、recovery_onlyではunlink/release/recheck/cleanupだけ、enabledでは全mutationを許可し、integration marker欠落をfail closedにする。
   - 完了時には、foundation単独を含む各readiness modeで設計どおりのroute/headless操作だけが実行され、どの入口からもguardを迂回できない。
