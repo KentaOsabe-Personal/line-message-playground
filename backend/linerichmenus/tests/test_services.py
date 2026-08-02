@@ -2,6 +2,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from django.db import OperationalError
 from django.test import TransactionTestCase
 
 from lineaccounts.admin_authorization import OwnerActiveProof, OwnerOperationContext
@@ -106,6 +107,8 @@ class RecordingGateway:
         self.default_sequence = []
         self.create_result = CreateAccepted("rich-menu-created")
         self.upload_result = GatewayAccepted()
+        self.set_default_result = GatewayAccepted()
+        self.clear_default_result = GatewayAccepted()
         self.calls = []
 
     def validate(self, context, request):
@@ -128,13 +131,15 @@ class RecordingGateway:
 
     def set_default(self, context, rich_menu_id):
         self.calls.append(("set_default", context, rich_menu_id))
-        self.default = RichMenuDefaultPresent(rich_menu_id)
-        return GatewayAccepted()
+        if isinstance(self.set_default_result, GatewayAccepted):
+            self.default = RichMenuDefaultPresent(rich_menu_id)
+        return self.set_default_result
 
     def clear_default(self, context):
         self.calls.append(("clear_default", context))
-        self.default = RichMenuDefaultExternal()
-        return GatewayAccepted()
+        if isinstance(self.clear_default_result, GatewayAccepted):
+            self.default = RichMenuDefaultExternal()
+        return self.clear_default_result
 
     def delete(self, context, rich_menu_id):
         self.calls.append(("delete", context, rich_menu_id))
@@ -338,6 +343,13 @@ class LifecycleRepository(RecordingRepository):
             ownership_marker="lrm:v1:managed-marker",
             origin_operation_id=uuid4(),
         )
+        self.other = ManagedResourceTarget(
+            public_id=uuid4(),
+            line_rich_menu_id="other-managed-line-id",
+            lifecycle=ResourceLifecycle.APPLIED,
+            ownership_marker="lrm:v1:other-managed-marker",
+            origin_operation_id=uuid4(),
+        )
         self.operation = None
         self.request_fingerprint = None
         self.identity_id = identity_id
@@ -345,7 +357,7 @@ class LifecycleRepository(RecordingRepository):
 
     def list_managed_resources(self, scope):
         del scope
-        return (self.target,)
+        return (self.target, self.other)
 
     def get_managed_resource(self, scope, resource_id):
         del scope
@@ -925,6 +937,25 @@ class RichMenuApplyServiceTests(TransactionTestCase):
         )
         self.assertNotIn("set_default", [call[0] for call in self.gateway.calls])
 
+    # テストケース: operation予約時にMySQL 1205/1213 lock errorを失敗注入する。
+    # 期待値: mutationを開始せずstorage_retryableへ安全分類し、DB詳細を公開しない。
+    def test_mysql_lock_errors_are_safe_retryable_before_external_mutation(self):
+        for code in (1205, 1213):
+            with self.subTest(code=code):
+                self.setUp()
+
+                def fail_accept(command):
+                    del command
+                    raise OperationalError(code, "mysql-lock-detail-canary")
+
+                self.repository.accept = fail_accept
+                result = self.service.start_operation(self.owner, self._command())
+
+                self.assertIsInstance(result, ServiceFailed)
+                self.assertEqual(result.code, SafeResultCode.STORAGE_RETRYABLE)
+                self.assertNotIn("mysql-lock-detail-canary", repr(result))
+                self.assertNotIn("create", [call[0] for call in self.gateway.calls])
+
 
 class RichMenuLifecycleServiceTests(TransactionTestCase):
     def setUp(self):
@@ -988,6 +1019,30 @@ class RichMenuLifecycleServiceTests(TransactionTestCase):
         )
         self.assertIn("clear_default", [call[0] for call in self.gateway.calls])
 
+    # テストケース: LINE defaultが既になし、または別の管理対象でunlinkする。
+    # 期待値: 現在defaultへclearを発行せず対象だけを非defaultへ収束させる。
+    def test_unlink_preserves_none_and_other_managed_defaults(self):
+        for observed in (
+            RichMenuDefaultNone(),
+            RichMenuDefaultPresent("other-managed-line-id"),
+        ):
+            with self.subTest(observed=type(observed).__name__):
+                self.setUp()
+                self.gateway.default = observed
+
+                result = self.service.start_operation(
+                    self.owner, self._command(OperationKind.UNLINK)
+                )
+
+                self.assertIsInstance(result, OperationSucceeded)
+                self.assertEqual(result.operation.result, SafeResultCode.NO_CHANGE)
+                self.assertEqual(
+                    self.repository.target.lifecycle,
+                    ResourceLifecycle.CLEANUP_REQUIRED,
+                )
+                self.assertNotIn("clear_default", [call[0] for call in self.gateway.calls])
+                self.assertEqual(self.gateway.default, observed)
+
     # テストケース: 管理終了を要求する。
     # 期待値: LINE callを一件も行わず、対象resourceだけをreleasedへ移す。
     def test_release_does_not_call_line_and_marks_resource_released(self):
@@ -999,6 +1054,11 @@ class RichMenuLifecycleServiceTests(TransactionTestCase):
         self.assertEqual(result.operation.status, OperationStatus.SUCCEEDED)
         self.assertEqual(self.repository.target.lifecycle, ResourceLifecycle.RELEASED)
         self.assertEqual(self.gateway.calls, [])
+        self.assertEqual(result.operation.result, SafeResultCode.SUCCEEDED)
+        self.assertNotIn(
+            NextAllowedAction.CLEAR_TO_DISABLE,
+            result.operation.next_allowed_actions,
+        )
 
 
 class RichMenuApplyContinuationTests(TransactionTestCase):
@@ -1105,6 +1165,43 @@ class RichMenuApplyContinuationTests(TransactionTestCase):
         self.assertEqual(result.operation.stage, OperationStage.UPLOADING)
         self.assertEqual(self.repository.candidate.lifecycle, ResourceLifecycle.CANDIDATE)
         self.assertNotIn("set_default", [call[0] for call in self.gateway.calls])
+
+    # テストケース: set defaultが拒否またはunknownになるapplyを要求する。
+    # 期待値: appliedへ確定せず候補と旧defaultを保護し、setを一回だけ実行する。
+    def test_set_default_failure_never_confirms_applied_or_retries(self):
+        for result, expected_status in (
+            (GatewayRejected("line_rejected"), OperationStatus.CLEANUP_REQUIRED),
+            (GatewayUnknown("timeout_unknown"), OperationStatus.UNKNOWN),
+        ):
+            with self.subTest(result=type(result).__name__):
+                self.setUp()
+                self.gateway.set_default_result = result
+
+                outcome = self.service.start_operation(self.owner, self._command())
+
+                self.assertIsInstance(outcome, OperationSucceeded)
+                self.assertEqual(outcome.operation.status, expected_status)
+                self.assertNotEqual(self.repository.candidate.lifecycle, ResourceLifecycle.APPLIED)
+                self.assertEqual(
+                    [call[0] for call in self.gateway.calls].count("set_default"), 1
+                )
+
+    # テストケース: set成功後の最終default観測がunknownになるapplyを要求する。
+    # 期待値: appliedへ確定せずverifying unknownを保存し、setや観測を自動retryしない。
+    def test_final_default_observation_unknown_prevents_apply_confirmation(self):
+        self.gateway.default_sequence = [
+            RichMenuDefaultExternal(),
+            RichMenuDefaultExternal(),
+            RichMenuDefaultUnknown("response_unknown"),
+        ]
+
+        outcome = self.service.start_operation(self.owner, self._command())
+
+        self.assertIsInstance(outcome, OperationSucceeded)
+        self.assertEqual(outcome.operation.status, OperationStatus.UNKNOWN)
+        self.assertEqual(outcome.operation.stage, OperationStage.VERIFYING)
+        self.assertNotEqual(self.repository.candidate.lifecycle, ResourceLifecycle.APPLIED)
+        self.assertEqual([call[0] for call in self.gateway.calls].count("set_default"), 1)
 
 
 class RichMenuRecoveryServiceTests(TransactionTestCase):

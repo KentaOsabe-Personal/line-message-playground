@@ -1,3 +1,7 @@
+from datetime import UTC, datetime
+from unittest.mock import Mock
+from uuid import uuid4
+
 from django.core import checks
 from django.test import SimpleTestCase, override_settings
 
@@ -10,8 +14,16 @@ from linerichmenus.container import (
     validate_mutation_readiness_configuration,
 )
 from linerichmenus.headless import DefaultRichMenuLifecyclePort, DjangoHeadlessReferenceContracts
-from linerichmenus.services import DefaultRichMenuService
-from linerichmenus.types import IntegrationNotReady, MutationReady, OperationKind
+from linerichmenus.headless import HeadlessCommand
+from lineaccounts.admin_authorization import OwnerOperationContext
+from linerichmenus.services import DefaultRichMenuService, ServiceFailed
+from linerichmenus.types import (
+    IntegrationNotReady,
+    MutationReady,
+    OperationCommand,
+    OperationKind,
+    SafeResultCode,
+)
 
 
 class MutationReadinessTests(SimpleTestCase):
@@ -90,6 +102,53 @@ class MutationReadinessTests(SimpleTestCase):
                         IntegrationNotReady(reason="integration_not_ready"),
                     )
                     self.assertFalse(readiness.configuration_valid)
+
+    # テストケース: integration marker欠落構成でowner入口とheadless入口から同じunlinkを開始する。
+    # 期待値: 両入口がintegration_not_readyへ一致し、fence・repository・LINEを一件も呼ばない。
+    def test_owner_and_headless_mutations_share_fail_closed_composition(self):
+        gateway = Mock()
+        owner_fence = Mock()
+        channel_port = Mock()
+        repository = Mock()
+        service = DefaultRichMenuService(
+            owner_fence=owner_fence,
+            channel_port=channel_port,
+            repository=repository,
+            gateway=gateway,
+            readiness=build_mutation_readiness(
+                mode="enabled",
+                reference_probe_integrated=True,
+                history_purge_integrated=True,
+                integration_marker="",
+            ),
+        )
+        owner = OwnerOperationContext(uuid4(), uuid4())
+        command = OperationCommand(
+            operation_id=uuid4(),
+            channel_public_id=uuid4(),
+            expected_channel_revision=datetime(2026, 8, 2, tzinfo=UTC),
+            kind=OperationKind.UNLINK,
+            subject_operation_id=None,
+            target_resource_id=uuid4(),
+        )
+
+        owner_result = service.start_operation(owner, command)
+        headless_result = DefaultRichMenuLifecyclePort(service).start_unlink(
+            HeadlessCommand(
+                owner=owner,
+                channel_public_id=command.channel_public_id,
+                expected_channel_revision=command.expected_channel_revision,
+                operation=command,
+            )
+        )
+
+        for result in (owner_result, headless_result):
+            self.assertIsInstance(result, ServiceFailed)
+            self.assertEqual(result.code, SafeResultCode.INTEGRATION_NOT_READY)
+        owner_fence.lock_active.assert_not_called()
+        channel_port.snapshot_exact.assert_not_called()
+        repository.accept.assert_not_called()
+        self.assertEqual(gateway.mock_calls, [])
 
     # テストケース: 未定義modeまたはoperation kindを境界へ渡す。
     # 期待値: fallbackや例外露出をせず安全な拒否結果になる。

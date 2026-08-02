@@ -124,6 +124,48 @@ class RichMenuRepositoryStageCASTests(TransactionTestCase):
         stored = RichMenuOperation.objects.get(pk=self.command.operation_id)
         self.assertEqual(stored.stage, "uploading")
 
+    # テストケース: 各外部I/O stage中にowner/provider/channel revision fenceが変わる。
+    # 期待値: create/upload/set/observe/clear/deleteの旧応答を採用せず元stageのunknownへ収束する。
+    def test_stale_fence_discards_late_response_for_every_external_stage(self):
+        for stage in (
+            OperationStage.CREATING,
+            OperationStage.UPLOADING,
+            OperationStage.SETTING_DEFAULT,
+            OperationStage.VERIFYING,
+            OperationStage.CLEARING_DEFAULT,
+            OperationStage.CLEANING,
+        ):
+            with self.subTest(stage=stage):
+                operation = RichMenuOperation.objects.get(pk=self.command.operation_id)
+                RichMenuOperation.objects.filter(pk=operation.pk).update(
+                    status="processing",
+                    stage=stage.value,
+                    stage_started_at=NOW,
+                    result_code="accepted",
+                    completed_at=None,
+                )
+                operation.channel_state.active_operation_id = operation.operation_id
+                operation.channel_state.blocking_operation = None
+                operation.channel_state.save(
+                    update_fields=("active_operation", "blocking_operation", "updated_at")
+                )
+                self.fence.status = "stale"
+
+                result = self.repository.complete_stage(
+                    StageOutcome(
+                        operation_id=operation.operation_id,
+                        expected_stage=stage,
+                        next_status=OperationStatus.SUCCEEDED,
+                        next_stage=stage,
+                        result=SafeResultCode.SUCCEEDED,
+                    )
+                )
+
+                self.assertEqual(result.status, OperationStatus.UNKNOWN)
+                self.assertEqual(result.stage, stage)
+                stored = RichMenuOperation.objects.get(pk=operation.pk)
+                self.assertEqual(stored.channel_state.blocking_operation_id, stored.operation_id)
+
     def _stage_outcome(self):
         return StageOutcome(
             operation_id=self.command.operation_id,
