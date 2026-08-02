@@ -374,7 +374,7 @@ class PreviewCommand:
             raise ValueError("invalid preview template")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class OperationCommand:
     operation_id: UUID
     channel_public_id: UUID
@@ -382,6 +382,8 @@ class OperationCommand:
     kind: OperationKind
     subject_operation_id: UUID | None
     target_resource_id: UUID | None
+    confirmation_token: str | None = None
+    template: TemplateInput | NormalizedTemplate | None = None
 
     def __post_init__(self) -> None:
         _require_uuid(self.operation_id, "operation id")
@@ -393,10 +395,26 @@ class OperationCommand:
             raise ValueError("invalid operation kind")
         _require_optional_uuid(self.subject_operation_id, "subject operation id")
         _require_optional_uuid(self.target_resource_id, "target resource id")
+        if self.confirmation_token is not None and (
+            not isinstance(self.confirmation_token, str) or not self.confirmation_token
+        ):
+            raise ValueError("invalid confirmation token")
+        if self.template is not None and not isinstance(
+            self.template, (TemplateInput, NormalizedTemplate)
+        ):
+            raise ValueError("invalid operation template")
         _validate_operation_relations(
             kind=self.kind,
             subject_operation_id=self.subject_operation_id,
             target_resource_id=self.target_resource_id,
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"<OperationCommand operation_id={self.operation_id} "
+            f"channel_public_id={self.channel_public_id} kind={self.kind.value} "
+            "expected_channel_revision=redacted confirmation_token=redacted "
+            "template=redacted>"
         )
 
 

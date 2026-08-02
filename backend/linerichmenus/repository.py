@@ -20,6 +20,7 @@ from .models import (
     RichMenuOperation,
     RichMenuOperationTransition,
 )
+from .reconciliation import ManagedResourceTarget
 from .state_machine import InvalidStateTransition, transition_operation, transition_resource
 from .types import (
     NextAllowedAction,
@@ -616,6 +617,445 @@ class DjangoRichMenuRepository:
             state.save(using=self.using, update_fields=("active_operation", "updated_at"))
             return OperationAccepted(_operation_view(operation), candidate_id)
 
+    def list_managed_resources(
+        self, scope: OwnerChannelScope
+    ) -> tuple[ManagedResourceTarget, ...]:
+        if not isinstance(scope, OwnerChannelScope):
+            raise TypeError("invalid owner channel scope")
+        resources = (
+            ManagedRichMenu.objects.using(self.using)
+            .select_related("origin_operation")
+            .filter(
+                channel_state_id=scope.channel_public_id,
+                origin_operation__owner_identity_public_id=scope.owner_identity_public_id,
+                origin_operation__provider_id=scope.provider_id,
+            )
+            .order_by("created_at", "public_id")
+        )
+        return tuple(_resource_target(resource) for resource in resources)
+
+    def record_observation(
+        self, scope: OwnerChannelScope, observation: DefaultObservation
+    ) -> bool:
+        if not isinstance(scope, OwnerChannelScope) or not isinstance(
+            observation, DefaultObservation
+        ):
+            raise TypeError("invalid observation")
+        with transaction.atomic(using=self.using):
+            state, _ = RichMenuChannelState.objects.using(self.using).get_or_create(
+                channel_public_id=scope.channel_public_id
+            )
+            state = (
+                RichMenuChannelState.objects.using(self.using)
+                .select_for_update()
+                .get(channel_public_id=scope.channel_public_id)
+            )
+            if observation.managed_resource_id is not None:
+                owned = (
+                    ManagedRichMenu.objects.using(self.using)
+                    .select_related("origin_operation")
+                    .filter(
+                        public_id=observation.managed_resource_id,
+                        channel_state_id=scope.channel_public_id,
+                        origin_operation__owner_identity_public_id=scope.owner_identity_public_id,
+                        origin_operation__provider_id=scope.provider_id,
+                    )
+                    .exists()
+                )
+                if not owned:
+                    return False
+            state.last_observation_kind = observation.kind.value
+            state.last_observation_fingerprint = observation.fingerprint
+            state.last_observed_at = observation.observed_at
+            state.save(
+                using=self.using,
+                update_fields=(
+                    "last_observation_kind",
+                    "last_observation_fingerprint",
+                    "last_observed_at",
+                    "updated_at",
+                ),
+            )
+        return True
+
+    def get_managed_resource(
+        self, scope: OwnerChannelScope, resource_id: UUID
+    ) -> ManagedResourceTarget | None:
+        if not isinstance(scope, OwnerChannelScope) or not isinstance(resource_id, UUID):
+            raise TypeError("invalid managed resource query")
+        resource = (
+            ManagedRichMenu.objects.using(self.using)
+            .select_related("origin_operation", "replacement_operation")
+            .filter(
+                public_id=resource_id,
+                channel_state_id=scope.channel_public_id,
+                origin_operation__owner_identity_public_id=scope.owner_identity_public_id,
+                origin_operation__provider_id=scope.provider_id,
+            )
+            .first()
+        )
+        return None if resource is None else _resource_target(resource)
+
+    def get_candidate_for_operation(
+        self, scope: OwnerChannelScope, operation_id: UUID
+    ) -> ManagedResourceTarget | None:
+        if not isinstance(scope, OwnerChannelScope) or not isinstance(operation_id, UUID):
+            raise TypeError("invalid candidate query")
+        resources = tuple(
+            ManagedRichMenu.objects.using(self.using)
+            .select_related("origin_operation", "replacement_operation")
+            .filter(
+                origin_operation_id=operation_id,
+                channel_state_id=scope.channel_public_id,
+                origin_operation__owner_identity_public_id=scope.owner_identity_public_id,
+                origin_operation__provider_id=scope.provider_id,
+            )
+            .order_by("created_at", "public_id")
+        )
+        if len(resources) != 1:
+            return None
+        return _resource_target(resources[0])
+
+    def bind_resource_line_id(self, resource_id: UUID, line_rich_menu_id: str) -> bool:
+        if not isinstance(resource_id, UUID) or not isinstance(line_rich_menu_id, str) or not line_rich_menu_id:
+            raise TypeError("invalid line resource binding")
+        with transaction.atomic(using=self.using):
+            resource = (
+                ManagedRichMenu.objects.using(self.using)
+                .select_for_update()
+                .filter(public_id=resource_id)
+                .first()
+            )
+            if resource is None:
+                return False
+            if resource.line_rich_menu_id is not None:
+                return resource.line_rich_menu_id == line_rich_menu_id
+            resource.line_rich_menu_id = line_rich_menu_id
+            try:
+                resource.save(using=self.using, update_fields=("line_rich_menu_id", "updated_at"))
+            except IntegrityError:
+                return False
+        return True
+
+    def get_operation_by_id(self, operation_id: UUID) -> OperationView | None:
+        if not isinstance(operation_id, UUID):
+            raise TypeError("invalid operation id")
+        operation = (
+            RichMenuOperation.objects.using(self.using)
+            .select_related("channel_state")
+            .filter(operation_id=operation_id)
+            .first()
+        )
+        return None if operation is None else _operation_view(operation)
+
+    def get_operation_for_owner(
+        self, owner_identity_public_id: UUID, provider_id: str, operation_id: UUID
+    ) -> OperationView | None:
+        if not isinstance(owner_identity_public_id, UUID) or not isinstance(operation_id, UUID):
+            raise TypeError("invalid operation scope")
+        operation = (
+            RichMenuOperation.objects.using(self.using)
+            .select_related("channel_state")
+            .filter(
+                operation_id=operation_id,
+                owner_identity_public_id=owner_identity_public_id,
+                provider_id=provider_id,
+            )
+            .first()
+        )
+        return None if operation is None else _operation_view(operation)
+
+    def get_request_fingerprint(self, operation_id: UUID) -> str | None:
+        if not isinstance(operation_id, UUID):
+            raise TypeError("invalid operation id")
+        return (
+            RichMenuOperation.objects.using(self.using)
+            .filter(operation_id=operation_id)
+            .values_list("request_fingerprint", flat=True)
+            .first()
+        )
+
+    def get_operation_image_digest(self, operation_id: UUID) -> str | None:
+        if not isinstance(operation_id, UUID):
+            raise TypeError("invalid operation id")
+        return (
+            ManagedRichMenu.objects.using(self.using)
+            .filter(origin_operation_id=operation_id)
+            .values_list("image_digest", flat=True)
+            .first()
+        )
+
+    def mark_resource_cleanup_required(self, resource_id: UUID) -> bool | OperationConflict:
+        if not isinstance(resource_id, UUID):
+            raise TypeError("invalid resource id")
+        with transaction.atomic(using=self.using):
+            resource = (
+                ManagedRichMenu.objects.using(self.using)
+                .select_for_update()
+                .select_related("channel_state")
+                .filter(public_id=resource_id)
+                .first()
+            )
+            if resource is None:
+                return OperationConflict("invalid_relation")
+            lifecycle = ResourceLifecycle(resource.lifecycle)
+            if lifecycle is ResourceLifecycle.CLEANUP_REQUIRED:
+                return True
+            try:
+                next_lifecycle = transition_resource(
+                    lifecycle, ResourceLifecycle.CLEANUP_REQUIRED
+                )
+            except InvalidStateTransition:
+                return OperationConflict("invalid_relation")
+            resource.lifecycle = next_lifecycle.value
+            resource.save(using=self.using, update_fields=("lifecycle", "updated_at"))
+            if resource.channel_state.current_resource_id == resource.public_id:
+                state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
+                    channel_public_id=resource.channel_state_id
+                )
+                state.current_resource = None
+                state.save(using=self.using, update_fields=("current_resource", "updated_at"))
+        return True
+
+    def discard_candidate(self, resource_id: UUID) -> bool | OperationConflict:
+        """外部ID未発行の予約候補だけをローカルで破棄する。"""
+        if not isinstance(resource_id, UUID):
+            raise TypeError("invalid candidate id")
+        with transaction.atomic(using=self.using):
+            resource = (
+                ManagedRichMenu.objects.using(self.using)
+                .select_for_update()
+                .filter(public_id=resource_id)
+                .first()
+            )
+            if (
+                resource is None
+                or resource.lifecycle != ResourceLifecycle.CANDIDATE.value
+                or resource.line_rich_menu_id is not None
+            ):
+                return OperationConflict("invalid_relation")
+            resource.lifecycle = ResourceLifecycle.DELETED.value
+            resource.deleted_at = self._clock()
+            resource.save(using=self.using, update_fields=("lifecycle", "deleted_at", "updated_at"))
+        return True
+
+    def finalize_apply(
+        self, operation_id: UUID, candidate_resource_id: UUID
+    ) -> bool | OperationConflict:
+        if not isinstance(operation_id, UUID) or not isinstance(candidate_resource_id, UUID):
+            raise TypeError("invalid apply finalization")
+        with transaction.atomic(using=self.using):
+            operation = (
+                RichMenuOperation.objects.using(self.using)
+                .select_for_update()
+                .select_related("channel_state")
+                .filter(operation_id=operation_id)
+                .first()
+            )
+            if operation is None:
+                return OperationConflict("operation_not_found")
+            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
+                channel_public_id=operation.channel_state_id
+            )
+            candidate = (
+                ManagedRichMenu.objects.using(self.using)
+                .select_for_update()
+                .filter(public_id=candidate_resource_id, channel_state=state)
+                .first()
+            )
+            if (
+                operation.kind != OperationKind.APPLY.value
+                or operation.status != OperationStatus.PROCESSING.value
+                or operation.stage != OperationStage.VERIFYING.value
+                or state.active_operation_id != operation.operation_id
+                or candidate is None
+                or candidate.origin_operation_id != operation.operation_id
+                or candidate.lifecycle != ResourceLifecycle.CANDIDATE.value
+                or candidate.line_rich_menu_id is None
+            ):
+                return OperationConflict("invalid_relation")
+            current = state.current_resource
+            if current is None:
+                candidate.lifecycle = ResourceLifecycle.APPLIED.value
+                candidate.save(using=self.using, update_fields=("lifecycle", "updated_at"))
+                state.current_resource = candidate
+                state.save(using=self.using, update_fields=("current_resource", "updated_at"))
+                return True
+            if current.public_id == candidate.public_id:
+                return OperationConflict("invalid_relation")
+            if current.lifecycle != ResourceLifecycle.APPLIED.value:
+                return OperationConflict("invalid_relation")
+            replacement = self.record_replacement(
+                replacement_operation_id=operation_id,
+                new_resource_id=candidate.public_id,
+                old_resource_id=current.public_id,
+            )
+            if isinstance(replacement, OperationConflict):
+                return replacement
+        return True
+
+    def finalize_unlink(self, resource_id: UUID) -> bool | OperationConflict:
+        if not isinstance(resource_id, UUID):
+            raise TypeError("invalid unlink resource")
+        with transaction.atomic(using=self.using):
+            resource = (
+                ManagedRichMenu.objects.using(self.using)
+                .select_for_update()
+                .select_related("channel_state")
+                .filter(public_id=resource_id)
+                .first()
+            )
+            if resource is None or resource.lifecycle != ResourceLifecycle.APPLIED.value:
+                return OperationConflict("invalid_relation")
+            resource.lifecycle = ResourceLifecycle.CLEANUP_REQUIRED.value
+            resource.save(using=self.using, update_fields=("lifecycle", "updated_at"))
+            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
+                channel_public_id=resource.channel_state_id
+            )
+            if state.current_resource_id == resource.public_id:
+                state.current_resource = None
+                state.save(using=self.using, update_fields=("current_resource", "updated_at"))
+        return True
+
+    def finalize_release(self, resource_id: UUID) -> bool | OperationConflict:
+        if not isinstance(resource_id, UUID):
+            raise TypeError("invalid release resource")
+        with transaction.atomic(using=self.using):
+            resource = (
+                ManagedRichMenu.objects.using(self.using)
+                .select_for_update()
+                .select_related("channel_state")
+                .filter(public_id=resource_id)
+                .first()
+            )
+            if resource is None or resource.lifecycle != ResourceLifecycle.APPLIED.value:
+                return OperationConflict("invalid_relation")
+            resource.lifecycle = ResourceLifecycle.RELEASED.value
+            resource.released_at = self._clock()
+            resource.save(using=self.using, update_fields=("lifecycle", "released_at", "updated_at"))
+            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
+                channel_public_id=resource.channel_state_id
+            )
+            if state.current_resource_id == resource.public_id:
+                state.current_resource = None
+                state.save(using=self.using, update_fields=("current_resource", "updated_at"))
+        return True
+
+    def finalize_deleted(self, resource_id: UUID) -> bool | OperationConflict:
+        if not isinstance(resource_id, UUID):
+            raise TypeError("invalid delete resource")
+        with transaction.atomic(using=self.using):
+            resource = (
+                ManagedRichMenu.objects.using(self.using)
+                .select_for_update()
+                .select_related("channel_state")
+                .filter(public_id=resource_id)
+                .first()
+            )
+            if resource is None or resource.channel_state.current_resource_id == resource.public_id:
+                return OperationConflict("invalid_relation")
+            if ResourceLifecycle(resource.lifecycle) not in {
+                ResourceLifecycle.CANDIDATE,
+                ResourceLifecycle.OLD,
+                ResourceLifecycle.CLEANUP_REQUIRED,
+            }:
+                return OperationConflict("invalid_relation")
+            resource.lifecycle = ResourceLifecycle.DELETED.value
+            resource.deleted_at = self._clock()
+            resource.save(using=self.using, update_fields=("lifecycle", "deleted_at", "updated_at"))
+        return True
+
+    def complete_recovery(
+        self, operation_id: UUID, next_status: OperationStatus, result: SafeResultCode
+    ) -> OperationView | StageConflict:
+        if not isinstance(operation_id, UUID) or not isinstance(next_status, OperationStatus):
+            raise TypeError("invalid recovery completion")
+        with transaction.atomic(using=self.using):
+            operation = (
+                RichMenuOperation.objects.using(self.using)
+                .select_for_update()
+                .select_related("channel_state")
+                .filter(operation_id=operation_id)
+                .first()
+            )
+            if operation is None or operation.status != OperationStatus.RECOVERY_ACTIVE.value:
+                return StageConflict("stale_stage")
+            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
+                channel_public_id=operation.channel_state_id
+            )
+            if next_status not in {OperationStatus.UNKNOWN, OperationStatus.FAILED}:
+                return StageConflict("invalid_transition")
+            self._append_transition(
+                operation=operation,
+                from_status=OperationStatus.RECOVERY_ACTIVE,
+                to_status=next_status,
+                stage=OperationStage(operation.stage),
+                reason=result,
+            )
+            operation.status = next_status.value
+            operation.stage_started_at = None
+            operation.result_code = result.value
+            if next_status is OperationStatus.FAILED:
+                operation.completed_at = self._clock()
+            state.active_operation = None
+            state.blocking_operation = operation
+            operation.save(
+                using=self.using,
+                update_fields=("status", "stage_started_at", "result_code", "completed_at", "updated_at"),
+            )
+            state.save(using=self.using, update_fields=("active_operation", "blocking_operation", "updated_at"))
+            return _operation_view(operation)
+
+    def complete_cleanup_recovery(
+        self, operation_id: UUID, resource_id: UUID | None
+    ) -> OperationView | StageConflict:
+        if not isinstance(operation_id, UUID) or not isinstance(resource_id, UUID):
+            raise TypeError("invalid cleanup completion")
+        with transaction.atomic(using=self.using):
+            operation = (
+                RichMenuOperation.objects.using(self.using)
+                .select_for_update()
+                .select_related("channel_state")
+                .filter(operation_id=operation_id, kind=OperationKind.CLEANUP.value)
+                .first()
+            )
+            if operation is None or operation.status != OperationStatus.RECOVERY_ACTIVE.value:
+                return StageConflict("stale_stage")
+            target = ManagedRichMenu.objects.using(self.using).select_for_update().filter(
+                public_id=resource_id,
+                channel_state_id=operation.channel_state_id,
+                lifecycle=ResourceLifecycle.DELETED.value,
+            ).first()
+            if target is None:
+                return StageConflict("invalid_transition")
+            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
+                channel_public_id=operation.channel_state_id
+            )
+            self._append_transition(
+                operation=operation,
+                from_status=OperationStatus.RECOVERY_ACTIVE,
+                to_status=OperationStatus.SUCCEEDED,
+                stage=OperationStage.CLEANING,
+                reason=SafeResultCode.SUCCEEDED,
+            )
+            operation.status = OperationStatus.SUCCEEDED.value
+            operation.stage_started_at = None
+            operation.result_code = SafeResultCode.SUCCEEDED.value
+            operation.completed_at = self._clock()
+            operation.save(
+                using=self.using,
+                update_fields=("status", "stage_started_at", "result_code", "completed_at", "updated_at"),
+            )
+            if state.active_operation_id == operation.operation_id:
+                state.active_operation = None
+            if state.blocking_operation_id in {
+                operation.operation_id,
+                operation.subject_operation_id,
+            }:
+                state.blocking_operation = None
+            state.save(using=self.using, update_fields=("active_operation", "blocking_operation", "updated_at"))
+            return _operation_view(operation)
+
     def accept_recovery(
         self, command: AcceptedOperation
     ) -> RecoveryAccepted | OperationReplay | OperationConflict:
@@ -1124,6 +1564,17 @@ def _resource_view(resource: ManagedRichMenu) -> ManagedResourceView:
         origin_operation_id=resource.origin_operation_id,
         lifecycle=ResourceLifecycle(resource.lifecycle),
         image_digest=resource.image_digest,
+    )
+
+
+def _resource_target(resource: ManagedRichMenu) -> ManagedResourceTarget:
+    return ManagedResourceTarget(
+        public_id=resource.public_id,
+        line_rich_menu_id=resource.line_rich_menu_id,
+        lifecycle=ResourceLifecycle(resource.lifecycle),
+        ownership_marker=resource.ownership_marker,
+        origin_operation_id=resource.origin_operation_id,
+        replacement_operation_id=resource.replacement_operation_id,
     )
 
 
