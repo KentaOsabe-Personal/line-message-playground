@@ -242,7 +242,7 @@ stateDiagram-v2
 
 `Processing`の具体stageは`creating | uploading | setting_default | verifying | clearing_default | cleaning | local_release`である。channel stateは未解決の`blocking_operation_id`と、現在I/Oを実行する`active_operation_id`を分離する。明示recheck／cleanupはblockerを`subject_operation_id`へ持つ独立operationとして一件だけ`RecoveryActive`へclaimし、未解決なら元blockerを維持する。観測で元stageの成功を確認し未開始stageが残る場合、recoveryを確定して元operationを次stageへatomic handoffするため、結果不明だった外部作用自体は再実行しない。
 
-createの明示拒否でLINE IDが発行されていない場合は外部作用なしの`Failed`としてblockerを解放する。create成功後のupload拒否、set直前のdefault差分、置換後の旧資源は、検証可能な候補を`CleanupRequired`として保持する。resource lifecycleは`candidate → applied → old/cleanup_required → deleted`または`applied → released`だけを許可する。
+createの明示拒否でLINE IDが発行されていない場合は外部作用なしの`Failed`としてblockerを解放する。create成功後のupload拒否、set直前のdefault差分、置換後の旧資源は、検証可能な候補を`CleanupRequired`として保持する。置換時は一つのreplacement operationと、それが旧資源化した一つの管理対象資源をnullable one-to-one関係としてatomicに保存し、同一channelに存在するだけの別old資源を同じcleanup対象へ推測しない。resource lifecycleは`candidate → applied → old/cleanup_required → deleted`または`applied → released`だけを許可する。
 
 ## Requirements Traceability
 
@@ -359,6 +359,7 @@ class RichMenuConfirmation(Protocol):
 - `RichMenuChannelState`行を`select_for_update`し、`blocking_operation_id`、`active_operation_id`、cleanup待ち、applied resourceの競合を一箇所で判定する。
 - operation IDはglobal unique、request fingerprintはowner/channel/kind/subject/target/config/confirmationを含む。同一ID・同一fingerprintは現在blockerの変化後も保存済み状態を返し、異なるfingerprintはconflictを返す。
 - recheckは`subject_operation_id`を必須、cleanupは`subject_operation_id`と`target_resource_id`を必須とする。unlink/releaseは`target_resource_id`だけを必須とし、applyは両方を持たない。subject/targetは同一channelに属し、循環参照を許さない。
+- replacement cleanupではtarget resourceの`replacement_operation_id`がsubject apply operationと完全一致することを必須にし、同一channel、current resource、またはold lifecycleだけから関係を推測しない。
 - 通常operationはblockerがない場合だけ受付する。recovery operationは指定subjectが現在blockerで、kindとsubject stage／target lifecycleの組合せが許可される場合だけ、blockerを保持したままactiveへatomic claimする。
 - create前に128-bit以上のrandom ownership markerを保存し、LINE rich menu `name`へversioned prefix付きで埋める。LINE ID単独では所有権としない。
 - 各外部段階は`ready → in_flight → accepted/rejected/unknown`をCASする。response到着時のstage/revision mismatchは現在状態を上書きしない。
@@ -569,13 +570,14 @@ erDiagram
     RichMenuChannelState ||--o{ ManagedRichMenu : tracks
     RichMenuOperation ||--o{ RichMenuOperationTransition : records
     RichMenuOperation ||--o{ ManagedRichMenu : originates
+    RichMenuOperation ||--o| ManagedRichMenu : replaces
     RichMenuOperation o|--o{ RichMenuOperation : subject
     ManagedRichMenu o|--o{ RichMenuOperation : target
 ```
 
 - **Aggregate root**: `RichMenuChannelState`。channel public UUIDごとに一件で、blocking operation、active operation、current managed resourceを管理する。
 - **Entity**: `RichMenuOperation`。owner/provider/channel/kind/request snapshot、subject operation、target resource、現在stage/resultを持ち、owner履歴のheaderとなる。
-- **Entity**: `ManagedRichMenu`。operation固有marker、LINE ID、image digest、candidate/applied/old/cleanup/deleted/released lifecycleを持つ。
+- **Entity**: `ManagedRichMenu`。operation固有marker、LINE ID、image digest、candidate/applied/old/cleanup/deleted/released lifecycle、および当該資源を旧資源化したnullable replacement operationを持つ。
 - **Entity**: `RichMenuOperationTransition`。safe codeと時刻だけをappend-onlyで記録する。
 - **Value objects**: normalized template、pixel digest、default observation fingerprint、operation fingerprint、safe error、next allowed action。
 
@@ -585,12 +587,14 @@ erDiagram
 |---------------|------------|-----------------------|
 | `linerichmenus_channelstate` | `channel_public_id UUID`, `blocking_operation_id UUID?`, `active_operation_id UUID?`, `current_resource_id UUID?`, last observation kind/fingerprint/time | UNIQUE channel ID、INDEX blocking/active operation、observation enum CHECK |
 | `linerichmenus_operation` | `operation_id UUID`, channel FK, owner identity UUID, provider ID, kind, `subject_operation_id?`, `target_resource_id?`, request fingerprint, confirmation usage digest?, expected revision, status, stage, stage started at, result code, configuration JSON?, timestamps | PK operation ID、nullable self/resource FK、UNIQUE confirmation usage digest when non-null、INDEX channel+accepted_at/subject/target、CHECK kind/relation/status/stage |
-| `linerichmenus_resource` | `public_id UUID`, channel FK, origin operation FK, `line_rich_menu_id?`, ownership marker, lifecycle, image digest, timestamps | UNIQUE line ID when non-null、UNIQUE marker、INDEX channel+lifecycle、CHECK lifecycle |
+| `linerichmenus_resource` | `public_id UUID`, channel FK, origin operation FK, `replacement_operation_id?`, `line_rich_menu_id?`, ownership marker, lifecycle, image digest, timestamps | UNIQUE line ID when non-null、UNIQUE marker、UNIQUE replacement operation when non-null、INDEX channel+lifecycle、CHECK lifecycle/replacement relation |
 | `linerichmenus_transition` | operation FK, sequence, from/to stage, safe reason, observed_at, created_at | UNIQUE operation+sequence、INDEX operation+created_at |
 
 `configuration_snapshot`はversioned JSON objectとしてtemplate ID/versionとordered fieldsの表示名・完全URLだけを持つ。serializerはread時にもschemaを検証し、catalog変更で既存snapshotを書き換えない。外部raw response、credential、token、image binary、owner LINE user IDを列へ追加しない。
 
 operation relation CHECKは、`apply: subject null/target null`、`unlink|release: subject null/target required`、`recheck: subject required/target null`、`cleanup: subject required/target required`を固定する。同一channel、subject非自己参照、subject chain非循環、targetのorigin/lifecycle整合はchannel state lock下のrepositoryで検証する。nullable relationはhistory purge transaction内だけ明示解除でき、それ以外の更新を公開しない。
+
+resource replacement relationは、`candidate|applied|released`ではnullとし、`old|cleanup_required|deleted`では発生元に応じて保持できる。既存の`old`行は推測でbackfillせずnullのまま保持し、ownership relation不明としてcleanupをfail closedにする。新しい`old`遷移ではreplacement operationを必須とし、relation先が同一channelのreplacement apply operationであることをrepositoryがchannel state lock下で検証する。
 
 ### Consistency & Integrity
 
@@ -599,6 +603,8 @@ operation relation CHECKは、`apply: subject null/target null`、`unlink|releas
 - `blocking_operation_id`はunknownまたはcleanup blockerが解消するまで保持する。`active_operation_id`は現在外部I/Oをclaimした通常／recovery operationだけを指し、I/O待ちでないunknown中はnullにできる。
 - blocker中は、そのblockerをsubjectとする許可済みrecheck／cleanup一件だけをactiveへclaimできる。通常operation、release、異なるsubject/target、二件目のrecoveryは拒否する。
 - recovery完了時は、child/subject/resource/pointer/transitionを一つのtransactionで更新する。recheck観測成功で未開始stageが残る場合はchildをterminalにし、subjectを次stageへactive handoffする。cleanup delete unknown時だけchildを新blockerにする。
+- recoveryは受付時点のcurrent channel revisionをchild operationへ独立bindし、観測完了時にchildのowner/provider/channel/revisionをexact再lockする。staleなら観測結果でsubject/resourceを変更せず、元blockerを維持したままchildだけを安全に終了してactive pointerを解放する。
+- replacement確定時は新current resource、旧resource lifecycle、旧resourceのreplacement operation、およびchannel stateを一transactionで更新する。replacement cleanupは保存済みrelationがsubjectと一致する一資源だけをclaimする。
 - state/current resourceとresource lifecycleの整合はrepository methodとDB CHECK/unique constraintで二重に守る。
 - history purgeはterminal history-only以外を削除せず、nullable recovery relationを同一transaction内で解除してからoperation/transition/deleted-or-released resourceと空のchannel state rowを削除する。途中失敗はtransactionをrollback-onlyにする。
 
@@ -702,7 +708,7 @@ graph LR
 ```
 
 1. `Pillow==12.3.0`、font、OFLを追加し、container buildとstartup system checkでversion/digestを検証する。
-2. `linerichmenus.0001_initial`で独立4 tableとconstraints/indexesを作る。data migration、既存row更新、既存外部作用を行わない。
+2. `linerichmenus.0001_initial`で独立4 tableとconstraints/indexesを作り、`0002_resource_replacement_operation`でnullable one-to-one replacement relationとCHECK制約を追加する。data migration、既存row更新、既存外部作用を行わない。
 3. appとowner API routeをread-only readinessで有効にする。template、preview、state、history readは利用できるが、owner/headless mutationは`integration_not_ready`へfail closedにする。
 4. golden image、exact-provider snapshot、scoped LINE mock、recovery handoff、migration非破壊testを通す。
 5. 下流Specがreference probeとrollback-only purgeをチャネル削除transactionへ組み込み、同じreleaseでintegration markerとmutation readinessを有効化してからFrontend／チャネル状態変更へ接続する。
