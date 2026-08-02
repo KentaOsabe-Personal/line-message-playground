@@ -19,9 +19,9 @@
   - 完了時には、全境界が生のLINE応答や資格情報なしで状態と結果を受け渡せ、未定義variantを型境界で扱えない。
   - _Requirements: 5.1, 5.8, 8.1, 8.8, 10.7, 10.8, 10.9, 10.10, 11.10_
 - [x] 1.4 リッチメニュー用の独立schemaを追加する
-  - channel state、operation、managed resource、append-only transitionの4モデルと、relation・lifecycle・index・一意性・CHECK制約をmigrationへ定義する。
+  - channel state、operation、managed resource、append-only transitionの4モデルと、operation/resource replacement relation・lifecycle・index・一意性・CHECK制約をmigrationへ定義する。
   - 既存テーブルや既存行を更新しない空schema migrationとし、channel public IDを集約境界にする。
-  - 完了時には、空DBと既存データ入りDBの双方で4テーブルだけが追加され、無効なoperation relationとresource lifecycleがDB制約で拒否される。
+  - 完了時には、空DBと既存データ入りDBの双方で4テーブルとnullable replacement relationだけが追加され、無効なoperation relation、resource lifecycle、replacement relationがDB制約で拒否される。
   - _Requirements: 6.1, 6.3, 6.4, 7.1, 8.1, 9.8, 10.1, 10.2, 10.6, 10.12_
   - _Boundary: RichMenuStateMachine, RichMenuRepository_
 
@@ -55,43 +55,43 @@
   - _Requirements: 4.2, 4.3, 4.4, 4.6, 4.7, 4.9, 6.1, 6.2, 6.3, 10.7, 10.9_
   - _Boundary: RichMenuConfirmation_
 
-- [ ] 3. 状態機械と永続化を実装する
-- [ ] 3.1 operationと管理資源の許可遷移を実装する
+- [x] 3. 状態機械と永続化を実装する
+- [x] 3.1 operationと管理資源の許可遷移を実装する
   - accepted・processing・failed・unknown・cleanup required・recovery active・succeededと具体stageの遷移を純粋関数で定義する。
   - candidate→applied→old/cleanup→deletedとapplied→releasedだけを許し、unlinkとreleaseを別操作として扱う。
   - 完了時には、全許可遷移が一意な結果になり、不正なstage、relation、resource lifecycleは状態変更前に拒否される。
   - _Depends: 1.3_
   - _Requirements: 6.4, 6.7, 6.8, 6.9, 7.1, 7.5, 7.6, 7.7, 7.8, 7.9, 8.1, 8.2, 8.7, 8.9, 9.6, 9.8_
   - _Boundary: RichMenuStateMachine_
-- [ ] 3.2 channel単位のoperation受付と冪等予約を実装する
+- [x] 3.2 channel単位のoperation受付と冪等予約を実装する
   - reference fenceとchannel stateを同一transactionでlockし、global operation ID、request fingerprint、confirmation usage digestを原子的に予約する。
   - 同一ID・同一fingerprintは保存済み状態へ収束させ、異fingerprint、競合operation、別subject/targetを外部作用前に拒否する。
   - 完了時には、並行受付でも一行・一候補だけが予約され、同一要求の再送は新しいLINE作用を作らない。
   - _Depends: 1.4, 3.1_
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 7.1, 7.9, 8.2, 8.9, 9.8_
   - _Boundary: RichMenuRepository_
-- [ ] 3.3 stage claim・CAS・外部I/O後fenceを実装する
+- [x] 3.3 stage claim・CAS・外部I/O後fenceを実装する
   - DB lockを外部I/O前に解放し、戻り時にowner/provider/channel revisionとoperation stageをexactに再lockしてCASする。
   - staleな応答が現在状態を上書きしないようunknownまたはrecheck_requiredへ安全に収束し、次stageでは新しいsnapshotを要求する。
   - 完了時には、外部I/O中に各fence軸を変更しても古い応答が確定状態を上書きせず、回復可能なblockerが保存される。
   - _Depends: 3.2_
   - _Requirements: 1.3, 1.6, 1.7, 6.4, 8.1, 8.2, 11.3_
   - _Boundary: RichMenuRepository_
-- [ ] 3.4 blockerとrecoveryのatomic claim・handoffを実装する
+- [x] 3.4 blockerとrecoveryのatomic claim・handoffを実装する
   - blocking operationとactive operationを分離し、許可されたsubject/targetを持つrecheckまたはcleanup一件だけをclaimする。
   - 観測成功時にchild確定と元operationの次未開始stageへのhandoffを一transactionで行い、cleanup delete unknownだけを新blockerへ移す。
   - 完了時には、二重recovery、異channel、自己参照、循環、異subject/targetが拒否され、成功したrecoveryで同じ外部作用を再実行せず元操作が進む。
   - _Depends: 3.3_
   - _Requirements: 7.9, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 9.7, 9.8_
   - _Boundary: RichMenuRepository_
-- [ ] 3.5 owner scopeの状態・operation・履歴queryを実装する
+- [x] 3.5 owner scopeの状態・operation・履歴queryを実装する
   - 保存済み状態、blocking/active operation、resource、cleanup、最新観測、next actionsを一貫したprojectionで取得する。
   - 履歴をowner/provider/channelでscopeし、新しい順、limit 1〜50、opaque cursor、immutable configuration snapshotで返す。
   - 完了時には、件数に依存しないquery数で対象ownerの履歴だけがページングされ、別scopeの存在や完全URLが漏れない。
   - _Depends: 3.2_
   - _Requirements: 1.1, 1.4, 1.5, 5.1, 5.8, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.9_
   - _Boundary: RichMenuRepository_
-- [ ] 3.6 reference probeとrollback-only履歴purgeを実装する
+- [x] 3.6 reference probeとrollback-only履歴purgeを実装する
   - applied・processing・unknown・cleanup待ちを削除阻止参照とし、terminal history-onlyを阻止対象から外す。
   - purgeをchannel削除transaction内だけで許可し、blocker・storage failure・部分失敗ではrollback-onlyにしてnullable recovery relationを安全に解除する。
   - 完了時には、呼出側が失敗結果を無視しても参照中channelや部分purgeをcommitできず、history-only channelだけが同じ完了単位で削除できる。
@@ -335,5 +335,7 @@
   - _Boundary: test_performance.py_
 
 ## Implementation Notes
+
+- Task 3 debug: recoveryは開始時のcurrent revisionを独立bindしてhandoff時にexact fenceを再検証する必要があり、replacement cleanupにはold resourceからreplacement operationへの永続的な一意relationが必要。
 
 - 2.3: 固定font layoutはcmap内の最大advance glyphを入力上限まで描画して検証し、PNG再読込ではdecompression bombを含むparser例外を`image_invalid`へ縮約する。
