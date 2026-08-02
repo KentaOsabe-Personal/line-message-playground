@@ -229,6 +229,13 @@ class ManagedRichMenu(models.Model):
         on_delete=models.PROTECT,
         related_name="originated_resources",
     )
+    replacement_operation = models.OneToOneField(
+        RichMenuOperation,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="replaced_resource",
+    )
     line_rich_menu_id = models.CharField(
         max_length=128, null=True, blank=True, unique=True
     )
@@ -260,6 +267,16 @@ class ManagedRichMenu(models.Model):
                     )
                 ),
                 name="lrm_resource_lifecycle_valid",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        lifecycle__in=("candidate", "applied", "released"),
+                        replacement_operation__isnull=True,
+                    )
+                    | Q(lifecycle__in=("old", "cleanup_required", "deleted"))
+                ),
+                name="lrm_resource_replacement_valid",
             ),
             models.CheckConstraint(
                 condition=(
