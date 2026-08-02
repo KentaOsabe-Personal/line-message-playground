@@ -99,36 +99,36 @@
   - _Requirements: 9.8, 10.12, 11.7, 11.8, 11.9_
   - _Boundary: HeadlessReferenceContracts_
 
-- [ ] 4. チャネル資格情報境界とLINE観測を実装する
-- [ ] 4.1 (P) exact-providerのチャネル操作snapshot portを追加する
+- [x] 4. チャネル資格情報境界とLINE観測を実装する
+- [x] 4.1 (P) exact-providerのチャネル操作snapshot portを追加する
   - owner・本人関係・provider完全一致・active状態・revision・資格情報を一つの非serialize snapshotとして取得する。
   - 外部I/O後に同じ軸を再lock検証するportを追加し、provider nullを許すlegacy scopeから分離する。
   - 完了時には、provider未設定・不一致・inactive・stale・credential読取不能がLINE call前に安全に拒否され、別provider tokenを選ばない。
   - _Depends: 1.3_
   - _Requirements: 1.1, 1.3, 1.4, 1.5, 1.6, 1.7, 11.3_
   - _Boundary: OwnerChannelOperationPort_
-- [ ] 4.2 LINE rich menu JSON・default gatewayを実装する
+- [x] 4.2 LINE rich menu JSON・default gatewayを実装する
   - validate・create・list・get・set/get/clear default・deleteをchannel-scoped context必須、SDK retry 0で提供する。
   - 2xx、作用なしを確認できる4xx、401/403/404/415、429、5xx、timeout、connection、malformed responseをsafe unionへ縮約する。
   - 完了時には、JSON/default endpointが資格情報・LINE ID・raw bodyを例外やlogへ出さず、曖昧な結果を成功や不存在と推測しない。
   - _Depends: 4.1_
   - _Requirements: 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 6.5, 6.6, 6.8, 6.11, 7.2, 7.3, 7.4, 7.5, 8.1, 8.8, 9.2, 9.3, 9.4, 9.7, 10.7, 10.10_
   - _Boundary: RichMenuGateway_
-- [ ] 4.3 LINE画像upload・download gatewayを実装する
+- [x] 4.3 LINE画像upload・download gatewayを実装する
   - 画像content type・sizeを制約したuploadとdownloadを同じchannel-scoped contextで提供し、blobの確実なcloseとdigest照合を行う。
   - timeout、connection、429、5xx、malformed content、close failureを安全な拒否または結果不明へ分類する。
   - 完了時には、画像binaryがgateway callの寿命を越えず、upload/downloadの曖昧な作用と観測を成功扱いしない。
   - _Depends: 2.3, 4.1_
   - _Requirements: 3.5, 3.7, 5.5, 5.6, 6.5, 6.11, 8.1, 8.8, 10.8, 10.10_
   - _Boundary: RichMenuGateway_
-- [ ] 4.4 保存状態と現在defaultの保守的な分類を実装する
+- [x] 4.4 保存状態と現在defaultの保守的な分類を実装する
   - defaultなし、管理対象一致、外部・別管理対象、認可/不存在/通信/解釈不能によるunknownを分類する。
   - 管理対象資源の一時非観測だけで作成失敗、削除済み、所有権喪失と確定せず、アプリ外資源の内容や所有権を推測しない。
   - 完了時には、各観測が安全な実状態分類とnext actionsになり、external resourceを取込み・編集・削除する経路が存在しない。
   - _Depends: 3.5, 4.2_
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 7.3, 7.4, 7.8_
   - _Boundary: RichMenuReconciler_
-- [ ] 4.5 unknown stageとcleanup対象のrecheck観測を実装する
+- [x] 4.5 unknown stageとcleanup対象のrecheck観測を実装する
   - marker 0/1/複数、個別取得、download digest、default、delete非観測quorumから元operationと一意な資源関係を検証する。
   - 観測不能・複数候補・関係未検証では採用も削除もせず、元blockerと明示的next actionを維持する。
   - 完了時には、create/upload/set/clear/deleteの各unknownを同じ外部作用なしで照合し、確認できた段階だけを元operationへ反映できる。
