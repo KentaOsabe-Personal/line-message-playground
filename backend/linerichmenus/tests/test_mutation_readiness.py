@@ -3,13 +3,30 @@ from django.test import SimpleTestCase, override_settings
 
 from linerichmenus.container import (
     LIFECYCLE_INTEGRATION_MARKER,
+    build_headless_lifecycle_port,
+    build_headless_reference_contracts,
     build_mutation_readiness,
+    build_rich_menu_service,
     validate_mutation_readiness_configuration,
 )
+from linerichmenus.headless import DefaultRichMenuLifecyclePort, DjangoHeadlessReferenceContracts
+from linerichmenus.services import DefaultRichMenuService
 from linerichmenus.types import IntegrationNotReady, MutationReady, OperationKind
 
 
 class MutationReadinessTests(SimpleTestCase):
+    # テストケース: runtime composition rootからowner APIとheadless向けconcrete依存を構築する。
+    # 期待値: service・lifecycle・reference/purgeが同じfail-closed設定で実体化される。
+    def test_composition_root_builds_all_public_contracts(self):
+        service = build_rich_menu_service()
+        lifecycle = build_headless_lifecycle_port()
+        references = build_headless_reference_contracts()
+
+        self.assertIsInstance(service, DefaultRichMenuService)
+        self.assertIsInstance(lifecycle, DefaultRichMenuLifecyclePort)
+        self.assertIsInstance(lifecycle._service, DefaultRichMenuService)
+        self.assertIsInstance(references, DjangoHeadlessReferenceContracts)
+
     # テストケース: foundation単独のread_only modeで全mutation種別を照合する。
     # 期待値: 全種別が外部作用前にintegration_not_readyへ分類される。
     def test_read_only_rejects_every_mutation_kind(self):

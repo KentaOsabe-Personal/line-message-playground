@@ -8,4 +8,5 @@ urlpatterns = [
     path("api/deliveries/", include("delivery.urls")),
     path("api/line/webhooks/", include("linewebhooks.urls")),
     path("api/line/channels/", include("linechannels.urls")),
+    path("api/line/rich-menus/", include("linerichmenus.urls")),
 ]
