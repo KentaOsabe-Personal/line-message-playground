@@ -298,16 +298,24 @@ class DjangoAdminChannelRepository:
                 .values("public_id", "label", "updated_at")
                 .first()
             )
+            if row is None:
+                return None
+            deactivation_pending = (
+                ChannelDeactivationState.objects.using(self.using)
+                .select_for_update()
+                .filter(line_channel__public_id=row["public_id"])
+                .exclude(status="completed")
+                .exists()
+            )
         except OperationalError as error:
             raise self._persistence_error(error) from None
         except DatabaseError:
             raise PersistenceError("storage_unavailable") from None
-        if row is None:
-            return None
         return LockedAdminChannel(
             public_id=row["public_id"],
             label=row["label"],
             updated_at=row["updated_at"],
+            deactivation_pending=deactivation_pending,
         )
 
     def delete_locked(self, channel: LockedAdminChannel) -> tuple[UUID, str]:

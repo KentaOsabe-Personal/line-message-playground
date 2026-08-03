@@ -107,29 +107,29 @@
   - _Boundary: AtomicChannelDelete_
   - _Depends: 3.3_
 
-- [ ] 4. Frontendの境界契約と画面状態を構築する
-- [ ] 4.1 リッチメニューと無効化の応答をexact DTOとして検証する
+- [x] 4. Frontendの境界契約と画面状態を構築する
+- [x] 4.1 リッチメニューと無効化の応答をexact DTOとして検証する
   - template、状態、操作、履歴、無効化についてkey、UUID、日時、enum、長さをclosed setで検証する。
   - 未知のkey・値や禁止された秘密をprotocol errorにし、以前のprojectionを最新として扱わない。
   - preview以外で確認値、URL、画像を受け入れない検証結果を観測できる。
   - _Requirements: 1.4, 1.5, 1.7, 8.7, 8.8, 12.3_
   - _Boundary: RichMenuAdminClient_
 
-- [ ] 4.2 認証付きHTTP手順と安全なエラー変換を実装する
+- [x] 4.2 認証付きHTTP手順と安全なエラー変換を実装する
   - template、preview、状態、操作、履歴、無効化APIをsame-origin sessionとCSRFで呼び出す。
   - GET失敗時は古い状態を表示せず、POSTのnetwork failureでは成功・失敗を推測せず明示的な再取得へ移す。
   - 確認値、URL、画像、内部例外をログ、URL、永続storage、エラーへ渡さない。
   - _Requirements: 1.3, 1.4, 1.5, 1.7, 3.6, 3.7, 3.8, 5.8, 5.9, 7.10, 8.7, 8.8_
   - _Boundary: RichMenuAdminClient_
 
-- [ ] 4.3 一時的なeditor状態とrequest generationの遷移を実装する
+- [x] 4.3 一時的なeditor状態とrequest generationの遷移を実装する
   - 読込中、準備済み、読取専用、再取得必要、取得失敗と、editorのclosed stateを区別する。
   - 入力、template、revision、期限の変化でpreviewを無効化し、古いgenerationの応答を採用しない。
   - session失効またはunmountでdraft、確認値、画像参照を破棄し、永続storageやURLへ保存しない。
   - _Requirements: 1.3, 1.5, 1.6, 2.3, 2.7, 2.8, 3.2, 3.5, 3.6, 3.7, 3.8, 3.9, 9.4, 9.5_
   - _Boundary: RichMenuAdminState_
 
-- [ ] 4.4 チャネル詳細・リッチメニュー状態・履歴を一画面へ安全に合成する
+- [x] 4.4 チャネル詳細・リッチメニュー状態・履歴を一画面へ安全に合成する
   - 同じrequest generationで各取得結果を採用し、読込中、失敗、protocol error時に古い操作を表示しない。
   - 無効チャネルは保存状態だけの読取専用とし、有効チャネルでもserverの実効操作以外は閉じる。
   - session失効、owner利用不能、全連携解除開始時には画面とmemory-only dataが直ちに破棄される。
@@ -308,3 +308,7 @@
   - _Requirements: 3.4, 3.10, 5.10, 7.10, 8.7, 8.9, 10.11, 11.7, 11.9, 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7_
   - _Boundary: LifecycleReadiness, RichMenuAdminConsole, ChannelDeactivationCoordinator, AtomicChannelDelete_
   - _Depends: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8_
+
+## Implementation Notes
+
+- preview成功応答は同一generationの`previewing`状態からだけ採用し、request中の入力・template変更後に旧tokenや画像を新draftへ再結合しない。

@@ -33,6 +33,7 @@ from linechannels.types import (
     PublicChannelSummary,
 )
 from linechannels.validators import build_credential_pair
+from linerichmenus.headless import HistoryPurgeResult
 
 
 def channel_view(*, provider_id="000123", active=True):
@@ -71,6 +72,7 @@ class AdminChannelServiceTests(TransactionTestCase):
         self.foundation = Mock()
         self.references = Mock()
         self.gateway = Mock()
+        self.history_purge = Mock()
         self.clock = Mock(side_effect=lambda: timezone.now())
         self.service = DefaultChannelAdminService(
             self.fence,
@@ -78,6 +80,7 @@ class AdminChannelServiceTests(TransactionTestCase):
             self.foundation,
             self.references,
             self.gateway,
+            history_purge=self.history_purge,
             clock=self.clock,
         )
 
@@ -258,12 +261,44 @@ class AdminChannelServiceTests(TransactionTestCase):
         self.repository.delete_locked.assert_not_called()
 
         self.references.is_referenced.return_value = ReferenceCheckResult("unreferenced")
+        self.history_purge.purge_history.return_value = HistoryPurgeResult("purged")
         self.repository.delete_locked.return_value = (view.public_id, view.label)
         deleted = self.service.delete(self.owner, command)
 
         self.assertEqual(deleted.channel_public_id, view.public_id)
         self.assertEqual(deleted.label, view.label)
+        self.history_purge.purge_history.assert_called_once_with(view.public_id)
         self.repository.delete_locked.assert_called_once_with(view)
+
+    # 3.3 RED: terminal履歴purgeはchannel削除の必須ゲートである。
+    def test_delete_requires_successful_history_purge_in_same_transaction(self):
+        view = channel_view(active=False)
+        command = DeleteAdminChannel(view.public_id, view.updated_at)
+        self.repository.lock_for_delete.return_value = view
+        self.references.is_referenced.return_value = ReferenceCheckResult("unreferenced")
+
+        for purge_status, expected_code in (
+            ("blocked", "channel_referenced"),
+            ("storage_unavailable", "storage_unavailable"),
+        ):
+            with self.subTest(purge_status=purge_status):
+                self.history_purge.reset_mock()
+                self.repository.delete_locked.reset_mock()
+                self.history_purge.purge_history.return_value = HistoryPurgeResult(
+                    purge_status
+                )
+
+                result = self.service.delete(self.owner, command)
+
+                self.assertEqual(result.code, expected_code)
+                self.repository.delete_locked.assert_not_called()
+
+        self.history_purge.purge_history.return_value = HistoryPurgeResult("not_found")
+        self.repository.delete_locked.return_value = (view.public_id, view.label)
+
+        deleted = self.service.delete(self.owner, command)
+
+        self.assertEqual(deleted.channel_public_id, view.public_id)
 
     # テストケース: snapshot取得から外部bot identity取得とrevision再検証まで実行する
     # 期待値: 外部call中はtransactionを保持せず、一致時だけconnectedを返す

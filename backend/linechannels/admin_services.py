@@ -67,6 +67,10 @@ class _ReferenceDirectory(Protocol):
     def is_referenced(self, channel_public_id: UUID) -> ReferenceCheckResult: ...
 
 
+class _HistoryPurge(Protocol):
+    def purge_history(self, channel_public_id: UUID): ...
+
+
 class _BotInfoGateway(Protocol):
     def get_bot_identity(self, access_token): ...
 
@@ -80,6 +84,7 @@ class DefaultChannelAdminService:
         reference_directory: _ReferenceDirectory,
         bot_info_gateway: _BotInfoGateway,
         lifecycle_coordinator=None,
+        history_purge: _HistoryPurge | None = None,
         *,
         using: str = "default",
         clock: Callable[[], datetime] = timezone.now,
@@ -90,6 +95,7 @@ class DefaultChannelAdminService:
         self._reference_directory = reference_directory
         self._bot_info_gateway = bot_info_gateway
         self._lifecycle_coordinator = lifecycle_coordinator
+        self._history_purge = history_purge
         self._using = using
         self._clock = clock
 
@@ -235,11 +241,20 @@ class DefaultChannelAdminService:
                     return AdminServiceFailed("channel_not_found")
                 if locked.updated_at != command.expected_updated_at:
                     return AdminServiceFailed("stale_channel")
+                if getattr(locked, "deactivation_pending", False):
+                    return AdminServiceFailed("deactivation_conflict")
                 reference = self._reference_directory.is_referenced(locked.public_id)
                 if reference.status == "referenced":
                     return AdminServiceFailed("channel_referenced")
                 if reference.status != "unreferenced":
                     return AdminServiceFailed(reference.status)
+                if self._history_purge is None:
+                    return AdminServiceFailed("storage_unavailable")
+                purge = self._history_purge.purge_history(locked.public_id)
+                if purge.status == "blocked":
+                    return AdminServiceFailed("channel_referenced")
+                if purge.status not in {"purged", "not_found"}:
+                    return AdminServiceFailed("storage_unavailable")
                 public_id, label = self._repository.delete_locked(locked)
                 return ChannelDeleteSucceeded(public_id, label)
         except (AttributeError, TypeError):

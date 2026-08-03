@@ -54,6 +54,7 @@ def build_channel_reference_directory() -> ChannelReferenceDirectory:
     from linefriendships.repositories import DjangoFriendshipReferenceProbe
     from lineinteractions.repositories import DjangoInteractionReferenceProbe
     from linewebhooks.repositories import DjangoWebhookReferenceProbe
+    from linerichmenus.container import build_headless_reference_contracts
 
     return ChannelReferenceDirectory(
         (
@@ -62,6 +63,7 @@ def build_channel_reference_directory() -> ChannelReferenceDirectory:
             DjangoWebhookReferenceProbe(),
             DjangoFriendshipReferenceProbe(),
             DjangoInteractionReferenceProbe(),
+            build_headless_reference_contracts(),
         )
     )
 
@@ -89,6 +91,7 @@ def build_manage_line_channel_prompts() -> ManageLineChannelPrompts:
 def build_channel_admin_service() -> DefaultChannelAdminService:
     from lineaccounts.admin_authorization import DjangoOwnerOperationFence
     from lineaccounts.repositories import DjangoAccountRepository
+    from linerichmenus.container import build_headless_reference_contracts
 
     cipher = _build_cipher()
     return DefaultChannelAdminService(
@@ -98,6 +101,7 @@ def build_channel_admin_service() -> DefaultChannelAdminService:
         build_channel_reference_directory(),
         DefaultLineBotInfoGateway(),
         build_channel_deactivation_coordinator(),
+        history_purge=build_headless_reference_contracts(),
     )
 
 

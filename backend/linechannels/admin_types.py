@@ -112,6 +112,7 @@ class LockedAdminChannel:
     public_id: UUID
     label: str
     updated_at: datetime
+    deactivation_pending: bool = False
 
 
 class AdminConnectionSnapshot(_SerializationDisabled):
