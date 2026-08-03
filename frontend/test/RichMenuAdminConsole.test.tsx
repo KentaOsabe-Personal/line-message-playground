@@ -58,6 +58,22 @@ describe('RichMenuAdminConsole', () => {
     expect(container.textContent).toBe('')
   })
 
+  // 6.1 RED: feature flag OFFでは保守的な状態panelがまだ表示されない。
+  test('shows saved state and LINE observation separately', async () => {
+    const channelApi = channels(); const richApi = menus()
+    vi.mocked(richApi.getState).mockResolvedValue({
+      ...rich(),
+      latestObservation: { kind: 'external_default', observedAt: now, fingerprint: 'b'.repeat(64), managedResourceId: null },
+      unavailableReason: 'integration_not_ready',
+      mode: 'unavailable',
+      effectiveActions: [],
+    })
+    await act(async () => root.render(<RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi} />))
+    expect(container.textContent).toContain('LINE実状態')
+    expect(container.textContent).toContain('アプリ外の既定')
+    expect(container.textContent).toContain('integration_not_ready')
+  })
+
   // 5.1-5.3 RED: editorの有効入力だけをpreview APIへ渡し、object URLとbeforeunloadを画面境界で管理する。
   test('creates and clears one memory-only expiring preview', async () => {
     const channelApi = channels(); const richApi = menus()
@@ -125,5 +141,42 @@ describe('RichMenuAdminConsole', () => {
     await Promise.resolve()
     expect(createObjectURL).not.toHaveBeenCalled()
     root = createRoot(container)
+  })
+
+  test('keeps one operation fenced during refresh and reloads saved projections after completion', async () => {
+    const channelApi = channels(); const richApi = menus()
+    vi.mocked(richApi.listTemplates).mockResolvedValue([template])
+    vi.mocked(richApi.getState).mockResolvedValue({ ...rich(), effectiveActions: ['new_preview', 'apply'], nextAllowedActions: ['new_preview', 'apply'] })
+    vi.mocked(richApi.createPreview).mockResolvedValue({
+      channelId, channelLabel: '通知チャネル', templateId: 'jp-link-one', templateVersion: 1,
+      fields: [{ displayName: '案内', uri: 'https://example.com/guide' }],
+      image: { contentType: 'image/png', width: 2500, height: 843, digest: 'a'.repeat(64), base64: 'aGVsbG8=' },
+      observation: { kind: 'default_none', observedAt: now, fingerprint: 'b'.repeat(64), managedResourceId: null },
+      warnings: [], confirmationToken: 'opaque', expiresAt: '2099-08-03T11:00:00+09:00',
+    })
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn().mockReturnValue('blob:operation-preview') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    let finishOperation!: (value: Awaited<ReturnType<RichMenuAdminApiClient['startOperation']>>) => void
+    vi.mocked(richApi.startOperation).mockImplementation((_channelId, input) => new Promise(resolve => {
+      finishOperation = resolve
+      expect(input.kind).toBe('apply')
+    }))
+    await act(async () => root.render(<RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi} />))
+    const inputs = [...container.querySelectorAll('input')]
+    await act(async () => { inputs[0].value = '案内'; inputs[0].dispatchEvent(new Event('input', { bubbles: true })) })
+    await act(async () => { inputs[1].value = 'https://example.com/guide'; inputs[1].dispatchEvent(new Event('input', { bubbles: true })) })
+    await act(async () => container.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })))
+    const apply = [...container.querySelectorAll('button')].find(button => button.textContent === '適用を確定')!
+    await act(async () => apply.click())
+    const refresh = [...container.querySelectorAll('button')].find(button => button.textContent === '操作完了を待っています…')!
+    expect(refresh.disabled).toBe(true)
+    expect(richApi.startOperation).toHaveBeenCalledTimes(1)
+    const input = vi.mocked(richApi.startOperation).mock.calls[0][1]
+    await act(async () => finishOperation({ operationId: input.operationId, kind: 'apply', status: 'unknown', stage: 'verifying', result: 'timeout_unknown', subjectOperationId: null, targetResourceId: null, acceptedAt: now, completedAt: null, nextAllowedActions: ['recheck'] }))
+    expect(richApi.getState).toHaveBeenCalledTimes(2)
+    expect(richApi.getHistory).toHaveBeenCalledTimes(2)
+    expect(container.textContent).toContain(`apply: ${input.operationId}`)
+    expect(container.textContent).toContain('次の明示操作: 結果を再確認')
+    expect(richApi.startOperation).toHaveBeenCalledTimes(1)
   })
 })
