@@ -71,4 +71,30 @@ describe('rich menu admin state', () => {
     expect(transitionRichMenuAdmin(dirty, { type: 'sessionInvalidated' })).toEqual(initialRichMenuAdminState)
     expect(transitionRichMenuAdmin(dirty, { type: 'unmounted' })).toEqual(initialRichMenuAdminState)
   })
+
+  // 5.2 RED: ownerが消去を承認した場合、draftとpreview参照を同時に空へ戻す。
+  test('clears draft and preview references as one editor transition', () => {
+    const ready = transitionRichMenuAdmin(transitionRichMenuAdmin(initialRichMenuAdminState, { type: 'loadStarted', generation: 1 }), { type: 'loadSucceeded', generation: 1, value: loaded() })
+    const dirty = transitionRichMenuAdmin(ready, { type: 'draftChanged', templateId: 'one', templateVersion: 1, fields: { area1: { displayName: '案内', uri: 'https://example.com' } } })
+    const previewing = transitionRichMenuAdmin(dirty, { type: 'previewStarted', generation: 1 })
+    const preview = transitionRichMenuAdmin(previewing, { type: 'previewSucceeded', generation: 1, confirmationToken: 'opaque', imageUrl: 'blob:preview', expiresAt: '2026-08-03T11:00:00+09:00', channelRevision: now })
+    const cleared = transitionRichMenuAdmin(preview, { type: 'editorCleared' })
+    expect(cleared.state).toBe('ready')
+    if (cleared.state !== 'ready') throw new Error('expected ready')
+    expect(cleared.editor).toEqual({ state: 'empty' })
+    expect(JSON.stringify(cleared)).not.toContain('opaque')
+    expect(JSON.stringify(cleared)).not.toContain('blob:preview')
+  })
+
+  // review remediation RED: invalid/expiredへ遷移した理由はtoken/imageを捨てても安全表示に残す。
+  test('retains a safe regeneration reason after preview invalidation and expiry', () => {
+    const ready = transitionRichMenuAdmin(transitionRichMenuAdmin(initialRichMenuAdminState, { type: 'loadStarted', generation: 1 }), { type: 'loadSucceeded', generation: 1, value: loaded() })
+    const dirty = transitionRichMenuAdmin(ready, { type: 'draftChanged', templateId: 'one', templateVersion: 1, fields: { area1: { displayName: '案内', uri: 'https://example.com' } } })
+    const previewing = transitionRichMenuAdmin(dirty, { type: 'previewStarted', generation: 1 })
+    const preview = transitionRichMenuAdmin(previewing, { type: 'previewSucceeded', generation: 1, confirmationToken: 'opaque', imageUrl: 'blob:preview', expiresAt: '2026-08-03T11:00:00+09:00', channelRevision: now })
+    const expired = transitionRichMenuAdmin(preview, { type: 'previewExpired', at: '2026-08-03T11:00:01+09:00' })
+    expect(expired.state).toBe('ready')
+    if (expired.state !== 'ready') throw new Error('expected ready')
+    expect(expired.editor.state).toBe('preview_expired')
+  })
 })

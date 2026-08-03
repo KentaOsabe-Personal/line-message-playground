@@ -11,6 +11,7 @@ const channelId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const now = '2026-08-03T10:00:00+09:00'
 const channel = (active = true) => ({ channelId, label: '通知チャネル', messagingApiChannelId: '123', botUserId: `U${'a'.repeat(32)}`, providerId: '456', active, credentialsState: 'configured' as const, credentialsUpdatedAt: now, createdAt: now, updatedAt: now, webhookUrl: `https://example.test/api/line/webhooks/${channelId}/` })
 const rich = () => ({ channelId, currentResource: null, blockingOperation: null, activeOperation: null, cleanupResources: [], latestObservation: null, historySummary: { totalCount: 0, latestOperationId: null, latestStatus: null }, nextAllowedActions: ['new_preview' as const], mode: 'enabled' as const, effectiveActions: ['new_preview' as const], unavailableReason: null })
+const template = { templateId: 'jp-link-one', version: 1, displayName: '1リンク', canvas: { width: 2500, height: 843 }, areas: [{ field: 'whole', description: '全面', bounds: { x: 0, y: 0, width: 2500, height: 843 } }], requiredFields: ['whole'], limits: { displayName: 20, uri: 1000 } }
 const channels = (active = true): ChannelAdminApiClient => ({ listChannels: vi.fn(), getChannel: vi.fn().mockResolvedValue(channel(active)), register: vi.fn(), update: vi.fn(), setState: vi.fn(), delete: vi.fn(), checkConnection: vi.fn() })
 const menus = (): RichMenuAdminApiClient => ({ listTemplates: vi.fn().mockResolvedValue([]), createPreview: vi.fn(), getState: vi.fn().mockResolvedValue(rich()), startOperation: vi.fn(), getOperation: vi.fn(), getHistory: vi.fn().mockResolvedValue({ items: [], nextCursor: null, hasMore: false }), getDeactivation: vi.fn().mockResolvedValue(null), startDeactivation: vi.fn(), recheckDeactivation: vi.fn() })
 let container: HTMLDivElement
@@ -55,5 +56,74 @@ describe('RichMenuAdminConsole', () => {
     expect(container.textContent).not.toContain('新しいプレビュー')
     await act(async () => root.render(<RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi} invalidated />))
     expect(container.textContent).toBe('')
+  })
+
+  // 5.1-5.3 RED: editorの有効入力だけをpreview APIへ渡し、object URLとbeforeunloadを画面境界で管理する。
+  test('creates and clears one memory-only expiring preview', async () => {
+    const channelApi = channels(); const richApi = menus()
+    vi.mocked(richApi.listTemplates).mockResolvedValue([template])
+    vi.mocked(richApi.createPreview).mockResolvedValue({
+      channelId, channelLabel: '通知チャネル', templateId: 'jp-link-one', templateVersion: 1,
+      fields: [{ displayName: '案内', uri: 'https://example.com/guide' }],
+      image: { contentType: 'image/png', width: 2500, height: 843, digest: 'a'.repeat(64), base64: 'aGVsbG8=' },
+      observation: { kind: 'default_none', observedAt: now, fingerprint: 'b'.repeat(64), managedResourceId: null },
+      warnings: [], confirmationToken: 'opaque', expiresAt: '2099-08-03T11:00:00+09:00',
+    })
+    const createObjectURL = vi.fn().mockReturnValue('blob:preview')
+    const revokeObjectURL = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL })
+    await act(async () => root.render(<RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi} />))
+
+    const inputs = [...container.querySelectorAll('input')]
+    await act(async () => { inputs[0].value = '案内'; inputs[0].dispatchEvent(new Event('input', { bubbles: true })) })
+    await act(async () => { inputs[1].value = 'https://example.com/guide'; inputs[1].dispatchEvent(new Event('input', { bubbles: true })) })
+    const unload = new Event('beforeunload', { cancelable: true }) as BeforeUnloadEvent
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(true)
+    await act(async () => container.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })))
+    expect(richApi.createPreview).toHaveBeenCalledWith(channelId, {
+      templateId: 'jp-link-one', templateVersion: 1, channelRevision: now,
+      fields: { whole: { displayName: '案内', uri: 'https://example.com/guide' } },
+    })
+    expect(container.textContent).toContain('期限付きプレビュー')
+    expect(container.textContent).toContain('1リンク')
+    expect(createObjectURL).toHaveBeenCalledTimes(1)
+
+    const editedName = container.querySelector('input') as HTMLInputElement
+    await act(async () => { editedName.value = '変更'; editedName.dispatchEvent(new Event('input', { bubbles: true })) })
+    expect(container.textContent).toContain('以前のプレビューは適用できません。新しいプレビューを生成してください。')
+    expect(container.textContent).not.toContain('期限付きプレビュー')
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:preview')
+
+    await act(async () => root.render(<RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi} invalidated />))
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:preview')
+    expect(container.textContent).toBe('')
+  })
+
+  // review remediation RED: preview中のunmountは遅延応答を採用せずobject URLを作らない。
+  test('invalidates an in-flight preview before unmount', async () => {
+    const channelApi = channels(); const richApi = menus()
+    vi.mocked(richApi.listTemplates).mockResolvedValue([template])
+    let resolvePreview!: (value: Awaited<ReturnType<RichMenuAdminApiClient['createPreview']>>) => void
+    vi.mocked(richApi.createPreview).mockReturnValue(new Promise(resolve => { resolvePreview = resolve }))
+    const createObjectURL = vi.fn().mockReturnValue('blob:late')
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
+    await act(async () => root.render(<RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi} />))
+    const inputs = [...container.querySelectorAll('input')]
+    await act(async () => { inputs[0].value = '案内'; inputs[0].dispatchEvent(new Event('input', { bubbles: true })) })
+    await act(async () => { inputs[1].value = 'https://example.com/guide'; inputs[1].dispatchEvent(new Event('input', { bubbles: true })) })
+    await act(async () => container.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })))
+    await act(async () => root.unmount())
+    resolvePreview({
+      channelId, channelLabel: '通知チャネル', templateId: 'jp-link-one', templateVersion: 1,
+      fields: [{ displayName: '案内', uri: 'https://example.com/guide' }],
+      image: { contentType: 'image/png', width: 2500, height: 843, digest: 'a'.repeat(64), base64: 'aGVsbG8=' },
+      observation: { kind: 'default_none', observedAt: now, fingerprint: 'b'.repeat(64), managedResourceId: null },
+      warnings: [], confirmationToken: 'opaque', expiresAt: '2099-08-03T11:00:00+09:00',
+    })
+    await Promise.resolve()
+    expect(createObjectURL).not.toHaveBeenCalled()
+    root = createRoot(container)
   })
 })

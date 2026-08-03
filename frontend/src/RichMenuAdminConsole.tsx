@@ -5,7 +5,10 @@ import type { ChannelAdminApiClient } from './channelAdminApi'
 import { createProtectedHttpClient } from './httpApi'
 import { createRichMenuAdminApiClient } from './richMenuAdminApi'
 import type { RichMenuAdminApiClient } from './richMenuAdminApi'
+import RichMenuEditor from './RichMenuEditor'
+import RichMenuPreview from './RichMenuPreview'
 import { initialRichMenuAdminState, transitionRichMenuAdmin } from './richMenuAdminState'
+import type { EditorDraft } from './richMenuAdminState'
 import type { RichMenuAction } from './richMenuAdminDto'
 
 type Props = {
@@ -25,12 +28,14 @@ const actionLabels: Record<RichMenuAction, string> = {
 export default function RichMenuAdminConsole({ channelId, channelApi: suppliedChannelApi, richApi: suppliedRichApi, invalidated = false, onSessionInvalid }: Props) {
   const [state, dispatch] = useReducer(transitionRichMenuAdmin, initialRichMenuAdminState)
   const generation = useRef(0)
+  const previewGeneration = useRef(0)
   const http = useMemo(() => createProtectedHttpClient({ onSessionInvalid }), [onSessionInvalid])
   const channelApi = useMemo(() => suppliedChannelApi ?? createChannelAdminApiClient(http), [suppliedChannelApi, http])
   const richApi = useMemo(() => suppliedRichApi ?? createRichMenuAdminApiClient(http), [suppliedRichApi, http])
 
   const load = useCallback(async () => {
     const current = ++generation.current
+    previewGeneration.current += 1
     dispatch({ type: 'loadStarted', generation: current })
     try {
       const [channel, templates, rich, history, deactivation] = await Promise.all([
@@ -51,10 +56,51 @@ export default function RichMenuAdminConsole({ channelId, channelApi: suppliedCh
   }, [channelApi, channelId, richApi])
 
   useEffect(() => {
-    if (invalidated) { generation.current += 1; dispatch({ type: 'sessionInvalidated' }); return }
+    if (invalidated) { generation.current += 1; previewGeneration.current += 1; dispatch({ type: 'sessionInvalidated' }); return }
     void load()
-    return () => { generation.current += 1 }
+    return () => { generation.current += 1; previewGeneration.current += 1 }
   }, [invalidated, load])
+
+  const editor = state.state === 'ready' ? state.editor : { state: 'empty' as const }
+  const dirty = editor.state !== 'empty'
+  const previewImageUrl = editor.state === 'preview_valid' ? editor.imageUrl : null
+
+  useEffect(() => {
+    if (!dirty || invalidated) return
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [dirty, invalidated])
+
+  useEffect(() => {
+    if (previewImageUrl === null) return
+    return () => URL.revokeObjectURL(previewImageUrl)
+  }, [previewImageUrl])
+
+  useEffect(() => {
+    if (editor.state !== 'preview_valid') return
+    const delay = Math.min(2_147_483_647, Math.max(0, new Date(editor.expiresAt).getTime() - Date.now()))
+    const timeout = window.setTimeout(() => dispatch({ type: 'previewExpired', at: new Date().toISOString() }), delay)
+    return () => window.clearTimeout(timeout)
+  }, [editor])
+
+  const createPreview = useCallback(async (draft: EditorDraft) => {
+    if (state.state !== 'ready' || !state.rich.effectiveActions.includes('new_preview')) return
+    const current = ++previewGeneration.current
+    dispatch({ type: 'previewStarted', generation: current })
+    try {
+      const preview = await richApi.createPreview(channelId, { ...draft, channelRevision: state.channel.updatedAt })
+      if (current !== previewGeneration.current) return
+      if (preview.channelId !== channelId || preview.templateId !== draft.templateId || preview.templateVersion !== draft.templateVersion) {
+        dispatch({ type: 'refreshRequired', reason: 'protocol_error' }); return
+      }
+      const bytes = Uint8Array.from(atob(preview.image.base64), character => character.charCodeAt(0))
+      const imageUrl = URL.createObjectURL(new Blob([bytes], { type: preview.image.contentType }))
+      dispatch({ type: 'previewSucceeded', generation: current, confirmationToken: preview.confirmationToken, imageUrl, expiresAt: preview.expiresAt, channelRevision: state.channel.updatedAt, preview })
+    } catch {
+      dispatch({ type: 'refreshRequired', reason: 'unknown_result' })
+    }
+  }, [channelId, richApi, state])
 
   if (invalidated) return null
   if (state.state === 'idle' || state.state === 'loading') return <section aria-label="リッチメニュー管理"><p role="status">管理状態を読み込んでいます…</p></section>
@@ -65,6 +111,15 @@ export default function RichMenuAdminConsole({ channelId, channelApi: suppliedCh
     <section aria-label="リッチメニュー管理"><div role="alert"><p>操作結果を確定できません。最新状態を再取得してください。</p><button type="button" onClick={() => { void load() }}>最新状態を再取得</button></div></section>
   )
   const readOnly = state.state === 'read_only'
+  const previewPresentation = (() => {
+    if (state.state !== 'ready' || state.editor.state !== 'preview_valid' || state.editor.preview === undefined) return null
+    const preview = state.editor.preview
+    return {
+      preview,
+      imageUrl: state.editor.imageUrl,
+      templateName: state.templates.find(template => template.templateId === preview.templateId && template.version === preview.templateVersion)?.displayName ?? '組み込みテンプレート',
+    }
+  })()
   return (
     <section className="rich-menu-admin" aria-labelledby="rich-menu-admin-heading">
       <header><p className="eyebrow">Rich menu console</p><h2 id="rich-menu-admin-heading">{state.channel.label}</h2></header>
@@ -84,6 +139,24 @@ export default function RichMenuAdminConsole({ channelId, channelApi: suppliedCh
         </div>
       )}
       {readOnly && <p role="status">このチャネルは保存済み状態だけを表示する読取専用です。</p>}
+      {!readOnly && state.rich.effectiveActions.includes('new_preview') && (
+        <RichMenuEditor
+          templates={state.templates}
+          draft={state.editor.state === 'empty' ? null : { templateId: state.editor.templateId, templateVersion: state.editor.templateVersion, fields: state.editor.fields }}
+          onDraftChange={draft => { previewGeneration.current += 1; dispatch({ type: 'draftChanged', ...draft }) }}
+          onTemplateChange={template => { previewGeneration.current += 1; dispatch({ type: 'templateChanged', templateId: template.templateId, templateVersion: template.version }) }}
+          onPreview={draft => { void createPreview(draft) }}
+        />
+      )}
+      {!readOnly && previewPresentation !== null && (
+        <RichMenuPreview
+          preview={previewPresentation.preview}
+          imageUrl={previewPresentation.imageUrl}
+          templateName={previewPresentation.templateName}
+        />
+      )}
+      {!readOnly && state.editor.state === 'preview_invalid' && <p role="alert">以前のプレビューは適用できません。新しいプレビューを生成してください。</p>}
+      {!readOnly && state.editor.state === 'preview_expired' && <p role="alert">プレビューは期限切れです。新しいプレビューを生成してください。</p>}
       <button type="button" onClick={() => { void load() }}>最新状態を再取得</button>
     </section>
   )

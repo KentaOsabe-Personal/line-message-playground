@@ -137,8 +137,8 @@
   - _Boundary: RichMenuAdminConsole_
   - _Depends: 4.1, 4.2, 4.3_
 
-- [ ] 5. template編集と期限付きpreviewを提供する
-- [ ] 5.1 組み込みtemplateの全項目editorを提供する
+- [x] 5. template編集と期限付きpreviewを提供する
+- [x] 5.1 組み込みtemplateの全項目editorを提供する
   - template名、版、必須項目、入力上限、領域を表示し、表示名と完全なHTTPS URLだけを編集可能にする。
   - 項目検証に失敗した場合はpreview requestを送らず、修正対象と安全な理由を表示する。
   - owner画像、自由layout、custom template、URI以外のactionを提供せず、未適用入力が画面で分かる。
@@ -146,7 +146,7 @@
   - _Boundary: RichMenuEditor_
   - _Depends: 4.3_
 
-- [ ] 5.2 editorと状態境界で未適用入力の消去規則を実装する
+- [x] 5.2 editorと状態境界で未適用入力の消去規則を実装する
   - 未適用入力があるtemplate切替では全入力の消去を確認し、取消時は元のtemplateと入力を保つ。
   - 画面内移動とreload・closeに使う未保存判定と消去処理を提供し、session失効やowner利用不能では確認なしに全一時参照を破棄する。
   - 消去完了時にdraftとpreview参照が空になり、object URLも解放され、再認証後に復元されない。
@@ -154,7 +154,7 @@
   - _Boundary: RichMenuEditor, RichMenuAdminState_
   - _Depends: 5.1_
 
-- [ ] 5.3 期限付きpreviewと手動リンク確認を実装する
+- [x] 5.3 期限付きpreviewと手動リンク確認を実装する
   - 対象チャネル、template、生成画像、全項目のURL、実状態、置換警告、有効期限を一つの確認表示にする。
   - 表示だけではリンクへ接続せず、ownerが選んだ一件だけをopenerとreferrerを渡さずに開く。
   - 入力、revision、template、実状態の変化または期限切れで適用を閉じ、リンク結果や到達保証を保存しない。
