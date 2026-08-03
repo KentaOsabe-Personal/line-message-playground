@@ -8,6 +8,12 @@ export type ConnectionStatus =
   | 'identity_mismatch'
   | 'rate_limited'
   | 'line_unavailable'
+export type ChannelDeactivationSummary = {
+  operationId: string
+  status: 'checking' | 'unlinking' | 'confirmation_required' | 'completed'
+  reason: string | null
+  updatedAt: string
+}
 
 export type ChannelAdminItem = {
   channelId: string
@@ -21,6 +27,8 @@ export type ChannelAdminItem = {
   createdAt: string
   updatedAt: string
   webhookUrl: string
+  deactivationSummary: ChannelDeactivationSummary | null
+  richMenuRefreshRequired: boolean
 }
 
 export type DeletedChannel = { channelId: string; label: string; deleted: true }
@@ -82,7 +90,16 @@ export function parseChannelAdminItem(value: unknown): Parsed<ChannelAdminItem> 
   if (!isRecord(value) || !hasExactKeys(value, [
     'channelId', 'label', 'messagingApiChannelId', 'botUserId', 'providerId', 'active',
     'credentialsState', 'credentialsUpdatedAt', 'createdAt', 'updatedAt', 'webhookUrl',
+    'deactivationSummary', 'richMenuRefreshRequired',
   ])) return protocolError()
+  const summary = value.deactivationSummary
+  const validSummary = summary === null || (
+    isRecord(summary) && hasExactKeys(summary, ['operationId', 'status', 'reason', 'updatedAt']) &&
+    isChannelAdminUuid(summary.operationId) &&
+    ['checking', 'unlinking', 'confirmation_required', 'completed'].includes(String(summary.status)) &&
+    (summary.reason === null || (typeof summary.reason === 'string' && summary.reason.length > 0 && summary.reason.length <= 64)) &&
+    isChannelAdminDateTime(summary.updatedAt)
+  )
   if (
     !isChannelAdminUuid(value.channelId) ||
     typeof value.label !== 'string' || value.label.trim().length === 0 || value.label.length > 255 ||
@@ -93,7 +110,8 @@ export function parseChannelAdminItem(value: unknown): Parsed<ChannelAdminItem> 
     (value.credentialsState !== 'configured' && value.credentialsState !== 'repair_required') ||
     !(value.credentialsUpdatedAt === null || isChannelAdminDateTime(value.credentialsUpdatedAt)) ||
     !isChannelAdminDateTime(value.createdAt) || !isChannelAdminDateTime(value.updatedAt) ||
-    !isWebhookUrl(value.webhookUrl, value.channelId)
+    !isWebhookUrl(value.webhookUrl, value.channelId) || !validSummary ||
+    typeof value.richMenuRefreshRequired !== 'boolean'
   ) return protocolError()
   return { ok: true, value: {
     channelId: value.channelId,
@@ -107,6 +125,8 @@ export function parseChannelAdminItem(value: unknown): Parsed<ChannelAdminItem> 
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     webhookUrl: value.webhookUrl,
+    deactivationSummary: summary as ChannelDeactivationSummary | null,
+    richMenuRefreshRequired: value.richMenuRefreshRequired,
   } }
 }
 

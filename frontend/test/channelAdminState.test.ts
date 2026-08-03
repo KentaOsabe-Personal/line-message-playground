@@ -19,6 +19,8 @@ const channel = (label = '通知チャネル'): ChannelAdminItem => ({
   createdAt: '2026-07-01T10:00:00Z',
   updatedAt: '2026-08-01T10:00:00+09:00',
   webhookUrl: 'https://example.test/api/line/webhooks/11111111-1111-4111-8111-111111111111/',
+  deactivationSummary: null,
+  richMenuRefreshRequired: false,
 })
 
 describe('channel admin state', () => {

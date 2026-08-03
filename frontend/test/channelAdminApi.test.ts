@@ -17,6 +17,8 @@ const channel = {
   createdAt: '2026-07-01T10:00:00Z',
   updatedAt: '2026-08-01T10:00:00+09:00',
   webhookUrl: `https://example.test/api/line/webhooks/${channelId}/`,
+  deactivationSummary: null,
+  richMenuRefreshRequired: false,
 }
 
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), {

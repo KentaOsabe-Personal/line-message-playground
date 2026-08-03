@@ -6,7 +6,7 @@ import type { RichMenuAdminLoaded } from '../src/richMenuAdminState'
 const now = '2026-08-03T10:00:00+09:00'
 const channelId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const loaded = (): RichMenuAdminLoaded => ({
-  channel: { channelId, label: '通知', messagingApiChannelId: '123', botUserId: `U${'a'.repeat(32)}`, providerId: '456', active: true, credentialsState: 'configured', credentialsUpdatedAt: now, createdAt: now, updatedAt: now, webhookUrl: `https://example.test/api/line/webhooks/${channelId}/` },
+  channel: { channelId, label: '通知', messagingApiChannelId: '123', botUserId: `U${'a'.repeat(32)}`, providerId: '456', active: true, credentialsState: 'configured', credentialsUpdatedAt: now, createdAt: now, updatedAt: now, webhookUrl: `https://example.test/api/line/webhooks/${channelId}/`, deactivationSummary: null, richMenuRefreshRequired: false },
   rich: { channelId, currentResource: null, blockingOperation: null, activeOperation: null, cleanupResources: [], latestObservation: null, historySummary: { totalCount: 0, latestOperationId: null, latestStatus: null }, nextAllowedActions: ['new_preview'], mode: 'enabled', effectiveActions: ['new_preview'], unavailableReason: null },
   history: { items: [], nextCursor: null, hasMore: false }, templates: [], deactivation: null,
 })
