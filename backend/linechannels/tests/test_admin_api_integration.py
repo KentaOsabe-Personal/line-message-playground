@@ -150,21 +150,27 @@ class AdminAPIIntegrationTests(TestCase):
         self.assertNotEqual(original_ciphertexts[0], bytes(credential.access_token_ciphertext))
         self.assertNotEqual(original_ciphertexts[1], bytes(credential.channel_secret_ciphertext))
 
-        disabled = self.unsafe(
+        direct_disable = self.unsafe(
             client,
             "post",
             f"/api/line/channels/{channel_id}/state/",
             {"expectedUpdatedAt": replaced.json()["updatedAt"], "active": False},
             csrf,
         )
-        self.assertEqual(disabled.status_code, 200)
-        self.assertFalse(disabled.json()["active"])
+        self.assertEqual(direct_disable.status_code, 409)
+        self.assertEqual(direct_disable.json()["error"]["code"], "lifecycle_required")
+        channel = LineChannel.objects.get(public_id=channel_id)
+        self.assertTrue(channel.is_active)
+
+        # 削除境界の既存検証はinactive fixtureから継続する。無効化自体は専用APIのテストが所有する。
+        LineChannel.objects.filter(public_id=channel_id).update(is_active=False)
+        channel.refresh_from_db()
 
         deleted = self.unsafe(
             client,
             "delete",
             f"/api/line/channels/{channel_id}/",
-            {"expectedUpdatedAt": disabled.json()["updatedAt"]},
+            {"expectedUpdatedAt": channel.updated_at.isoformat()},
             csrf,
         )
         self.assertEqual(deleted.status_code, 200)
@@ -172,7 +178,7 @@ class AdminAPIIntegrationTests(TestCase):
         self.assertFalse(LineChannel.objects.filter(public_id=channel_id).exists())
         self.assertFalse(LineChannelCredential.objects.filter(line_channel__public_id=channel_id).exists())
 
-        rendered = " ".join(str(response.json()) for response in (created, metadata, replaced, disabled, deleted))
+        rendered = " ".join(str(response.json()) for response in (created, metadata, replaced, direct_disable, deleted))
         for canary in (
             "create-access-token-canary",
             "create-channel-secret-canary",

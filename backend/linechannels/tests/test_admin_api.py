@@ -50,9 +50,12 @@ class AdminPresenterTests(SimpleTestCase):
             {
                 "channelId", "label", "messagingApiChannelId", "botUserId",
                 "providerId", "active", "credentialsState", "credentialsUpdatedAt",
-                "createdAt", "updatedAt", "webhookUrl",
+                "createdAt", "updatedAt", "webhookUrl", "deactivationSummary",
+                "richMenuRefreshRequired",
             },
         )
+        self.assertIsNone(dto["deactivationSummary"])
+        self.assertFalse(dto["richMenuRefreshRequired"])
         self.assertEqual(dto["webhookUrl"], f"https://public.example.ngrok.app/api/line/webhooks/{CHANNEL_ID}/")
         self.assertNotIn("cipher", str(dto).lower())
         self.assertNotIn("token", str(dto).lower())

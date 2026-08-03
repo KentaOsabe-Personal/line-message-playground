@@ -42,6 +42,10 @@ class _AdminRepository(Protocol):
 
     def get_for_owner_provider(self, public_id: UUID, owner_provider_id: str): ...
 
+    def lock_mutation_if_no_pending(
+        self, public_id: UUID, owner_provider_id: str, expected_updated_at: datetime
+    ): ...
+
     def get_connection_snapshot(self, public_id: UUID, owner_provider_id: str): ...
 
     def lock_connection_revision(
@@ -75,6 +79,7 @@ class DefaultChannelAdminService:
         foundation_service: _FoundationService,
         reference_directory: _ReferenceDirectory,
         bot_info_gateway: _BotInfoGateway,
+        lifecycle_coordinator=None,
         *,
         using: str = "default",
         clock: Callable[[], datetime] = timezone.now,
@@ -84,6 +89,7 @@ class DefaultChannelAdminService:
         self._foundation_service = foundation_service
         self._reference_directory = reference_directory
         self._bot_info_gateway = bot_info_gateway
+        self._lifecycle_coordinator = lifecycle_coordinator
         self._using = using
         self._clock = clock
 
@@ -147,6 +153,17 @@ class DefaultChannelAdminService:
                     return proof
                 if command.provider_id is not None and command.provider_id != proof.provider_id:
                     return AdminServiceFailed("provider_mismatch")
+                mutation_fence = self._repository.lock_mutation_if_no_pending(
+                    command.channel_public_id,
+                    proof.provider_id,
+                    command.expected_updated_at,
+                )
+                if mutation_fence in {
+                    "channel_not_found", "stale_channel", "deactivation_conflict"
+                }:
+                    return AdminServiceFailed(mutation_fence)
+                if mutation_fence != "allowed" and isinstance(mutation_fence, str):
+                    return AdminServiceFailed("storage_unavailable")
                 return self._update_locked(proof, command, state_change=False)
         except (AttributeError, TypeError):
             return AdminServiceFailed("invalid_input")
@@ -155,6 +172,29 @@ class DefaultChannelAdminService:
 
     def set_state(self, owner: OwnerOperationContext, command: SetAdminChannelState):
         try:
+            if command.is_active is False:
+                return AdminServiceFailed("lifecycle_required")
+            if self._lifecycle_coordinator is not None:
+                from .admin_lifecycle_types import (
+                    DeactivationFailed,
+                    ReactivateChannel,
+                )
+
+                result = self._lifecycle_coordinator.reactivate(
+                    owner,
+                    ReactivateChannel(
+                        command.channel_public_id,
+                        command.expected_updated_at,
+                        command.repair_credentials,
+                    ),
+                )
+                if isinstance(result, DeactivationFailed):
+                    return AdminServiceFailed(
+                        self._mutation_code(result.code, state_change=True)
+                    )
+                return self._project_mutation(
+                    result.channel_public_id, result.provider_id
+                )
             with transaction.atomic(using=self._using):
                 proof = self._lock_owner(owner)
                 if isinstance(proof, AdminServiceFailed):

@@ -1,4 +1,5 @@
 from rest_framework.response import Response
+from django.http import JsonResponse
 
 from lineaccounts.admin_authorization import OwnerOperationContext
 from lineaccounts.authentication import OwnerPrincipal
@@ -12,7 +13,10 @@ from .admin_serializers import (
     DeleteChannelRequestSerializer,
     SetChannelStateRequestSerializer,
     UpdateChannelRequestSerializer,
+    RecheckDeactivationRequestSerializer,
+    StartDeactivationRequestSerializer,
 )
+from .admin_lifecycle_types import DeactivationFailed, DeactivationSucceeded
 from .admin_types import (
     AdminChannelMutationSucceeded,
     AdminServiceFailed,
@@ -21,7 +25,10 @@ from .admin_types import (
     ChannelReadSucceeded,
     ConnectionCheckCompleted,
 )
-from .container import build_channel_admin_service
+from .container import (
+    build_channel_admin_service,
+    build_channel_deactivation_coordinator,
+)
 
 
 def _owner(request) -> OwnerOperationContext:
@@ -48,11 +55,32 @@ def _succeeded(result, expected_type):
             "encryption_failed": "storage_unavailable",
             "credential_unreadable": "credential_unavailable",
             "channel_referenced": "channel_referenced",
+            "lifecycle_required": "lifecycle_required",
+            "deactivation_conflict": "deactivation_conflict",
             "storage_retryable": "storage_retryable",
             "storage_unavailable": "storage_unavailable",
         }.get(result.code, "storage_unavailable")
         raise SafeAPIError(code)
     if not isinstance(result, expected_type):
+        raise SafeAPIError("storage_unavailable")
+    return result
+
+
+def _lifecycle_succeeded(result):
+    if isinstance(result, DeactivationFailed):
+        code = {
+            "channel_inactive": "channel_unavailable",
+            "deactivation_not_found": "channel_not_found",
+            "recovery_conflict": "deactivation_conflict",
+        }.get(result.code, result.code)
+        if code not in {
+            "authentication_required", "owner_operation_blocked", "channel_not_found",
+            "channel_unavailable", "stale_channel", "deactivation_conflict",
+            "storage_retryable", "storage_unavailable",
+        }:
+            code = "storage_unavailable"
+        raise SafeAPIError(code)
+    if not isinstance(result, DeactivationSucceeded):
         raise SafeAPIError("storage_unavailable")
     return result
 
@@ -135,3 +163,41 @@ class AdminChannelConnectionCheckAPIView(AdminAPIView):
             ConnectionCheckCompleted,
         )
         return Response(self.presenter().connection(channel_id, result))
+
+
+class AdminChannelDeactivationAPIView(AdminAPIView):
+    def coordinator(self):
+        return build_channel_deactivation_coordinator()
+
+    def get(self, request, channel_id):
+        result = _lifecycle_succeeded(
+            self.coordinator().get(_owner(request), channel_id)
+        )
+        if result.view is None:
+            return JsonResponse(None, safe=False)
+        return Response(self.presenter().deactivation(result.view))
+
+    def post(self, request, channel_id):
+        serializer = StartDeactivationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = _lifecycle_succeeded(
+            self.coordinator().start(
+                _owner(request), serializer.to_command(channel_id)
+            )
+        )
+        return Response(self.presenter().deactivation(result.view))
+
+
+class AdminChannelDeactivationRecheckAPIView(AdminAPIView):
+    def coordinator(self):
+        return build_channel_deactivation_coordinator()
+
+    def post(self, request, channel_id):
+        serializer = RecheckDeactivationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = _lifecycle_succeeded(
+            self.coordinator().recheck(
+                _owner(request), serializer.to_command(channel_id)
+            )
+        )
+        return Response(self.presenter().deactivation(result.view))

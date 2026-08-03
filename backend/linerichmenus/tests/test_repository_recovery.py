@@ -137,6 +137,47 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
         self.assertIsInstance(rejected, OperationConflict)
         self.assertEqual(rejected.reason, "invalid_relation")
 
+    # 2.2/2.3 second remediation: pending deactivationが要求する正当なcleanupだけを通す。
+    def test_pending_deactivation_allows_related_cleanup_recovery(self):
+        from linechannels.admin_lifecycle_repositories import (
+            DjangoPendingDeactivationFence,
+        )
+        from linechannels.models import ChannelDeactivationState, LineChannel
+
+        subject = RichMenuOperation.objects.get(pk=self.apply.operation_id)
+        subject.status = "cleanup_required"
+        subject.stage = "cleaning"
+        subject.save(update_fields=("status", "stage"))
+        channel = LineChannel.objects.create(
+            public_id=self.apply.channel_public_id,
+            messaging_api_channel_id=str(uuid4().int)[:20],
+            bot_user_id="U" + uuid4().hex,
+            label="cleanup fence",
+            provider_id=self.apply.provider_id,
+            is_active=True,
+        )
+        ChannelDeactivationState.objects.create(
+            line_channel=channel,
+            operation_id=uuid4(),
+            owner_identity_public_id=self.apply.owner_identity_public_id,
+            provider_id=self.apply.provider_id,
+            expected_channel_revision=channel.updated_at,
+            status="confirmation_required",
+            safe_reason="cleanup_required",
+        )
+        self.repository._deactivation_fence = DjangoPendingDeactivationFence()
+        cleanup = replace(
+            self.recheck,
+            operation_id=uuid4(),
+            kind=OperationKind.CLEANUP,
+            target_resource_id=self.candidate_id,
+            request_fingerprint="c" * 64,
+        )
+
+        accepted = self.repository.accept_recovery(cleanup)
+
+        self.assertIsInstance(accepted, RecoveryAccepted)
+
     # テストケース: cleanup delete unknown operationをsubjectにcleanupを再受付する。
     # 期待値: deleteを再実行可能にせずrecheckだけを許可する。
     def test_unknown_cleanup_operation_cannot_spawn_another_cleanup(self):

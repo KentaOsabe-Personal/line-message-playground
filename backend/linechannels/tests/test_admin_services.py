@@ -217,6 +217,33 @@ class AdminChannelServiceTests(TransactionTestCase):
         failed = self.service.set_state(self.owner, command)
         self.assertEqual(failed.code, "credential_unavailable")
 
+    # 2.4 RED: active:falseはrich-menu lifecycleを迂回できない。
+    def test_set_state_rejects_direct_disable(self):
+        view = channel_view(active=True)
+        result = self.service.set_state(
+            self.owner,
+            SetAdminChannelState(view.public_id, view.updated_at, False),
+        )
+        self.assertEqual(result.code, "lifecycle_required")
+        self.foundation.update.assert_not_called()
+
+    # 2.2 remediation RED: pending deactivation中は競合するchannel更新を拒否する。
+    def test_update_rejects_channel_mutation_during_pending_deactivation(self):
+        view = channel_view(active=True)
+        self.repository.lock_mutation_if_no_pending.return_value = (
+            "deactivation_conflict"
+        )
+
+        result = self.service.update(
+            self.owner,
+            UpdateAdminChannel(
+                view.public_id, view.updated_at, label="競合更新"
+            ),
+        )
+
+        self.assertEqual(result.code, "deactivation_conflict")
+        self.foundation.update.assert_not_called()
+
     # テストケース: 参照中と未参照のチャネルを削除する
     # 期待値: channel lockとrevision確認後に参照を調べ、未参照時だけ原子削除する
     def test_delete_checks_references_after_channel_lock(self):

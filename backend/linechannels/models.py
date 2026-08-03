@@ -103,6 +103,7 @@ class ChannelDeactivationState(models.Model):
     safe_reason = models.CharField(max_length=64, null=True, editable=False)
     subject_rich_operation_id = models.UUIDField(null=True, editable=False)
     latest_recovery_operation_id = models.UUIDField(null=True, editable=False)
+    recovery_result_ready = models.BooleanField(default=False, editable=False)
     accepted_at = models.DateTimeField(auto_now_add=True, editable=False)
     updated_at = models.DateTimeField(auto_now=True, editable=False)
     completed_at = models.DateTimeField(null=True, editable=False)
@@ -143,6 +144,13 @@ class ChannelDeactivationState(models.Model):
             models.CheckConstraint(
                 condition=GreaterThan(Length("provider_id"), 0),
                 name="linech_deactivation_provider_nonempty",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(recovery_result_ready=False)
+                    | models.Q(latest_recovery_operation_id__isnull=False)
+                ),
+                name="linech_deactivation_recovery_ready_valid",
             ),
         ]
 

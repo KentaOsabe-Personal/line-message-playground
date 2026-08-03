@@ -6,6 +6,7 @@ from lineaccounts.admin_authorization import DjangoOwnerOperationFence
 from lineaccounts.repositories import DjangoAccountRepository
 from linechannels import runtime as channel_runtime
 from linechannels.admin_repositories import DjangoAdminChannelRepository
+from linechannels.admin_lifecycle_repositories import DjangoPendingDeactivationFence
 from linechannels.admin_types import ChannelRevisionProof, ChannelRevisionUnchanged
 from linechannels.crypto import FernetCredentialCipher
 
@@ -101,7 +102,8 @@ def build_rich_menu_service() -> DefaultRichMenuService:
     gateway = DefaultRichMenuGateway()
     catalog = DefaultTemplateCatalog()
     repository = DjangoRichMenuRepository(
-        operation_fence=_ChannelOperationFence(channel_port)
+        operation_fence=_ChannelOperationFence(channel_port),
+        deactivation_fence=DjangoPendingDeactivationFence(),
     )
     return DefaultRichMenuService(
         owner_fence=DjangoOwnerOperationFence(DjangoAccountRepository()),

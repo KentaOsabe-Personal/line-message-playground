@@ -13,6 +13,7 @@ from .admin_types import (
     SetAdminChannelState,
     UpdateAdminChannel,
 )
+from .admin_lifecycle_types import RecheckDeactivation, StartDeactivation
 from .types import AccessToken, ChannelSecret, CredentialPair
 from .validators import (
     BoundaryValidationError,
@@ -50,6 +51,19 @@ class AwareDateTimeField(serializers.Field):
 
     def to_representation(self, value: datetime):
         return value.isoformat()
+
+
+class CanonicalUUIDField(serializers.Field):
+    def to_internal_value(self, data):
+        if not isinstance(data, str):
+            raise serializers.ValidationError(_INVALID)
+        try:
+            parsed = UUID(data)
+        except (ValueError, TypeError, AttributeError):
+            raise serializers.ValidationError(_INVALID) from None
+        if str(parsed) != data or parsed.version != 4:
+            raise serializers.ValidationError(_INVALID)
+        return parsed
 
 
 def _boundary_validator(validator):
@@ -230,3 +244,27 @@ class DeleteChannelRequestSerializer(ExactRequestSerializer):
 
 class ConnectionCheckRequestSerializer(ExactRequestSerializer):
     pass
+
+
+class StartDeactivationRequestSerializer(ExactRequestSerializer):
+    operationId = CanonicalUUIDField()
+    expectedUpdatedAt = AwareDateTimeField()
+
+    def to_command(self, channel_id: UUID) -> StartDeactivation:
+        return StartDeactivation(
+            channel_id,
+            self.validated_data["operationId"],
+            self.validated_data["expectedUpdatedAt"],
+        )
+
+
+class RecheckDeactivationRequestSerializer(StartDeactivationRequestSerializer):
+    recoveryOperationId = CanonicalUUIDField()
+
+    def to_command(self, channel_id: UUID) -> RecheckDeactivation:
+        return RecheckDeactivation(
+            channel_id,
+            self.validated_data["operationId"],
+            self.validated_data["recoveryOperationId"],
+            self.validated_data["expectedUpdatedAt"],
+        )

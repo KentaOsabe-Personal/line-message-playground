@@ -73,6 +73,12 @@ class UnavailableOperationFence:
         return OperationFenceResult("unavailable")
 
 
+class AllowAllDeactivationFence:
+    def allows(self, command) -> bool:
+        del command
+        return True
+
+
 @dataclass(frozen=True, slots=True)
 class StageClaimed:
     operation: OperationView
@@ -358,6 +364,7 @@ class DjangoRichMenuRepository:
         *,
         reference_fence: ChannelReferenceFence | None = None,
         operation_fence: OperationFence | None = None,
+        deactivation_fence=None,
         using: str = "default",
         clock: Callable[[], datetime] = timezone.now,
         in_flight_timeout: timedelta = timedelta(minutes=5),
@@ -365,6 +372,7 @@ class DjangoRichMenuRepository:
         self.using = using
         self._reference_fence = reference_fence or DjangoChannelReferenceFence(using=using)
         self._operation_fence = operation_fence or UnavailableOperationFence()
+        self._deactivation_fence = deactivation_fence or AllowAllDeactivationFence()
         self._clock = clock
         if not isinstance(in_flight_timeout, timedelta) or in_flight_timeout.total_seconds() <= 0:
             raise ValueError("invalid in-flight timeout")
@@ -607,6 +615,8 @@ class DjangoRichMenuRepository:
                     if fence.status == "channel_not_found"
                     else fence.status
                 )
+            if not self._deactivation_fence.allows(command):
+                return OperationConflict("operation_in_progress")
 
             existing = (
                 RichMenuOperation.objects.using(self.using)
@@ -1297,6 +1307,8 @@ class DjangoRichMenuRepository:
                 return OperationConflict(
                     "channel_unavailable" if fence.status == "channel_not_found" else fence.status
                 )
+            if not self._deactivation_fence.allows(command):
+                return OperationConflict("operation_in_progress")
             existing = (
                 RichMenuOperation.objects.using(self.using)
                 .select_for_update()

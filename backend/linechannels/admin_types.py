@@ -4,6 +4,7 @@ from typing import Literal, Protocol
 from uuid import UUID
 
 from .types import AccessToken, CredentialPair
+from .admin_lifecycle_types import DeactivationSummary
 
 
 class _SerializationDisabled:
@@ -102,6 +103,8 @@ class AdminChannelView:
     credentials_updated_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    deactivation_summary: DeactivationSummary | None = None
+    rich_menu_refresh_required: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -486,6 +489,8 @@ AdminServiceFailureCode = Literal[
     "encryption_failed",
     "credential_unreadable",
     "channel_referenced",
+    "lifecycle_required",
+    "deactivation_conflict",
     "storage_retryable",
     "storage_unavailable",
 ]

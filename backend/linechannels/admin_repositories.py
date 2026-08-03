@@ -25,8 +25,9 @@ from .admin_types import (
     RichMenuChannelSnapshot,
     SnapshotAvailable,
 )
+from .admin_lifecycle_types import DeactivationSummary
 from .crypto import CredentialCryptoError
-from .models import LineChannel, LineChannelCredential
+from .models import ChannelDeactivationState, LineChannel, LineChannelCredential
 from .repositories import PersistenceError, RepositoryProgrammingError
 from .types import AccessToken, CredentialContext, EncryptedCredential
 
@@ -69,6 +70,50 @@ class DjangoAdminChannelRepository:
                 .first()
             )
             return None if row is None else self._view(row)
+        except OperationalError as error:
+            raise self._persistence_error(error) from None
+        except DatabaseError:
+            raise PersistenceError("storage_unavailable") from None
+
+    def has_pending_deactivation(
+        self, public_id: UUID, owner_provider_id: str
+    ) -> bool:
+        try:
+            return ChannelDeactivationState.objects.using(self.using).filter(
+                line_channel__public_id=public_id,
+                line_channel__provider_id=owner_provider_id,
+            ).exclude(status="completed").exists()
+        except OperationalError as error:
+            raise self._persistence_error(error) from None
+        except DatabaseError:
+            raise PersistenceError("storage_unavailable") from None
+
+    def lock_mutation_if_no_pending(
+        self,
+        public_id: UUID,
+        owner_provider_id: str,
+        expected_updated_at: datetime,
+    ) -> str:
+        self._require_transaction()
+        try:
+            channel = (
+                LineChannel.objects.using(self.using)
+                .select_for_update()
+                .filter(self._provider_scope(owner_provider_id), public_id=public_id)
+                .first()
+            )
+            if channel is None:
+                return "channel_not_found"
+            if channel.updated_at != expected_updated_at:
+                return "stale_channel"
+            pending = (
+                ChannelDeactivationState.objects.using(self.using)
+                .select_for_update()
+                .filter(line_channel=channel)
+                .exclude(status="completed")
+                .exists()
+            )
+            return "deactivation_conflict" if pending else "allowed"
         except OperationalError as error:
             raise self._persistence_error(error) from None
         except DatabaseError:
@@ -293,6 +338,9 @@ class DjangoAdminChannelRepository:
         complete_credential_rows = credential_rows.exclude(
             access_token_ciphertext=b""
         ).exclude(channel_secret_ciphertext=b"")
+        deactivation_rows = ChannelDeactivationState.objects.using(self.using).filter(
+            line_channel_id=OuterRef("pk")
+        )
         return (
             LineChannel.objects.using(self.using)
             .annotate(
@@ -300,6 +348,18 @@ class DjangoAdminChannelRepository:
                 admin_credentials_complete=Exists(complete_credential_rows),
                 admin_credentials_updated_at=Subquery(
                     credential_rows.values("updated_at")[:1]
+                ),
+                admin_deactivation_operation_id=Subquery(
+                    deactivation_rows.values("operation_id")[:1]
+                ),
+                admin_deactivation_status=Subquery(
+                    deactivation_rows.values("status")[:1]
+                ),
+                admin_deactivation_reason=Subquery(
+                    deactivation_rows.values("safe_reason")[:1]
+                ),
+                admin_deactivation_updated_at=Subquery(
+                    deactivation_rows.values("updated_at")[:1]
                 ),
             )
             .values(
@@ -314,6 +374,10 @@ class DjangoAdminChannelRepository:
                 "admin_credentials_configured",
                 "admin_credentials_complete",
                 "admin_credentials_updated_at",
+                "admin_deactivation_operation_id",
+                "admin_deactivation_status",
+                "admin_deactivation_reason",
+                "admin_deactivation_updated_at",
             )
         )
 
@@ -328,6 +392,15 @@ class DjangoAdminChannelRepository:
     @staticmethod
     def _view(row) -> AdminChannelView:
         configured = bool(row["admin_credentials_complete"])
+        operation_id = row.get("admin_deactivation_operation_id")
+        summary = None
+        if operation_id is not None:
+            summary = DeactivationSummary(
+                operation_id=operation_id,
+                status=row["admin_deactivation_status"],
+                safe_reason=row["admin_deactivation_reason"],
+                updated_at=row["admin_deactivation_updated_at"],
+            )
         return AdminChannelView(
             public_id=row["public_id"],
             messaging_api_channel_id=row["messaging_api_channel_id"],
@@ -343,6 +416,12 @@ class DjangoAdminChannelRepository:
             ),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            deactivation_summary=summary,
+            rich_menu_refresh_required=(
+                row["is_active"]
+                and summary is not None
+                and summary.status == "completed"
+            ),
         )
 
     def _persistence_error(self, error: OperationalError) -> PersistenceError:

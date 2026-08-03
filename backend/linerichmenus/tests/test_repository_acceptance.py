@@ -24,6 +24,16 @@ class LockedFence:
         return ReferenceFenceResult("locked")
 
 
+class DeactivationFence:
+    def __init__(self, allowed):
+        self.allowed = allowed
+        self.calls = []
+
+    def allows(self, command):
+        self.calls.append(command)
+        return self.allowed
+
+
 class RichMenuRepositoryAcceptanceTests(TransactionTestCase):
     reset_sequences = True
 
@@ -63,6 +73,22 @@ class RichMenuRepositoryAcceptanceTests(TransactionTestCase):
         self.assertEqual(candidate.lifecycle, "candidate")
         self.assertEqual(candidate.image_digest, "c" * 64)
         self.assertGreaterEqual(len(candidate.ownership_marker), 32)
+
+    # 2.2 remediation RED: pending deactivation中は通常mutation受付を同じtransactionで拒否する。
+    def test_pending_deactivation_blocks_operation_acceptance(self):
+        fence = DeactivationFence(False)
+        repository = DjangoRichMenuRepository(
+            reference_fence=LockedFence(),
+            deactivation_fence=fence,
+            clock=lambda: NOW,
+        )
+
+        result = repository.accept(self.command)
+
+        self.assertIsInstance(result, OperationConflict)
+        self.assertEqual(result.reason, "operation_in_progress")
+        self.assertFalse(RichMenuOperation.objects.exists())
+        self.assertEqual(fence.calls, [self.command])
 
     # テストケース: 同じglobal operation IDとfingerprintを再送する。
     # 期待値: 保存済み状態を返しoperationとcandidateを増やさない。
