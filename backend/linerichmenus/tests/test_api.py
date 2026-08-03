@@ -17,6 +17,7 @@ from linerichmenus.services import TemplateListSucceeded
 from linerichmenus.catalog import DefaultTemplateCatalog
 from linerichmenus.types import (
     ChannelStateView,
+    EffectiveCapabilities,
     HistorySummary,
     NextAllowedAction,
     OperationKind,
@@ -161,6 +162,9 @@ class OwnerRichMenuAPITests(SimpleTestCase):
                 latest_observation=None,
                 history_summary=HistorySummary(0, None, None),
                 next_allowed_actions=(),
+                capabilities=EffectiveCapabilities(
+                    mode="read_only", actions=(), unavailable_reason="channel_inactive"
+                ),
             )
         )
         with patch("linerichmenus.views.build_rich_menu_service", return_value=service):
@@ -170,6 +174,9 @@ class OwnerRichMenuAPITests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["channelId"], str(self.channel_id))
+        self.assertEqual(response.data["mode"], "read_only")
+        self.assertEqual(response.data["effectiveActions"], [])
+        self.assertEqual(response.data["unavailableReason"], "channel_inactive")
         self.assertNotIn("confirmationToken", response.data)
 
     # テストケース: 全mutation variantが一つのoperation endpointへ到達する。

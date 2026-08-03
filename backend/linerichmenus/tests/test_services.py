@@ -796,7 +796,11 @@ class RichMenuPreviewServiceTests(TransactionTestCase):
         result = self.service.get_state(self.owner, self.channel_id)
 
         self.assertIsInstance(result, StateSucceeded)
-        self.assertIs(result.state, self.repository.state)
+        self.assertEqual(result.state.capabilities.mode, "read_only")
+        self.assertEqual(result.state.capabilities.actions, ())
+        self.assertEqual(
+            result.state.capabilities.unavailable_reason, "channel_inactive"
+        )
         self.assertEqual(self.gateway.calls, [])
         self.assertEqual(self.repository.observations, [])
 

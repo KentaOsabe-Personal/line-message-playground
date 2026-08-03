@@ -66,6 +66,26 @@ class NextAllowedAction(StrEnum):
     CLEAR_TO_DISABLE = "clear_to_disable"
 
 
+@dataclass(frozen=True, slots=True)
+class EffectiveCapabilities:
+    mode: str
+    actions: tuple[NextAllowedAction, ...]
+    unavailable_reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.mode not in {"read_only", "recovery_only", "enabled", "unavailable"}:
+            raise ValueError("invalid capability mode")
+        _require_tuple_of(self.actions, NextAllowedAction, "effective actions")
+        if self.unavailable_reason is not None and (
+            not isinstance(self.unavailable_reason, str)
+            or not self.unavailable_reason
+            or len(self.unavailable_reason) > 64
+        ):
+            raise ValueError("invalid unavailable reason")
+        if self.mode == "unavailable" and self.actions:
+            raise ValueError("unavailable capabilities cannot expose actions")
+
+
 class PreviewWarning(StrEnum):
     EXTERNAL_DEFAULT_REPLACED = "external_default_replaced"
     URL_HISTORY_PERSISTED = "url_history_persisted"
@@ -553,6 +573,7 @@ class ChannelStateView:
     latest_observation: DefaultObservation | None
     history_summary: HistorySummary
     next_allowed_actions: tuple[NextAllowedAction, ...]
+    capabilities: EffectiveCapabilities | None = None
 
     def __post_init__(self) -> None:
         _require_uuid(self.channel_public_id, "channel id")
@@ -578,6 +599,10 @@ class ChannelStateView:
         _require_tuple_of(
             self.next_allowed_actions, NextAllowedAction, "next allowed actions"
         )
+        if self.capabilities is not None and not isinstance(
+            self.capabilities, EffectiveCapabilities
+        ):
+            raise ValueError("invalid effective capabilities")
 
 
 @dataclass(frozen=True, slots=True, repr=False)

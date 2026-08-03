@@ -64,12 +64,17 @@ from .repository import (
     StageConflict,
     StageExpired,
     StageOutcome,
+    DisableUnlinkRejected,
+    DisableUnlinkReplay,
+    ReserveDisableUnlink,
+    ReservedDisableUnlink,
 )
 from .types import (
     ChannelStateView,
     ConfirmationRejected,
     ConfirmationAccepted,
     DefaultObservation,
+    EffectiveCapabilities,
     HistoryPage,
     HistorySummary,
     InputFieldError,
@@ -111,6 +116,13 @@ class MutationReadiness(Protocol):
         self, kind: OperationKind
     ) -> MutationReady | IntegrationNotReady: ...
 
+    def project(
+        self,
+        actions: tuple[NextAllowedAction, ...],
+        *,
+        channel_active: bool,
+    ) -> EffectiveCapabilities: ...
+
 
 class DefaultMutationReadiness:
     _RECOVERY_KINDS = frozenset(
@@ -119,6 +131,19 @@ class DefaultMutationReadiness:
             OperationKind.RELEASE,
             OperationKind.RECHECK,
             OperationKind.CLEANUP,
+        }
+    )
+    _READ_ACTIONS = frozenset(
+        {NextAllowedAction.GET_STATE, NextAllowedAction.VIEW_HISTORY}
+    )
+    _RECOVERY_ACTIONS = frozenset(
+        {
+            NextAllowedAction.UNLINK,
+            NextAllowedAction.RELEASE,
+            NextAllowedAction.RECHECK,
+            NextAllowedAction.CLEANUP,
+            NextAllowedAction.GET_STATE,
+            NextAllowedAction.VIEW_HISTORY,
         }
     )
 
@@ -140,6 +165,38 @@ class DefaultMutationReadiness:
         if self._mode == "recovery_only" and kind not in self._RECOVERY_KINDS:
             return IntegrationNotReady(reason="integration_not_ready")
         return MutationReady()
+
+    def project(
+        self,
+        actions: tuple[NextAllowedAction, ...],
+        *,
+        channel_active: bool,
+    ) -> EffectiveCapabilities:
+        if not isinstance(actions, tuple) or not all(
+            isinstance(action, NextAllowedAction) for action in actions
+        ):
+            return EffectiveCapabilities(
+                "unavailable", (), "integration_not_ready"
+            )
+        if not self.configuration_valid:
+            return EffectiveCapabilities(
+                "unavailable", (), "integration_not_ready"
+            )
+        if channel_active is not True:
+            return EffectiveCapabilities(
+                "read_only",
+                tuple(action for action in actions if action in self._READ_ACTIONS),
+                "channel_inactive",
+            )
+        allowed = {
+            "read_only": self._READ_ACTIONS,
+            "recovery_only": self._RECOVERY_ACTIONS,
+            "enabled": frozenset(NextAllowedAction),
+        }[self._mode]
+        return EffectiveCapabilities(
+            self._mode,
+            tuple(action for action in actions if action in allowed),
+        )
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -474,6 +531,39 @@ class DefaultRichMenuService:
             return failure
         return TemplateListSucceeded(tuple(self._catalog.list_templates()))
 
+    def build_disable_assessment_proof(
+        self,
+        owner: OwnerOperationContext,
+        *,
+        provider_id: str,
+        channel_public_id: UUID,
+        expected_channel_revision: datetime,
+        resource_id: UUID,
+        observation_fingerprint: str,
+    ) -> str | None:
+        if (
+            not isinstance(owner, OwnerOperationContext)
+            or not isinstance(provider_id, str)
+            or not provider_id
+        ):
+            return None
+        builder = getattr(self._repository, "get_disable_assessment_proof", None)
+        if not callable(builder):
+            return None
+        try:
+            return builder(
+                scope=OwnerChannelScope(
+                    owner_identity_public_id=owner.identity_public_id,
+                    provider_id=provider_id,
+                    channel_public_id=channel_public_id,
+                ),
+                expected_channel_revision=expected_channel_revision,
+                resource_id=resource_id,
+                observation_fingerprint=observation_fingerprint,
+            )
+        except Exception:
+            return None
+
     def get_state(
         self,
         owner: OwnerOperationContext,
@@ -502,7 +592,7 @@ class DefaultRichMenuService:
         stored = self._repository.get_state(scope)
         state = stored if isinstance(stored, ChannelStateView) else self._empty_state(channel_id)
         if inactive or resolved.snapshot is None:
-            return StateSucceeded(state)
+            return StateSucceeded(self._with_effective_capabilities(state, active=False))
 
         gateway_context = RichMenuGatewayContext(
             channel_public_id=resolved.snapshot.channel_public_id,
@@ -521,7 +611,7 @@ class DefaultRichMenuService:
         refreshed = self._repository.get_state(scope)
         state = refreshed if isinstance(refreshed, ChannelStateView) else state
         return StateSucceeded(
-            state=state.__class__(
+            state=self._with_effective_capabilities(state.__class__(
                 channel_public_id=state.channel_public_id,
                 current_resource=state.current_resource,
                 blocking_operation=state.blocking_operation,
@@ -530,7 +620,24 @@ class DefaultRichMenuService:
                 latest_observation=reconciliation.observation,
                 history_summary=state.history_summary,
                 next_allowed_actions=reconciliation.next_allowed_actions,
-            )
+            ), active=True)
+        )
+
+    def _with_effective_capabilities(
+        self, state: ChannelStateView, *, active: bool
+    ) -> ChannelStateView:
+        return state.__class__(
+            channel_public_id=state.channel_public_id,
+            current_resource=state.current_resource,
+            blocking_operation=state.blocking_operation,
+            active_operation=state.active_operation,
+            cleanup_resources=state.cleanup_resources,
+            latest_observation=state.latest_observation,
+            history_summary=state.history_summary,
+            next_allowed_actions=state.next_allowed_actions,
+            capabilities=self._readiness.project(
+                state.next_allowed_actions, channel_active=active
+            ),
         )
 
     def get_operation(
@@ -619,6 +726,94 @@ class DefaultRichMenuService:
         if handler is None:
             return ServiceFailed(SafeResultCode.INVALID_INPUT)
         return handler(owner, command)
+
+    def start_disable_unlink(self, command) -> OperationResult:
+        """Headless disable用に対象選定とunlink受付を一体化して実行する。"""
+        from .headless import HeadlessUnlinkCommand
+
+        if not isinstance(command, HeadlessUnlinkCommand):
+            return ServiceFailed(SafeResultCode.INVALID_INPUT)
+        readiness = self._readiness.authorize(OperationKind.UNLINK)
+        if isinstance(readiness, IntegrationNotReady):
+            return ServiceFailed(SafeResultCode.INTEGRATION_NOT_READY)
+        probe_command = OperationCommand(
+            operation_id=command.deactivation_operation_id,
+            channel_public_id=command.channel_public_id,
+            expected_channel_revision=command.expected_channel_revision,
+            kind=OperationKind.UNLINK,
+            subject_operation_id=None,
+            # targetは公開commandから受けず、snapshot取得用の型条件だけを満たす。
+            target_resource_id=command.deactivation_operation_id,
+        )
+        proof, snapshot, failure = self._resolve_operation_channel(
+            command.owner, probe_command
+        )
+        if failure is not None:
+            return failure
+        assert proof is not None and snapshot is not None
+        if proof.provider_id != command.provider_id:
+            return ServiceFailed(SafeResultCode.CHANNEL_UNAVAILABLE)
+        reserve = getattr(self._repository, "reserve_disable_unlink", None)
+        if not callable(reserve):
+            return ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
+        try:
+            reserved = reserve(
+                ReserveDisableUnlink(
+                    owner_identity_public_id=proof.identity_public_id,
+                    provider_id=proof.provider_id,
+                    channel_public_id=command.channel_public_id,
+                    expected_channel_revision=command.expected_channel_revision,
+                    deactivation_operation_id=command.deactivation_operation_id,
+                    assessment_proof=command.assessment_proof,
+                )
+            )
+        except Exception as error:
+            return ServiceFailed(_storage_error_code(error))
+        if isinstance(reserved, DisableUnlinkReplay):
+            return OperationSucceeded(reserved.operation)
+        if isinstance(reserved, DisableUnlinkRejected):
+            code = {
+                "stale_assessment": SafeResultCode.STALE_CHANNEL,
+                "external_default": SafeResultCode.OPERATION_CONFLICT,
+                "recheck_required": SafeResultCode.OPERATION_IN_PROGRESS,
+                "cleanup_required": SafeResultCode.OPERATION_IN_PROGRESS,
+                "unavailable": SafeResultCode.STORAGE_UNAVAILABLE,
+            }[reserved.reason]
+            return ServiceFailed(code)
+        if not isinstance(reserved, ReservedDisableUnlink):
+            return ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
+        scope = OwnerChannelScope(
+            owner_identity_public_id=proof.identity_public_id,
+            provider_id=proof.provider_id,
+            channel_public_id=command.channel_public_id,
+        )
+        target = self._get_candidate(scope, reserved.target_resource_id)
+        if target is None or target.lifecycle is not ResourceLifecycle.APPLIED:
+            return self._start_unknown_simple_operation(
+                operation_id=command.deactivation_operation_id,
+                stage=OperationStage.CLEARING_DEFAULT,
+            )
+        observed = self._observe(scope, self._gateway_context(snapshot))
+        if isinstance(observed, ServiceFailed):
+            return observed
+        if (
+            observed.observation.kind is not ObservationKind.MANAGED_DEFAULT
+            or observed.observation.managed_resource_id != target.public_id
+        ):
+            return self._start_unknown_simple_operation(
+                operation_id=command.deactivation_operation_id,
+                stage=OperationStage.CLEARING_DEFAULT,
+            )
+        result = self._run_unlink_clear_stage(
+            owner=command.owner,
+            operation_id=command.deactivation_operation_id,
+            scope=scope,
+            snapshot=snapshot,
+            target=target,
+        )
+        if isinstance(result, ServiceFailed):
+            return result
+        return OperationSucceeded(self._with_unlink_actions(result))
 
     def _start_apply(
         self, owner: OwnerOperationContext, command: OperationCommand

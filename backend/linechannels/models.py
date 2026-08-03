@@ -80,3 +80,76 @@ class LineChannelCredential(models.Model):
         )
 
     __repr__ = __str__
+
+
+class ChannelDeactivationState(models.Model):
+    class Status(models.TextChoices):
+        CHECKING = "checking"
+        UNLINKING = "unlinking"
+        CONFIRMATION_REQUIRED = "confirmation_required"
+        COMPLETED = "completed"
+
+    line_channel = models.OneToOneField(
+        LineChannel,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="deactivation_state",
+    )
+    operation_id = models.UUIDField(unique=True, editable=False)
+    owner_identity_public_id = models.UUIDField(editable=False)
+    provider_id = models.CharField(max_length=64, editable=False)
+    expected_channel_revision = models.DateTimeField(editable=False)
+    status = models.CharField(max_length=32, choices=Status.choices, editable=False)
+    safe_reason = models.CharField(max_length=64, null=True, editable=False)
+    subject_rich_operation_id = models.UUIDField(null=True, editable=False)
+    latest_recovery_operation_id = models.UUIDField(null=True, editable=False)
+    accepted_at = models.DateTimeField(auto_now_add=True, editable=False)
+    updated_at = models.DateTimeField(auto_now=True, editable=False)
+    completed_at = models.DateTimeField(null=True, editable=False)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        status="checking",
+                        safe_reason__isnull=True,
+                        subject_rich_operation_id__isnull=True,
+                        latest_recovery_operation_id__isnull=True,
+                        completed_at__isnull=True,
+                    )
+                    | models.Q(
+                        status="unlinking",
+                        safe_reason__isnull=True,
+                        subject_rich_operation_id__isnull=False,
+                        latest_recovery_operation_id__isnull=True,
+                        completed_at__isnull=True,
+                    )
+                    | models.Q(
+                        status="confirmation_required",
+                        safe_reason__isnull=False,
+                        completed_at__isnull=True,
+                    )
+                    | models.Q(
+                        status="completed",
+                        safe_reason__isnull=True,
+                        subject_rich_operation_id__isnull=True,
+                        latest_recovery_operation_id__isnull=True,
+                        completed_at__isnull=False,
+                    )
+                ),
+                name="linech_deactivation_variant_valid",
+            ),
+            models.CheckConstraint(
+                condition=GreaterThan(Length("provider_id"), 0),
+                name="linech_deactivation_provider_nonempty",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"ChannelDeactivationState(operation_id={self.operation_id}, "
+            f"status={self.status})"
+        )
+
+    __repr__ = __str__
