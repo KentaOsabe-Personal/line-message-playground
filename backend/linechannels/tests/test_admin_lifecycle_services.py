@@ -67,7 +67,8 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
     def command(self):
         return StartDeactivation(self.channel_id, self.operation_id, self.revision)
 
-    # 2.2 RED: clear評価は外部I/O中lockを保持せず原子的完了へ進む。
+    # テストケース: clear評価中のtransaction状態を観測して無効化を開始する。
+    # 期待値: 外部評価中にDB lockを保持せず、チャネルと同一intentを原子的に完了する。
     def test_start_clear_completes_without_holding_database_lock(self):
         reserved = self.view()
         completed = self.view(
@@ -89,7 +90,8 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
         self.assertEqual(result.view.status, "completed")
         self.assertTrue(all(self.fence.calls))
 
-    # 2.2 RED: managed defaultは同じdeactivation IDでunlinkし、成功後に再評価する。
+    # テストケース: managed defaultの解除が必要な無効化intentを開始する。
+    # 期待値: 同じdeactivation IDでunlinkし、成功後の再評価から無効化を完了する。
     def test_start_unlink_uses_same_intent_and_reassesses_before_completion(self):
         reserved = self.view()
         completed = self.view(
@@ -118,26 +120,51 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
         self.assertEqual(unlink_command.deactivation_operation_id, self.operation_id)
         self.assertEqual(result.view.status, "completed")
 
-    # 2.2 RED: external/unknown/cleanupはactiveを維持した確認待ちへ保存する。
+    # テストケース: external default、観測結果不明、cleanup待ちの各評価で無効化を開始する。
+    # 期待値: activeと同一intentを保った確認待ちを保存し、unlink・完了の外部作用を一度も行わない。
     def test_start_blocker_stays_active_and_saves_closed_reason(self):
-        reserved = self.view()
-        blocked = self.view(
-            status="confirmation_required", safe_reason="external_default"
+        cases = (
+            (
+                DisableAssessment("external_default_blocked", reason="external_default"),
+                "external_default",
+            ),
+            (
+                DisableAssessment("unavailable", reason="observation_unknown"),
+                "observation_unknown",
+            ),
+            (
+                DisableAssessment(
+                    "cleanup_required",
+                    target_resource_id=uuid4(),
+                    reason="cleanup_required",
+                ),
+                "cleanup_required",
+            ),
         )
-        self.repository.reserve.return_value = ReservedDeactivation(reserved)
-        self.lifecycle.assess_disable.return_value = DisableAssessment(
-            "external_default_blocked", reason="external_default"
-        )
-        self.repository.save_result.return_value = SavedDeactivation(blocked)
 
-        result = self.coordinator.start(self.owner, self.command())
+        for assessment, reason in cases:
+            with self.subTest(status=assessment.status):
+                self.repository.reset_mock()
+                self.lifecycle.reset_mock()
+                reserved = self.view()
+                blocked = self.view(
+                    status="confirmation_required", safe_reason=reason
+                )
+                self.repository.reserve.return_value = ReservedDeactivation(reserved)
+                self.lifecycle.assess_disable.return_value = assessment
+                self.repository.save_result.return_value = SavedDeactivation(blocked)
 
-        self.assertTrue(result.view.channel_active)
-        self.assertEqual(result.view.safe_reason, "external_default")
-        self.lifecycle.start_disable_unlink.assert_not_called()
-        self.repository.complete_inactive.assert_not_called()
+                result = self.coordinator.start(self.owner, self.command())
 
-    # 2.2/2.3 remediation RED: unlink未受付失敗は存在しないsubjectを保存しない。
+                saved = self.repository.save_result.call_args.args[0]
+                self.assertTrue(result.view.channel_active)
+                self.assertEqual(result.view.safe_reason, reason)
+                self.assertEqual(saved.operation_id, self.operation_id)
+                self.lifecycle.start_disable_unlink.assert_not_called()
+                self.repository.complete_inactive.assert_not_called()
+
+    # テストケース: unlink未受付失敗後にsubjectなしの同一intentを明示再確認する。
+    # 期待値: 存在しないsubjectを保存せず、再確認では外部作用のない最新評価を選ぶ。
     def test_unlink_rejection_saves_no_subject_and_reassesses_on_recheck(self):
         reserved = self.view()
         blocked = self.view(
@@ -160,7 +187,8 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
         self.assertIsNone(saved.subject_rich_operation_id)
         self.assertEqual(saved.safe_reason, "stale_channel")
 
-    # 2.3 RED: 明示recheckだけがrevisionを前進し、subject有無でrecovery commandを分ける。
+    # テストケース: 保存subjectを持つ確認待ちintentをownerが明示再確認する。
+    # 期待値: revisionを前進して元subjectだけをreconcileし、原子的完了へ収束する。
     def test_explicit_recheck_advances_revision_and_recovers_saved_subject(self):
         subject_id = uuid4()
         recovery_id = uuid4()
@@ -199,7 +227,8 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
         self.assertEqual(recovery.subject_operation_id, subject_id)
         self.assertEqual(result.view.status, "completed")
 
-    # 2.3 RED: 同じrecovery IDの保存済み結果は再送せず一件へ収束する。
+    # テストケース: 保存結果がある同じrecovery IDを再送する。
+    # 期待値: 外部recoveryやrevision更新を再実行せず、保存済み一件を返す。
     def test_recheck_replay_returns_saved_result_without_external_call(self):
         recovery_id = uuid4()
         replay = self.view(
@@ -221,7 +250,8 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
         self.repository.advance_recheck_revision.assert_not_called()
         self.lifecycle.recover_disable.assert_not_called()
 
-    # 2.3 remediation: recovery ID予約後に中断しても同じIDで外部recoveryを再開する。
+    # テストケース: recovery ID予約後かつ結果保存前に中断した同じIDを再送する。
+    # 期待値: 同じIDの外部recoveryだけを再開し、新しいintentを作らず完了する。
     def test_incomplete_recovery_reservation_retries_same_id(self):
         recovery_id = uuid4()
         subject_id = uuid4()
@@ -254,7 +284,8 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
         self.lifecycle.recover_disable.assert_called_once()
         self.assertEqual(result.view.status, "completed")
 
-    # 2.5 RED: 再有効化はchannelだけを変更しrich menu portを呼ばない。
+    # テストケース: 無効チャネルを資格情報変更なしで再有効化する。
+    # 期待値: channelだけを更新して再取得gateを返し、rich menu portへ外部作用を行わない。
     def test_reactivate_changes_only_channel_and_requires_fresh_reads(self):
         self.foundation.update.return_value = SimpleNamespace(
             status="succeeded",

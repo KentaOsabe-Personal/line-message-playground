@@ -11,6 +11,8 @@ let container: HTMLDivElement; let root: Root
 describe('RichMenuHistory', () => {
   beforeEach(() => { container = document.createElement('div'); document.body.append(container); root = createRoot(container) })
   afterEach(async () => { await act(async () => root.unmount()); container.remove() })
+  // テストケース: cursor付き履歴でownerが次ページを明示clickする。
+  // 期待値: 上限付きの次pageを一度だけ追加し、rollback操作を提供しない。
   test('appends one bounded cursor page only after an explicit click', async () => {
     const loadNext = vi.fn().mockResolvedValue({ items: [item('次ページ')], nextCursor: null, hasMore: false })
     await act(async () => root.render(<RichMenuHistory initialPage={{ items: [item('先頭')], nextCursor: 'cursor', hasMore: true }} readOnly loadNext={loadNext} />))
@@ -24,6 +26,8 @@ describe('RichMenuHistory', () => {
     expect(container.textContent).toContain('次ページ')
     expect(container.textContent).not.toContain('rollback')
   })
+  // テストケース: 既存履歴page表示後に次page取得が失敗する。
+  // 期待値: 既存pageを保持しつつ完全・最新とは表示せず、明示再取得を案内する。
   test('keeps prior pages but marks them incomplete after failure', async () => {
     const loadNext = vi.fn().mockRejectedValue(new Error('private'))
     await act(async () => root.render(<RichMenuHistory initialPage={{ items: [item('保存済み')], nextCursor: 'cursor', hasMore: true }} readOnly={false} loadNext={loadNext} />))

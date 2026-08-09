@@ -235,8 +235,6 @@ class MutationReadinessTests(SimpleTestCase):
             IntegrationNotReady(reason="unsupported_operation"),
         )
 
-    # テストケース: elevated modeと不完全な統合設定をstartup checkへ渡す。
-    # 期待値: Django checkが安全な固定エラーで起動をfail closedにする。
     @override_settings(
         LINE_RICH_MENU_MUTATION_MODE="enabled",
         LINE_RICH_MENU_REFERENCE_PROBE_INTEGRATED=False,
@@ -244,14 +242,14 @@ class MutationReadinessTests(SimpleTestCase):
         LINE_RICH_MENU_DEACTIVATION_LIFECYCLE_INTEGRATED=True,
         LINE_RICH_MENU_INTEGRATION_MARKER=LIFECYCLE_INTEGRATION_MARKER,
     )
+    # テストケース: elevated modeと不完全な統合設定をstartup checkへ渡す。
+    # 期待値: Django checkが安全な固定エラーで起動をfail closedにする。
     def test_startup_check_rejects_incomplete_elevated_configuration(self):
         errors = checks.run_checks()
 
         self.assertIn("linerichmenus.E010", {error.id for error in errors})
         self.assertNotIn(LIFECYCLE_INTEGRATION_MARKER, repr(errors))
 
-    # テストケース: foundation既定のread_only構成をstartup checkへ渡す。
-    # 期待値: 統合markerなしでも安全なread-only起動が許可される。
     @override_settings(
         LINE_RICH_MENU_MUTATION_MODE="read_only",
         LINE_RICH_MENU_REFERENCE_PROBE_INTEGRATED=False,
@@ -259,6 +257,8 @@ class MutationReadinessTests(SimpleTestCase):
         LINE_RICH_MENU_DEACTIVATION_LIFECYCLE_INTEGRATED=False,
         LINE_RICH_MENU_INTEGRATION_MARKER="",
     )
+    # テストケース: foundation既定のread_only構成をstartup checkへ渡す。
+    # 期待値: 統合markerなしでも安全なread-only起動が許可される。
     def test_startup_check_accepts_foundation_read_only_configuration(self):
         self.assertEqual(validate_mutation_readiness_configuration(), ())
 

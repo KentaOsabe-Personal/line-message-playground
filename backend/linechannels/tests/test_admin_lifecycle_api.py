@@ -42,7 +42,8 @@ def deactivation_view(**changes):
 
 
 class DeactivationPresenterTests(SimpleTestCase):
-    # 2.4 RED: API DTOはsafe stateと相関・次操作だけを返す。
+    # テストケース: 保存済みdeactivation viewをowner API presenterへ渡す。
+    # 期待値: safe state・操作相関・次操作だけをexact DTOで返し、内部値を露出しない。
     def test_presents_exact_safe_deactivation_response(self):
         dto = AdminPresenter().deactivation(deactivation_view())
 
@@ -58,7 +59,8 @@ class DeactivationPresenterTests(SimpleTestCase):
         self.assertNotIn("resource", str(dto).lower())
         self.assertNotIn("token", str(dto).lower())
 
-    # 2.4/2.5 RED: 一覧・詳細は未解決intentと再有効化refresh gateを含む。
+    # テストケース: 未解決intentと再有効化直後のチャネルprojectionを表示する。
+    # 期待値: 一覧・詳細に安全なsummaryとrefresh gateを含める。
     def test_channel_projection_includes_deactivation_summary_and_refresh_gate(self):
         summary = DeactivationSummary(
             OPERATION_ID,
@@ -106,7 +108,8 @@ class DeactivationAPITests(APITestCase):
             path, body, format="json", HTTP_ORIGIN=self.origin
         )
 
-    # 2.4 RED: state取得/start/recheckをowner endpointとして公開する。
+    # テストケース: owner endpointからstate取得、start、recheckを同じintentへ行う。
+    # 期待値: owner・provider・revision fenceを通り、同じsafe intentを返す。
     def test_get_start_and_recheck_return_same_safe_intent(self):
         self.coordinator.get.return_value = DeactivationSucceeded(None)
         empty = self.client.get(f"/api/line/channels/{CHANNEL_ID}/deactivation/")
@@ -136,7 +139,8 @@ class DeactivationAPITests(APITestCase):
         self.assertEqual(started.json()["operationId"], str(OPERATION_ID))
         self.assertEqual(rechecked.json()["recoveryOperationId"], str(RECOVERY_ID))
 
-    # 2.4 RED: stale/conflictをsafe HTTP errorへ閉じる。
+    # テストケース: lifecycle serviceのstaleと競合結果をHTTP境界へ返す。
+    # 期待値: 内部詳細を含まない固定statusとsafe error codeへ縮約する。
     def test_maps_lifecycle_conflicts_without_internal_details(self):
         self.coordinator.start.return_value = DeactivationFailed("deactivation_conflict")
         response = self.post(
@@ -146,7 +150,8 @@ class DeactivationAPITests(APITestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["error"]["code"], "deactivation_conflict")
 
-    # 2.4: operation correlationはcanonical UUIDv4だけを受け付ける。
+    # テストケース: 非canonicalまたはUUIDv4以外のoperation correlationを送る。
+    # 期待値: service開始前にinvalid inputとして拒否する。
     def test_rejects_noncanonical_or_non_v4_operation_ids(self):
         for operation_id in (str(OPERATION_ID).upper(), str(UUID(int=1))):
             with self.subTest(operation_id=operation_id):

@@ -42,7 +42,8 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
             )
         )
 
-    # 2.1 RED: 同じoperationはreplay、別operationは競合となる。
+    # テストケース: 同じoperation IDと別operation IDで無効化intentを予約する。
+    # 期待値: 同じIDはreplay、別IDは競合となり現在intentは一件だけ残る。
     def test_reserve_is_idempotent_and_rejects_competing_intent(self):
         operation_id = uuid4()
         first = self.reserve(operation_id)
@@ -54,7 +55,8 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
         self.assertIsInstance(competing, DeactivationConflict)
         self.assertEqual(ChannelDeactivationState.objects.count(), 1)
 
-    # 2.1 RED: stale外部結果を保存せず、明示recheckだけrevisionを前進させる。
+    # テストケース: channel更新後に古いrevisionの外部結果を保存し、明示recheckする。
+    # 期待値: stale結果を拒否し、明示recheckだけが最新revisionへ前進する。
     def test_result_cas_conflict_and_explicit_revision_advance(self):
         reserved = self.reserve()
         old_revision = self.channel.updated_at
@@ -99,7 +101,8 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
             advanced.view.expected_channel_revision, self.channel.updated_at
         )
 
-    # 2.1 RED: inactive化とdeactivation完了を単一CASで確定する。
+    # テストケース: 予約済みintentを期待revisionで完了し、古いrevisionでも再実行する。
+    # 期待値: channel無効化とintent完了を同時commitし、stale CASは部分更新せず拒否する。
     def test_complete_inactive_updates_channel_and_state_atomically(self):
         reserved = self.reserve()
         result = self.repository.complete_inactive(
@@ -133,6 +136,8 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
             DeactivationConflict,
         )
 
+    # テストケース: intent未作成チャネルを正しいproviderと別providerから取得する。
+    # 期待値: 正しいscopeは空状態、別scopeは対象非開示のnot foundとして区別する。
     def test_get_distinguishes_empty_state_from_hidden_channel(self):
         self.assertIsNone(
             self.repository.get_for_owner(
@@ -144,7 +149,8 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
         )
         self.assertEqual(hidden.code, "channel_not_found")
 
-    # 2.1/2.5 remediation RED: completed projectionは再有効化後の新intentへ置換できる。
+    # テストケース: 完了済み無効化projectionのチャネルを再有効化して新intentを予約する。
+    # 期待値: 過去資源を復元せず、一件の現在projectionを新operationへ置換する。
     def test_reactivated_channel_can_reserve_a_new_deactivation_intent(self):
         first = self.reserve()
         self.repository.complete_inactive(
@@ -168,12 +174,14 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
         self.assertEqual(second.view.status, "checking")
         self.assertEqual(ChannelDeactivationState.objects.count(), 1)
 
-    # 2.3 remediation RED: recovery reservationと保存済み結果を区別する永続fieldを持つ。
+    # テストケース: deactivation modelのrecovery結果準備fieldを確認する。
+    # 期待値: 予約直後と保存済み結果を区別できる安全なfalse既定値を持つ。
     def test_recovery_reservation_tracks_whether_result_is_persisted(self):
         field = ChannelDeactivationState._meta.get_field("recovery_result_ready")
         self.assertFalse(field.default)
 
-    # 2.2 remediation: pending intentは通常mutationを拒否し、同じrecoveryだけ許可する。
+    # テストケース: pending intent中に通常mutation、同じrecovery、対象cleanupを順にfenceする。
+    # 期待値: 通常mutationを拒否し、保存intentに結び付く回復操作だけを許可する。
     def test_pending_deactivation_fence_allows_only_its_reserved_recovery(self):
         from types import SimpleNamespace
         from django.db import transaction
@@ -233,7 +241,8 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
         with transaction.atomic():
             self.assertTrue(fence.allows(cleanup))
 
-    # 2.2 second remediation RED: channel lockとpending確認を同じrepository境界で行う。
+    # テストケース: pending intentを持つchannelの通常mutation lockを取得する。
+    # 期待値: 同じlock区間でpendingを検出し、deactivation conflictとして拒否する。
     def test_channel_mutation_lock_rejects_pending_state(self):
         from django.db import transaction
         from linechannels.admin_repositories import DjangoAdminChannelRepository
@@ -248,7 +257,8 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
             )
         self.assertEqual(result, "deactivation_conflict")
 
-    # 2.2 second remediation: 二接続でもchannel更新とdeactivation reserveは直列化する。
+    # テストケース: 別DB接続でchannel更新とdeactivation予約を同時実行する。
+    # 期待値: 固定channel lock順で直列化し、両方を同時成功させない。
     def test_channel_mutation_and_deactivation_reserve_linearize_on_channel_lock(self):
         import threading
         from concurrent.futures import ThreadPoolExecutor

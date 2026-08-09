@@ -72,7 +72,8 @@ describe('rich menu admin state', () => {
     expect(transitionRichMenuAdmin(dirty, { type: 'unmounted' })).toEqual(initialRichMenuAdminState)
   })
 
-  // 5.2 RED: ownerが消去を承認した場合、draftとpreview参照を同時に空へ戻す。
+  // テストケース: ownerが未適用入力の消去を承認する。
+  // 期待値: draftとpreviewのmemory-only参照を同じ遷移で空へ戻す。
   test('clears draft and preview references as one editor transition', () => {
     const ready = transitionRichMenuAdmin(transitionRichMenuAdmin(initialRichMenuAdminState, { type: 'loadStarted', generation: 1 }), { type: 'loadSucceeded', generation: 1, value: loaded() })
     const dirty = transitionRichMenuAdmin(ready, { type: 'draftChanged', templateId: 'one', templateVersion: 1, fields: { area1: { displayName: '案内', uri: 'https://example.com' } } })
@@ -86,7 +87,8 @@ describe('rich menu admin state', () => {
     expect(JSON.stringify(cleared)).not.toContain('blob:preview')
   })
 
-  // review remediation RED: invalid/expiredへ遷移した理由はtoken/imageを捨てても安全表示に残す。
+  // テストケース: previewを入力変更または期限切れで無効化する。
+  // 期待値: tokenと画像を破棄しつつ、安全な再生成理由だけを状態へ残す。
   test('retains a safe regeneration reason after preview invalidation and expiry', () => {
     const ready = transitionRichMenuAdmin(transitionRichMenuAdmin(initialRichMenuAdminState, { type: 'loadStarted', generation: 1 }), { type: 'loadSucceeded', generation: 1, value: loaded() })
     const dirty = transitionRichMenuAdmin(ready, { type: 'draftChanged', templateId: 'one', templateVersion: 1, fields: { area1: { displayName: '案内', uri: 'https://example.com' } } })

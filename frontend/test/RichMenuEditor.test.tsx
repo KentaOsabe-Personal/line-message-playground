@@ -29,7 +29,8 @@ describe('RichMenuEditor', () => {
   beforeEach(() => { container = document.createElement('div'); document.body.append(container); root = createRoot(container) })
   afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks() })
 
-  // 5.1 RED: templateの全領域と入力上限を表示し、表示名・HTTPS URLだけを編集できる。
+  // テストケース: 組み込みtemplateの全領域を表示して不正入力からpreviewを要求する。
+  // 期待値: 入力上限と安全な検証理由を表示し、preview APIを呼ばない。
   test('renders every built-in field and reports safe validation errors without preview', async () => {
     const onDraftChange = vi.fn()
     const onPreview = vi.fn()
@@ -58,7 +59,8 @@ describe('RichMenuEditor', () => {
     expect(onDraftChange).toHaveBeenCalled()
   })
 
-  // 5.2 RED: dirtyなtemplate切替は全入力消去を確認し、取消時は元入力を維持する。
+  // テストケース: 未適用入力があるtemplate切替で消去確認を拒否する。
+  // 期待値: 元templateと入力を維持し、previewを開始しない。
   test('keeps the original draft when template clearing is cancelled', async () => {
     const draft = { templateId: 'jp-link-two', templateVersion: 3, fields: {
       left: { displayName: '左', uri: 'https://example.com/left' },
@@ -79,7 +81,8 @@ describe('RichMenuEditor', () => {
     expect(select.value).toBe('jp-link-two')
   })
 
-  // 5.2 RED: 消去を承認した場合だけ新templateの空draftへ切り替える。
+  // テストケース: 未適用入力があるtemplate切替で消去を承認する。
+  // 期待値: 元入力を破棄し、新templateの空draftへ一度だけ切り替える。
   test('switches to an empty draft only after clearing is confirmed', async () => {
     const draft = { templateId: 'jp-link-two', templateVersion: 3, fields: {
       left: { displayName: '左', uri: 'https://example.com/left' },

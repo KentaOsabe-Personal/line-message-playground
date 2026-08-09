@@ -57,6 +57,8 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 
+// テストケース: 空一覧、activeチャネル、inactiveチャネルを順に描画する。
+// 期待値: 各状態を区別し、inactiveチャネルを利用可能とは表示しない。
 test('renders empty and ready states without treating inactive channels as available', async () => {
   const emptyApi = api([])
   await act(async () => root.render(<ChannelAdminConsole api={emptyApi} />))
@@ -73,6 +75,8 @@ test('renders empty and ready states without treating inactive channels as avail
   expect(container.textContent).not.toContain('受付可能')
 })
 
+// テストケース: exact providerのチャネルカードからリッチメニュー管理を開く。
+// 期待値: 対象をmemory-onlyで渡し、URLへチャネル情報を載せない。
 test('opens one channel rich-menu console without putting the target in the URL', async () => {
   const scoped = { ...channel(), providerId: '456' }
   const client = api([scoped]); vi.mocked(client.getChannel).mockResolvedValue(scoped)
@@ -88,12 +92,16 @@ test('opens one channel rich-menu console without putting the target in the URL'
   expect(container.textContent).toContain('LINEチャネル管理')
 })
 
+// テストケース: provider未設定のlegacyチャネルカードを描画する。
+// 期待値: リッチメニューライフサイクル導線を公開しない。
 test('does not expose rich-menu lifecycle navigation for a legacy null-provider channel', async () => {
   const client = api([channel()])
   await act(async () => root.render(<ChannelAdminConsole api={client} richMenuApi={richApi()} />))
   expect([...container.querySelectorAll('button')].some(button => button.textContent === 'リッチメニューを管理')).toBe(false)
 })
 
+// テストケース: 設定済みinactiveチャネルの再有効化導線を選ぶ。
+// 期待値: 直接更新せず、複合ライフサイクル再取得gateへ移る。
 test('routes configured reactivation through the composite lifecycle refresh gate', async () => {
   const scoped = { ...channel(), providerId: '456', credentialsState: 'configured' as const }
   const client = api([scoped]); vi.mocked(client.getChannel).mockResolvedValue(scoped)
@@ -104,6 +112,8 @@ test('routes configured reactivation through the composite lifecycle refresh gat
   expect(container.textContent).toContain('チャネルを再有効化')
 })
 
+// テストケース: 保存済み無効化intentがあるチャネルカードを描画する。
+// 期待値: 競合するcard mutationを閉じ、現在intentの状態を表示する。
 test('keeps channel-card mutations closed for a persisted deactivation intent', async () => {
   const pending = { ...channel(), providerId: '456', active: true, deactivationSummary: {
     operationId: '223e4567-e89b-42d3-a456-426614174001', status: 'checking' as const,
@@ -116,6 +126,8 @@ test('keeps channel-card mutations closed for a persisted deactivation intent', 
   expect(container.textContent).toContain('無効化 checking')
 })
 
+// テストケース: 資格情報修復を伴う再有効化が成功する。
+// 期待値: channel detailとrich stateの複合再取得gateへ移り、完了後だけ操作を開く。
 test('enters the composite refresh gate after credential-repair reactivation succeeds', async () => {
   const inactive = { ...channel(), providerId: '456' }
   const active = { ...inactive, active: true, credentialsState: 'configured' as const, richMenuRefreshRequired: true }
@@ -131,6 +143,8 @@ test('enters the composite refresh gate after credential-repair reactivation suc
   expect(container.textContent).toContain('再有効化後の最新チャネル状態とリッチメニュー実状態を取得しました')
 })
 
+// テストケース: 資格情報修復mutationの応答を保留して再有効化する。
+// 期待値: 一件の実mutation完了前にrefresh gateへ進まず、重複操作もしない。
 test('waits for the one real credential-repair mutation before entering the refresh gate', async () => {
   const inactive = { ...channel(), providerId: '456' }
   const active = { ...inactive, active: true, credentialsState: 'configured' as const, richMenuRefreshRequired: true }
@@ -151,6 +165,8 @@ test('waits for the one real credential-repair mutation before entering the refr
   expect(container.textContent).toContain('Rich menu console')
 })
 
+// テストケース: チャネル一覧取得を失敗させた後、ownerが明示再取得する。
+// 期待値: 古い一覧を表示せず、安全な失敗からclick時だけ一度再試行する。
 test('shows a safe load failure and retries only after an explicit click', async () => {
   const listChannels = vi.fn()
     .mockRejectedValueOnce(new Error('private failure'))
@@ -167,6 +183,8 @@ test('shows a safe load failure and retries only after an explicit click', async
   expect(container.textContent).toContain('登録済みチャネルはありません')
 })
 
+// テストケース: create操作を再描画前に二重clickする。
+// 期待値: 同じoperation keyのPOSTを一件だけ開始する。
 test('starts the same create operation only once before React can rerender', async () => {
   let resolveRegister: ((item: ChannelAdminItem) => void) | undefined
   const register = vi.fn().mockReturnValue(new Promise<ChannelAdminItem>((resolve) => { resolveRegister = resolve }))

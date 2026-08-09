@@ -236,8 +236,8 @@
   - _Boundary: AtomicChannelDelete, RichMenuAdminConsole_
   - _Depends: 3.4, 4.4, 6.5_
 
-- [ ] 8. 単体・統合・安全性・提供modeを検証する
-- [ ] 8.1 (P) 実効操作・headless評価・解除予約のBackend単体テストを追加する
+- [x] 8. 単体・統合・安全性・提供modeを検証する
+- [x] 8.1 (P) 実効操作・headless評価・解除予約のBackend単体テストを追加する
   - 提供modeの積集合、無効状態、結果不明、構成不整合と、評価・回復の全closed variantを検証する。
   - 古い評価、対象差替え、所有権差替えで予約がLINE呼出しゼロになることを検証する。
   - 安全なprojection、対象非露出、操作の一件性を観測できる単体テストが通る。
@@ -245,7 +245,7 @@
   - _Boundary: EffectiveCapabilityProjection, RichMenuLifecyclePort_
   - _Depends: 1.2, 1.3, 1.4_
 
-- [ ] 8.2 (P) 無効化API・統合・並行更新のBackendテストを追加する
+- [x] 8.2 (P) 無効化API・統合・並行更新のBackendテストを追加する
   - 解除不要、解除必要、阻止、結果不明、明示再確認、revision競合を二接続の競合を含めて検証する。
   - 外部I/O中のlock非保持、無効化の原子的完了、同一IDの再送、別IDの競合、自動再確認ゼロ件を検証する。
   - 失敗時に有効チャネルと同じ現在意図が残るBackendテスト群が通る。
@@ -253,7 +253,7 @@
   - _Boundary: ChannelDeactivationCoordinator, ChannelAdminLifecycleAPI_
   - _Depends: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-- [ ] 8.3 (P) 参照確認・履歴削除・物理削除・readinessのBackend統合テストを追加する
+- [x] 8.3 (P) 参照確認・履歴削除・物理削除・readinessのBackend統合テストを追加する
   - 阻止参照、確定履歴だけ、対象なし、履歴削除失敗、新規参照、deadlockを検証する。
   - チャネル、資格情報、履歴、無効化状態が必ず全commitまたは全rollbackになることを検証する。
   - modeとmarker不整合では変更・LINE呼出しゼロ件となり、`enabled`だけが通常操作を許すテスト群が通る。
@@ -261,7 +261,7 @@
   - _Boundary: AtomicChannelDelete, LifecycleReadiness_
   - _Depends: 1.5, 3.1, 3.2, 3.3, 3.4_
 
-- [ ] 8.4 (P) Frontend DTOと状態遷移の単体テストを追加する
+- [x] 8.4 (P) Frontend DTOと状態遷移の単体テストを追加する
   - 全variantのexact parse、未知・余分・禁止応答とrequest generationを検証する。
   - 入力、template、revision、期限によるpreview無効化と、session失効・unmount時のmemory clearを検証する。
   - 未適用入力、確認値、画像が永続storage、URL、エラーへ残らない単体テストが通る。
@@ -269,7 +269,7 @@
   - _Boundary: RichMenuAdminClient, RichMenuAdminState_
   - _Depends: 4.1, 4.2, 4.3_
 
-- [ ] 8.5 (P) 導線・editor・previewのComponentフローを検証する
+- [x] 8.5 (P) 導線・editor・previewのComponentフローを検証する
   - 対象チャネルの導線、読込・失敗表示、未適用入力の切替・戻る・`beforeunload`・session失効と全template項目を検証する。
   - previewの期限・無効化・object URL解放、リンク自動接続ゼロ件、手動open一件を検証する。
   - 導線、編集、previewのowner journeyが独立したComponentテスト群で通る。
@@ -277,7 +277,7 @@
   - _Boundary: RichMenuAdminConsole, RichMenuEditor, RichMenuPreview_
   - _Depends: 5.1, 5.2, 5.3, 7.1_
 
-- [ ] 8.6 (P) 操作・回復・履歴のComponentフローを検証する
+- [x] 8.6 (P) 操作・回復・履歴のComponentフローを検証する
   - 保存状態と実状態の全分類、適用、置換、解除、管理終了、再確認、後片付けのdialogと安全な阻止理由を検証する。
   - 再描画前の二重clickでもPOST一件、自動polling・再試行ゼロ件、履歴追加・失敗・無効時読取専用を検証する。
   - 状態、操作、回復、履歴のowner journeyが独立したComponentテスト群で通る。
@@ -285,7 +285,7 @@
   - _Boundary: RichMenuStatePanel, RichMenuRecoveryPanel, RichMenuHistory_
   - _Depends: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 8.7 無効化・再有効化・物理削除の画面統合を検証する
+- [x] 8.7 無効化・再有効化・物理削除の画面統合を検証する
   - 無効化確認、確認待ち再開、有効状態維持、同一意図、再有効化後の再取得gate、削除阻止と結果を検証する。
   - アプリ外既定、後片付け待ち、競合、部分削除失敗が安全な次操作を示し、自動再確認ゼロ件となることを検証する。
   - チャネルライフサイクルのowner journeyがBackend契約と結合したテスト群で通る。
@@ -293,15 +293,15 @@
   - _Boundary: RichMenuAdminConsole, ChannelAdminLifecycleAPI, AtomicChannelDelete_
   - _Depends: 7.2, 7.3, 7.4_
 
-- [ ] 8.8 秘密非露出とpreviewのno-storeを横断検証する
+- [x] 8.8 秘密非露出とpreviewのno-storeを横断検証する
   - 資格情報、owner識別子、session、確認値、URL、画像、LINE生応答のcanaryが状態、履歴、エラー、ログ、表現、無効化状態へ漏れないことを検証する。
   - previewだけが必要な確認情報を`no-store`で返し、画面破棄後に全一時参照が解放されることを検証する。
   - 秘密非露出を観測可能に確認するsecurityテスト群が通る。
   - _Requirements: 1.7, 2.8, 3.9, 8.8, 11.8_
-  - _Boundary: RichMenuAdminClient, RichMenuAdminConsole, ChannelDeactivationCoordinator, AtomicChannelDelete_
+  - _Boundary: RichMenuAdminClient, RichMenuAdminConsole, ChannelPreviewAPIView, ChannelDeactivationCoordinator, AtomicChannelDelete_
   - _Depends: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7_
 
-- [ ] 8.9 性能budgetとreadiness rolloutの最終回帰を行う
+- [x] 8.9 性能budgetとreadiness rolloutの最終回帰を行う
   - 状態・履歴のquery budget、履歴上限50件、自動polling・再試行ゼロ件、外部I/O中のlock非保持、原子的commit・rollbackと競合を検証する。
   - 同一releaseの`enabled`、障害時の`recovery_only`、資源が空の`read_only`へ切替後、再取得した実効操作がruntimeと一致することを検証する。
   - FrontendとBackendのbuild・testが通り、統合成果が各提供modeでfail closedに動作する。
@@ -312,3 +312,4 @@
 ## Implementation Notes
 
 - preview成功応答は同一generationの`previewing`状態からだけ採用し、request中の入力・template変更後に旧tokenや画像を新draftへ再結合しない。
+- previewの`no-store`はservice成功後ではなく`ChannelPreviewAPIView.finalize_response`で付与し、serializer validationを含む全応答経路を保存禁止にする。

@@ -11,6 +11,8 @@ let container: HTMLDivElement; let root: Root
 describe('RichMenuOperationPanel', () => {
   beforeEach(() => { container = document.createElement('div'); document.body.append(container); root = createRoot(container) })
   afterEach(async () => { await act(async () => root.unmount()); container.remove() })
+  // テストケース: apply確認を表示し、再描画前に実行ボタンを二重clickする。
+  // 期待値: 対象と置換影響を表示し、同じoperationのPOSTを一件だけ開始する。
   test('confirms the apply impact and prevents duplicate starts', async () => {
     const onApply = vi.fn()
     await act(async () => root.render(<RichMenuOperationPanel channelLabel="通知" preview={preview} currentDefault="アプリ外の既定" busy={false} result={null} onApply={onApply} />))

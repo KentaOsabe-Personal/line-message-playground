@@ -144,6 +144,11 @@ class TemplateListAPIView(RichMenuAPIView):
 
 
 class ChannelPreviewAPIView(RichMenuAPIView):
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response["Cache-Control"] = "no-store"
+        return response
+
     def post(self, request, channel_id):
         serializer = PreviewRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

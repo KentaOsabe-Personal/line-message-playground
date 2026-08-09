@@ -12,18 +12,31 @@ from lineaccounts.gateway import VerifiedLineIdentity
 from lineaccounts.models import OwnerAccount
 from lineaccounts.repositories import DjangoAccountRepository
 from lineaccounts.types import LineSubject
-from linerichmenus.services import OperationSucceeded, ServiceFailed, StateSucceeded
+from linerichmenus.services import (
+    OperationSucceeded,
+    PreviewSucceeded,
+    ServiceFailed,
+    StateSucceeded,
+)
 from linerichmenus.services import TemplateListSucceeded
 from linerichmenus.catalog import DefaultTemplateCatalog
 from linerichmenus.types import (
     ChannelStateView,
+    DefaultObservation,
     EffectiveCapabilities,
     HistorySummary,
+    IssuedConfirmation,
     NextAllowedAction,
+    NormalizedTemplate,
+    ObservationKind,
     OperationKind,
     OperationStatus,
     OperationView,
+    PreviewView,
+    RenderedImage,
     SafeResultCode,
+    TemplateFieldValue,
+    TemplateReference,
 )
 from linerichmenus.views import (
     ChannelHistoryAPIView,
@@ -75,7 +88,7 @@ class OwnerRichMenuAPITests(SimpleTestCase):
         )
 
     # テストケース: ownerがstrict preview endpointへ確認入力を送る。
-    # 期待値: owner context・channel ID・aware revisionをserviceへ渡しsafe failureへ対応する。
+    # 期待値: owner context・channel ID・aware revisionをserviceへ渡し、失敗時もpreview応答を保存禁止にする。
     def test_preview_endpoint_builds_typed_command_and_maps_safe_failure(self):
         service = Mock()
         service.preview.return_value = ServiceFailed(SafeResultCode.STALE_CHANNEL)
@@ -95,6 +108,58 @@ class OwnerRichMenuAPITests(SimpleTestCase):
         self.assertEqual(command.channel_public_id, self.channel_id)
         self.assertEqual(command.expected_channel_revision, NOW)
         self.assertEqual(response.data["error"]["code"], "stale_channel")
+        self.assertEqual(response["Cache-Control"], "no-store")
+
+    # テストケース: ownerが有効なpreview入力を送り、serviceが確認情報と画像を返す。
+    # 期待値: 成功応答をno-storeで返し、必要なpreview情報だけを含める。
+    def test_preview_success_response_is_no_store(self):
+        service = Mock()
+        template = NormalizedTemplate(
+            TemplateReference("jp-link-one", 1),
+            (TemplateFieldValue("案内", "https://example.com"),),
+        )
+        service.preview.return_value = PreviewSucceeded(
+            preview=PreviewView(
+                channel_public_id=self.channel_id,
+                channel_label="通知チャネル",
+                template=template,
+                image_digest="a" * 64,
+                observation=DefaultObservation(
+                    ObservationKind.DEFAULT_NONE, NOW, "b" * 64, None
+                ),
+                expires_at=NOW + timedelta(minutes=5),
+                warnings=(),
+            ),
+            confirmation=IssuedConfirmation(
+                "opaque-confirmation", NOW + timedelta(minutes=5), "c" * 64
+            ),
+            image=RenderedImage("image/png", 2500, 843, "a" * 64, b"image"),
+        )
+        body = {
+            "templateId": "jp-link-one",
+            "templateVersion": 1,
+            "channelRevision": NOW.isoformat(),
+            "fields": {"area1": {"displayName": "案内", "uri": "https://example.com"}},
+        }
+
+        with patch("linerichmenus.views.build_rich_menu_service", return_value=service):
+            response = ChannelPreviewAPIView.as_view()(
+                self.request("post", "/preview/", body), channel_id=self.channel_id
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Cache-Control"], "no-store")
+        self.assertEqual(response.data["confirmationToken"], "opaque-confirmation")
+
+    # テストケース: ownerが必須項目を欠くpreview入力を送る。
+    # 期待値: serializerの400応答にもno-storeを付け、入力値を保存可能にしない。
+    def test_preview_validation_failure_is_no_store(self):
+        response = ChannelPreviewAPIView.as_view()(
+            self.request("post", "/preview/", {}), channel_id=self.channel_id
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response["Cache-Control"], "no-store")
 
     # テストケース: preview endpointへ秘密をfield名に埋めた未知keyを送る。
     # 期待値: field名を反射せずAPI固有invalid_inputへ安全に縮約する。

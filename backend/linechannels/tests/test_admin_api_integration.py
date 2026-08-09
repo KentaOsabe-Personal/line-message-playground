@@ -238,7 +238,8 @@ class AdminAPIIntegrationTests(TestCase):
         ):
             self.assertNotIn(canary, rendered)
 
-    # 3.4 RED: rich-menu blockerは公開delete APIで安全な阻止理由になる。
+    # テストケース: rich-menu blockerが残るチャネルを公開delete APIで削除する。
+    # 期待値: 安全な阻止理由を返し、チャネル・資格情報・履歴を一件も削除しない。
     def test_rich_menu_blocker_prevents_api_delete_without_partial_state_loss(self):
         client, csrf = self.owner_client()
         created = self.unsafe(
@@ -279,7 +280,8 @@ class AdminAPIIntegrationTests(TestCase):
         self.assertTrue(RichMenuChannelState.objects.filter(pk=state.pk).exists())
         self.assertTrue(RichMenuOperation.objects.filter(pk=operation.pk).exists())
 
-    # 3.1 RED: 未完了deactivationは削除直前のlock区間で阻止する。
+    # テストケース: 未完了deactivation intentを持つチャネルを物理削除する。
+    # 期待値: 削除直前のlock区間で拒否し、全local stateを保持する。
     def test_pending_deactivation_prevents_api_delete(self):
         client, csrf = self.owner_client()
         created = self.unsafe(
@@ -311,7 +313,8 @@ class AdminAPIIntegrationTests(TestCase):
         self.assertTrue(LineChannelCredential.objects.filter(line_channel=channel).exists())
         self.assertTrue(ChannelDeactivationState.objects.filter(pk=pending.pk).exists())
 
-    # 3.3 remediation: purge成功後のchannel delete失敗もtransaction全体を戻す。
+    # テストケース: terminal履歴purge成功後にchannel deleteを失敗させる。
+    # 期待値: transaction全体をrollbackし、チャネル・資格情報・履歴・無効化状態を復元する。
     def test_delete_failure_after_history_purge_restores_every_local_row(self):
         client, csrf = self.owner_client()
         created = self.unsafe(

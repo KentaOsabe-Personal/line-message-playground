@@ -58,7 +58,8 @@ describe('RichMenuAdminConsole', () => {
     expect(container.textContent).toBe('')
   })
 
-  // 7.1 RED: memory-only画面内遷移はdirty editorを破棄する前に確認する。
+  // テストケース: dirty editorを持つmemory-only管理画面から戻る操作を選ぶ。
+  // 期待値: 破棄確認を行い、取消時は維持し承認時だけ入力を消去する。
   test('confirms a dirty in-app back navigation and clears it on approval', async () => {
     const channelApi = channels(); const richApi = menus(); const onBack = vi.fn()
     vi.mocked(richApi.listTemplates).mockResolvedValue([template])
@@ -76,6 +77,8 @@ describe('RichMenuAdminConsole', () => {
     expect(confirm).toHaveBeenCalledTimes(2)
   })
 
+  // テストケース: owner・provider・channel scopeが拒否された管理画面を読み込む。
+  // 期待値: 対象情報を開示せずチャネルconsoleへ戻し、一時参照を残さない。
   test('returns to the non-disclosing channel console when channel scope is rejected', async () => {
     const channelApi = channels(); const richApi = menus(); const onBack = vi.fn()
     vi.mocked(channelApi.getChannel).mockRejectedValue(new ChannelAdminApiError({ code: 'provider_mismatch', summary: 'private target' }, 403))
@@ -84,7 +87,8 @@ describe('RichMenuAdminConsole', () => {
     expect(container.textContent).not.toContain('private target')
   })
 
-  // 7.2 RED: 無効化はrich状態を確認後に専用operationを一件だけ開始する。
+  // テストケース: rich状態を確認してチャネル無効化を二重clickする。
+  // 期待値: 専用deactivation intentを一件だけ開始し、自動再確認しない。
   test('starts and preserves one explicit channel deactivation intent', async () => {
     const channelApi = channels(); const richApi = menus()
     const result = { channelId, channelActive: true, channelUpdatedAt: now, operationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', status: 'confirmation_required' as const, reason: 'external_default', subjectOperationId: null, recoveryOperationId: null, nextAction: 'resolve_external_default_then_recheck' as const, acceptedAt: now, updatedAt: now, completedAt: null }
@@ -102,6 +106,8 @@ describe('RichMenuAdminConsole', () => {
     expect(richApi.recheckDeactivation).not.toHaveBeenCalled()
   })
 
+  // テストケース: 完了済み無効化履歴を持つ再有効化チャネルで新しい無効化を開始する。
+  // 期待値: 過去intentを履歴として保持し、異なる新operation IDを発行する。
   test('starts a new deactivation after reactivation preserves the completed intent as history', async () => {
     const latestUpdatedAt = '2026-08-03T11:00:00+09:00'
     const completedOperationId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
@@ -126,6 +132,8 @@ describe('RichMenuAdminConsole', () => {
     expect(newOperationId).not.toBe(completedOperationId)
   })
 
+  // テストケース: 確認待ちの保存済み無効化intentを表示してownerが再確認を選ぶ。
+  // 期待値: 自動recheckせず、明示click時だけ同じintentを再確認する。
   test('rechecks the persisted deactivation only after an explicit owner click', async () => {
     const channelApi = channels(); const richApi = menus()
     const pending = { channelId, channelActive: true, channelUpdatedAt: now, operationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', status: 'confirmation_required' as const, reason: 'cleanup_required', subjectOperationId: null, recoveryOperationId: null, nextAction: 'complete_cleanup_then_recheck' as const, acceptedAt: now, updatedAt: now, completedAt: null }
@@ -139,6 +147,8 @@ describe('RichMenuAdminConsole', () => {
     expect(richApi.recheckDeactivation).toHaveBeenCalledWith(channelId, expect.objectContaining({ operationId: pending.operationId, expectedUpdatedAt: now }))
   })
 
+  // テストケース: 保存済み無効化intentがpending中の管理画面を描画する。
+  // 期待値: rich menuとchannelの競合mutationをすべて閉じる。
   test('keeps every competing mutation closed while a persisted deactivation is pending', async () => {
     const channelApi = channels(); const richApi = menus()
     vi.mocked(richApi.listTemplates).mockResolvedValue([template])
@@ -150,6 +160,8 @@ describe('RichMenuAdminConsole', () => {
     expect(container.textContent).toContain('無効化の確認中は競合する操作を実行できません')
   })
 
+  // テストケース: dialog表示中のrefreshで保存済み無効化intentを検出する。
+  // 期待値: 古いdialogを破棄し、最新intentの安全な操作だけを表示する。
   test('discards stale lifecycle dialogs when refresh discovers a persisted deactivation', async () => {
     const channelApi = channels(); const richApi = menus()
     const pending = { channelId, channelActive: true, channelUpdatedAt: now, operationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', status: 'checking' as const, reason: null, subjectOperationId: null, recoveryOperationId: null, nextAction: 'get_state' as const, acceptedAt: now, updatedAt: now, completedAt: null }
@@ -165,7 +177,8 @@ describe('RichMenuAdminConsole', () => {
     expect(richApi.startDeactivation).not.toHaveBeenCalled()
   })
 
-  // 7.3 RED: 再有効化後はchannel detailとrich stateの再取得完了まで変更操作を閉じる。
+  // テストケース: 再有効化後にchannel detailとrich stateを別々に再取得する。
+  // 期待値: 両方の成功まで変更操作を閉じ、過去editor dataを復元しない。
   test('gates mutations on a full refresh after reactivation without restoring editor data', async () => {
     const channelApi = channels(false); const richApi = menus()
     const reactivated = { ...channel(true), richMenuRefreshRequired: true }
@@ -184,7 +197,8 @@ describe('RichMenuAdminConsole', () => {
     expect(container.querySelectorAll('input')).toHaveLength(0)
   })
 
-  // 7.4 RED: 物理削除はrich参照とterminal履歴を確認し、原子的成功だけを画面終了へ渡す。
+  // テストケース: rich参照とterminal履歴を確認してチャネル物理削除を実行する。
+  // 期待値: 原子的成功時だけ画面を終了し、阻止や部分失敗を成功扱いしない。
   test('confirms rich references and terminal history before one atomic channel delete', async () => {
     const channelApi = channels(false); const richApi = menus(); const onDeleted = vi.fn()
     vi.mocked(richApi.getState).mockResolvedValue({ ...rich(), mode: 'read_only', effectiveActions: [], nextAllowedActions: [], historySummary: { totalCount: 3, latestOperationId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', latestStatus: 'succeeded' } })
@@ -202,7 +216,8 @@ describe('RichMenuAdminConsole', () => {
     expect(onDeleted).toHaveBeenCalledWith({ channelId, label: '通知チャネル', deleted: true })
   })
 
-  // 6.1 RED: feature flag OFFでは保守的な状態panelがまだ表示されない。
+  // テストケース: 保存状態とLINE観測が異なるrich menu概要を描画する。
+  // 期待値: 両者を区別し、serverの実効操作だけを安全に表示する。
   test('shows saved state and LINE observation separately', async () => {
     const channelApi = channels(); const richApi = menus()
     vi.mocked(richApi.getState).mockResolvedValue({
@@ -218,7 +233,8 @@ describe('RichMenuAdminConsole', () => {
     expect(container.textContent).toContain('integration_not_ready')
   })
 
-  // 5.1-5.3 RED: editorの有効入力だけをpreview APIへ渡し、object URLとbeforeunloadを画面境界で管理する。
+  // テストケース: editor入力からpreviewを生成し、未保存確認後に破棄する。
+  // 期待値: 有効入力だけを送信し、object URLとbeforeunloadを画面境界で解放する。
   test('creates and clears one memory-only expiring preview', async () => {
     const channelApi = channels(); const richApi = menus()
     vi.mocked(richApi.listTemplates).mockResolvedValue([template])
@@ -261,7 +277,8 @@ describe('RichMenuAdminConsole', () => {
     expect(container.textContent).toBe('')
   })
 
-  // review remediation RED: preview中のunmountは遅延応答を採用せずobject URLを作らない。
+  // テストケース: preview request保留中に管理画面をunmountして遅延成功を返す。
+  // 期待値: 遅延応答を採用せず、tokenやobject URLを新規作成しない。
   test('invalidates an in-flight preview before unmount', async () => {
     const channelApi = channels(); const richApi = menus()
     vi.mocked(richApi.listTemplates).mockResolvedValue([template])
@@ -287,6 +304,8 @@ describe('RichMenuAdminConsole', () => {
     root = createRoot(container)
   })
 
+  // テストケース: 一件のrich menu operation処理中にrefreshと完了応答を発生させる。
+  // 期待値: operationをfenceし、完了後に保存済みprojectionだけを再取得する。
   test('keeps one operation fenced during refresh and reloads saved projections after completion', async () => {
     const channelApi = channels(); const richApi = menus()
     vi.mocked(richApi.listTemplates).mockResolvedValue([template])
