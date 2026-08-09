@@ -4,6 +4,8 @@ from . import runtime
 from .admin_gateway import DefaultLineBotInfoGateway
 from .admin_repositories import DjangoAdminChannelRepository
 from .admin_services import DefaultChannelAdminService
+from .admin_lifecycle_repositories import DjangoChannelDeactivationRepository
+from .admin_lifecycle_services import DefaultChannelDeactivationCoordinator
 from .crypto import FernetCredentialCipher
 from .management.prompts import GetPassManageLineChannelPrompts, ManageLineChannelPrompts
 from .repositories import (
@@ -52,6 +54,7 @@ def build_channel_reference_directory() -> ChannelReferenceDirectory:
     from linefriendships.repositories import DjangoFriendshipReferenceProbe
     from lineinteractions.repositories import DjangoInteractionReferenceProbe
     from linewebhooks.repositories import DjangoWebhookReferenceProbe
+    from linerichmenus.container import build_headless_reference_contracts
 
     return ChannelReferenceDirectory(
         (
@@ -60,6 +63,7 @@ def build_channel_reference_directory() -> ChannelReferenceDirectory:
             DjangoWebhookReferenceProbe(),
             DjangoFriendshipReferenceProbe(),
             DjangoInteractionReferenceProbe(),
+            build_headless_reference_contracts(),
         )
     )
 
@@ -87,6 +91,7 @@ def build_manage_line_channel_prompts() -> ManageLineChannelPrompts:
 def build_channel_admin_service() -> DefaultChannelAdminService:
     from lineaccounts.admin_authorization import DjangoOwnerOperationFence
     from lineaccounts.repositories import DjangoAccountRepository
+    from linerichmenus.container import build_headless_reference_contracts
 
     cipher = _build_cipher()
     return DefaultChannelAdminService(
@@ -95,4 +100,39 @@ def build_channel_admin_service() -> DefaultChannelAdminService:
         DefaultLineChannelService(DjangoLineChannelRepository(), cipher),
         build_channel_reference_directory(),
         DefaultLineBotInfoGateway(),
+        build_channel_deactivation_coordinator(),
+        history_purge=build_headless_reference_contracts(),
     )
+
+
+def build_channel_deactivation_coordinator() -> DefaultChannelDeactivationCoordinator:
+    from lineaccounts.admin_authorization import DjangoOwnerOperationFence
+    from lineaccounts.repositories import DjangoAccountRepository
+    from linerichmenus.container import build_rich_menu_service
+    from linerichmenus.headless import DefaultRichMenuLifecyclePort
+
+    cipher = _build_cipher()
+    channel_service = DefaultLineChannelService(DjangoLineChannelRepository(), cipher)
+    lifecycle = DefaultRichMenuLifecyclePort(
+        build_rich_menu_service(), recovery_store=_PassThroughRecoveryStore()
+    )
+    return DefaultChannelDeactivationCoordinator(
+        DjangoOwnerOperationFence(DjangoAccountRepository()),
+        DjangoChannelDeactivationRepository(),
+        lifecycle,
+        channel_service,
+    )
+
+
+class _PassThroughRecoveryStore:
+    """Coordinatorが一件性を所有し、portにはassessment保存だけを委譲する。"""
+
+    def lookup(self, command):
+        from linerichmenus.headless import DisableRecoveryLookup
+
+        return DisableRecoveryLookup()
+
+    def save(self, command, assessment):
+        from linerichmenus.headless import DisableRecoveryLookup
+
+        return DisableRecoveryLookup(assessment=assessment)

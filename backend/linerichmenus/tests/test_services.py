@@ -279,6 +279,14 @@ class ApplyingRepository(RecordingRepository):
         self.candidate = replace(self.candidate, line_rich_menu_id=line_rich_menu_id)
         return True
 
+    def mark_resource_cleanup_required(self, resource_id):
+        if resource_id != self.candidate.public_id:
+            return False
+        self.candidate = replace(
+            self.candidate, lifecycle=ResourceLifecycle.CLEANUP_REQUIRED
+        )
+        return True
+
     def mark_resource_applied(self, resource_id):
         if self.candidate is None or self.candidate.public_id != resource_id:
             return False
@@ -489,6 +497,14 @@ class RecoveryRepository(RecordingRepository):
         )
         return True
 
+    def mark_resource_cleanup_required(self, resource_id):
+        if resource_id != self.candidate.public_id:
+            return False
+        self.candidate = replace(
+            self.candidate, lifecycle=ResourceLifecycle.CLEANUP_REQUIRED
+        )
+        return True
+
     def get_operation(self, scope, operation_id):
         del scope
         if self.subject.operation_id == operation_id:
@@ -662,6 +678,9 @@ class RichMenuPreviewServiceTests(TransactionTestCase):
             reconciler=self.reconciler,
             renderer=self.renderer,
             confirmation=self.confirmation,
+            readiness=DefaultMutationReadiness(
+                mode="enabled", integration_complete=True
+            ),
             clock=lambda: NOW,
         )
 
@@ -784,6 +803,14 @@ class RichMenuPreviewServiceTests(TransactionTestCase):
         )
         self.assertEqual(len(self.repository.observations), 1)
         self.assertEqual([call[0] for call in self.gateway.calls], ["get_default"])
+        self.assertIn(
+            NextAllowedAction.NEW_PREVIEW,
+            result.state.capabilities.actions,
+        )
+        self.assertIn(
+            NextAllowedAction.APPLY,
+            result.state.capabilities.actions,
+        )
 
     # テストケース: inactive channelの状態照会を行う。
     # 期待値: 保存projectionだけを返し、LINE観測を開始しない。
@@ -796,7 +823,11 @@ class RichMenuPreviewServiceTests(TransactionTestCase):
         result = self.service.get_state(self.owner, self.channel_id)
 
         self.assertIsInstance(result, StateSucceeded)
-        self.assertIs(result.state, self.repository.state)
+        self.assertEqual(result.state.capabilities.mode, "read_only")
+        self.assertEqual(result.state.capabilities.actions, ())
+        self.assertEqual(
+            result.state.capabilities.unavailable_reason, "channel_inactive"
+        )
         self.assertEqual(self.gateway.calls, [])
         self.assertEqual(self.repository.observations, [])
 
@@ -907,6 +938,7 @@ class RichMenuApplyServiceTests(TransactionTestCase):
             self.gateway.calls[1][2].name,
             self.repository.candidate.ownership_marker,
         )
+        self.assertTrue(self.gateway.calls[1][2].selected)
 
     # テストケース: createが明示拒否されるapplyを要求する。
     # 期待値: upload/setは開始せず、候補なしのfailedへ収束する。
@@ -1228,7 +1260,7 @@ class RichMenuRecoveryServiceTests(TransactionTestCase):
         return owner, service, repository, gateway, reconciler, channel_id
 
     # テストケース: create unknownを明示recheckする。
-    # 期待値: 作成・uploadを再実行せずcandidateをbindして次stageへhandoffする。
+    # 期待値: 作成・uploadを再実行せずcandidateをbindし、安全なcleanupへ収束する。
     def test_recheck_confirms_create_without_repeating_mutation(self):
         owner, service, repository, gateway, reconciler, channel_id = self._build_service()
         reconciler.recheck_result = RecheckConfirmed(
@@ -1251,6 +1283,43 @@ class RichMenuRecoveryServiceTests(TransactionTestCase):
         self.assertIsInstance(result, OperationSucceeded)
         self.assertEqual(result.operation.status, OperationStatus.SUCCEEDED)
         self.assertEqual(repository.candidate.line_rich_menu_id, "recovered-line-id")
+        self.assertEqual(repository.subject.status, OperationStatus.CLEANUP_REQUIRED)
+        self.assertEqual(repository.subject.stage, OperationStage.CLEANING)
+        self.assertEqual(repository.candidate.lifecycle, ResourceLifecycle.CLEANUP_REQUIRED)
+        self.assertEqual(gateway.calls, [])
+
+    def test_recheck_confirms_upload_then_requires_cleanup_instead_of_stalling(self):
+        owner, service, repository, gateway, reconciler, channel_id = self._build_service()
+        repository.subject = replace(
+            repository.subject,
+            stage=OperationStage.UPLOADING,
+        )
+        repository.candidate = replace(
+            repository.candidate,
+            line_rich_menu_id="uploaded-line-id",
+        )
+        reconciler.recheck_result = RecheckConfirmed(
+            OperationStage.UPLOADING,
+            line_rich_menu_id="uploaded-line-id",
+            resource_id=repository.candidate.public_id,
+            next_stage=OperationStage.SETTING_DEFAULT,
+        )
+        command = OperationCommand(
+            operation_id=uuid4(),
+            channel_public_id=channel_id,
+            expected_channel_revision=NOW,
+            kind=OperationKind.RECHECK,
+            subject_operation_id=repository.subject.operation_id,
+            target_resource_id=None,
+        )
+
+        result = service.start_operation(owner, command)
+
+        self.assertIsInstance(result, OperationSucceeded)
+        self.assertEqual(result.operation.status, OperationStatus.SUCCEEDED)
+        self.assertEqual(repository.subject.status, OperationStatus.CLEANUP_REQUIRED)
+        self.assertEqual(repository.subject.stage, OperationStage.CLEANING)
+        self.assertEqual(repository.candidate.lifecycle, ResourceLifecycle.CLEANUP_REQUIRED)
         self.assertEqual(gateway.calls, [])
 
     # テストケース: recheck観測自体がunknownになる。
@@ -1272,7 +1341,8 @@ class RichMenuRecoveryServiceTests(TransactionTestCase):
         result = service.start_operation(owner, command)
 
         self.assertIsInstance(result, OperationSucceeded)
-        self.assertEqual(result.operation.status, OperationStatus.UNKNOWN)
+        self.assertEqual(result.operation.status, OperationStatus.FAILED)
+        self.assertEqual(repository.subject.status, OperationStatus.UNKNOWN)
         self.assertEqual(gateway.calls, [])
 
     # テストケース: cleanup対象のownershipとdefault非一致を確認して削除する。

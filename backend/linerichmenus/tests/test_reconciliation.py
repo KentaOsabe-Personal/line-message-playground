@@ -5,6 +5,7 @@ from django.test import SimpleTestCase
 
 from linerichmenus.gateway import (
     GatewayUnknown,
+    ImageAbsent,
     ImageObserved,
     RichMenuDefaultExternal,
     RichMenuDefaultNone,
@@ -19,11 +20,13 @@ from linerichmenus.reconciliation import (
     DefaultRichMenuReconciler,
     ManagedResourceTarget,
     ReconcileContext,
+    RecheckConfirmed,
     RecheckContext,
 )
 from linerichmenus.types import (
     NextAllowedAction,
     ObservationKind,
+    OperationKind,
     OperationStage,
     ResourceLifecycle,
 )
@@ -135,6 +138,24 @@ class ReconciliationClassificationTests(SimpleTestCase):
                         result.next_allowed_actions,
                         (NextAllowedAction.RECHECK, NextAllowedAction.GET_STATE),
                     )
+                else:
+                    self.assertIn(
+                        NextAllowedAction.NEW_PREVIEW,
+                        result.next_allowed_actions,
+                    )
+                    self.assertIn(
+                        NextAllowedAction.APPLY,
+                        result.next_allowed_actions,
+                    )
+                    if expected_kind is ObservationKind.MANAGED_DEFAULT:
+                        self.assertIn(
+                            NextAllowedAction.UNLINK,
+                            result.next_allowed_actions,
+                        )
+                        self.assertIn(
+                            NextAllowedAction.RELEASE,
+                            result.next_allowed_actions,
+                        )
 
     # テストケース: released lifecycleのresource IDがdefaultとして返る。
     # 期待値: 既知IDでもexternal defaultへ分類し、managedへ戻さない。
@@ -158,6 +179,24 @@ class RecheckObservationTests(SimpleTestCase):
         self.gateway = RecordingGateway()
         self.reconciler = DefaultRichMenuReconciler(self.gateway)
         self.context = gateway_context()
+
+    def test_upload_absence_is_confirmed_for_safe_cleanup(self):
+        candidate = target(lifecycle=ResourceLifecycle.CANDIDATE)
+        self.gateway.image = ImageAbsent()
+
+        result = self.reconciler.recheck_operation(
+            RecheckContext(
+                gateway_context=self.context,
+                stage=OperationStage.UPLOADING,
+                subject_operation_id=SUBJECT_OPERATION_ID,
+                candidate=candidate,
+                expected_image_digest="a" * 64,
+            )
+        )
+
+        self.assertIsInstance(result, RecheckConfirmed)
+        self.assertEqual(result.resource_id, candidate.public_id)
+        self.assertIsNone(result.next_stage)
 
     # テストケース: create unknown後にmarker一致が0件・1件・複数件となる。
     # 期待値: 完全一致1件だけを次stageへ進め、それ以外はunknownを維持する。
@@ -241,7 +280,7 @@ class RecheckObservationTests(SimpleTestCase):
             pixel_digest="b" * 64,
             byte_size=100,
         )
-        rejected = self.reconciler.recheck_operation(
+        observed_for_cleanup = self.reconciler.recheck_operation(
             RecheckContext(
                 gateway_context=self.context,
                 stage=OperationStage.UPLOADING,
@@ -250,8 +289,8 @@ class RecheckObservationTests(SimpleTestCase):
                 expected_image_digest="a" * 64,
             )
         )
-        self.assertEqual(rejected.status, "unknown")
-        self.assertEqual(rejected.reason, "not_confirmed")
+        self.assertEqual(observed_for_cleanup.status, "confirmed")
+        self.assertEqual(observed_for_cleanup.resource_id, candidate.public_id)
 
     # テストケース: set/clear default unknownをdefault観測だけでrecheckする。
     # 期待値: 対象一致または対象非defaultを確認できた段階だけconfirmedにする。
@@ -300,6 +339,7 @@ class RecheckObservationTests(SimpleTestCase):
                 stage=OperationStage.CLEANING,
                 subject_operation_id=SUBJECT_OPERATION_ID,
                 target=cleanup_target,
+                subject_kind=OperationKind.CLEANUP,
             )
         )
 
@@ -319,6 +359,7 @@ class RecheckObservationTests(SimpleTestCase):
                 stage=OperationStage.CLEANING,
                 subject_operation_id=SUBJECT_OPERATION_ID,
                 target=cleanup_target,
+                subject_kind=OperationKind.CLEANUP,
             )
         )
         self.assertEqual(unresolved.status, "unknown")
@@ -343,7 +384,32 @@ class RecheckObservationTests(SimpleTestCase):
                 stage=OperationStage.CLEANING,
                 subject_operation_id=SUBJECT_OPERATION_ID,
                 target=cleanup_target,
+                subject_kind=OperationKind.CLEANUP,
             )
         )
 
         self.assertEqual(confirmed.status, "confirmed")
+
+    def test_initial_cleanup_confirms_owned_existing_resource_without_deleting(self):
+        cleanup_target = target(
+            line_id="cleanup-id",
+            marker="cleanup-marker",
+            lifecycle=ResourceLifecycle.CLEANUP_REQUIRED,
+            origin_operation_id=SUBJECT_OPERATION_ID,
+        )
+        self.gateway.resource = ResourceObserved(
+            ResourceSummary("cleanup-id", "cleanup-marker")
+        )
+
+        confirmed = self.reconciler.recheck_operation(
+            RecheckContext(
+                gateway_context=self.context,
+                stage=OperationStage.CLEANING,
+                subject_operation_id=SUBJECT_OPERATION_ID,
+                target=cleanup_target,
+                subject_kind=OperationKind.APPLY,
+            )
+        )
+
+        self.assertEqual(confirmed.status, "confirmed")
+        self.assertEqual(self.gateway.calls, [("get_resource", "cleanup-id")])

@@ -31,6 +31,8 @@ _ERRORS = {
     "recipient_not_found": (status.HTTP_404_NOT_FOUND, "対象を確認できませんでした。"),
     "stale_confirmation": (status.HTTP_409_CONFLICT, "もう一度内容を確認してください。"),
     "stale_channel": (status.HTTP_409_CONFLICT, "チャネルの最新状態を確認してください。"),
+    "deactivation_conflict": (status.HTTP_409_CONFLICT, "進行中の無効化状態を確認してください。"),
+    "lifecycle_required": (status.HTTP_409_CONFLICT, "専用の無効化手順を使用してください。"),
     "channel_referenced": (status.HTTP_409_CONFLICT, "参照中のチャネルは削除できません。"),
     "unlink_in_progress": (status.HTTP_409_CONFLICT, "連携解除を処理中です。"),
     "unlink_attempt_stale": (status.HTTP_409_CONFLICT, "連携状態を再確認してください。"),

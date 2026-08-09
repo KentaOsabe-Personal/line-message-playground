@@ -13,8 +13,14 @@ from lineaccounts.models import DeliveryRecipient, LineIdentity
 from lineaccounts.repositories import DjangoAccountRepository
 from lineaccounts.types import LineSubject
 from linechannels.container import build_channel_admin_service
-from linechannels.models import LineChannel, LineChannelCredential
+from linechannels.models import (
+    ChannelDeactivationState,
+    LineChannel,
+    LineChannelCredential,
+)
+from linechannels.repositories import PersistenceError
 from linechannels.types import ChannelMutationFailed
+from linerichmenus.models import ManagedRichMenu, RichMenuChannelState, RichMenuOperation
 
 
 class AdminAPIIntegrationTests(TestCase):
@@ -150,29 +156,80 @@ class AdminAPIIntegrationTests(TestCase):
         self.assertNotEqual(original_ciphertexts[0], bytes(credential.access_token_ciphertext))
         self.assertNotEqual(original_ciphertexts[1], bytes(credential.channel_secret_ciphertext))
 
-        disabled = self.unsafe(
+        direct_disable = self.unsafe(
             client,
             "post",
             f"/api/line/channels/{channel_id}/state/",
             {"expectedUpdatedAt": replaced.json()["updatedAt"], "active": False},
             csrf,
         )
-        self.assertEqual(disabled.status_code, 200)
-        self.assertFalse(disabled.json()["active"])
+        self.assertEqual(direct_disable.status_code, 409)
+        self.assertEqual(direct_disable.json()["error"]["code"], "lifecycle_required")
+        channel = LineChannel.objects.get(public_id=channel_id)
+        self.assertTrue(channel.is_active)
+
+        # 削除境界の既存検証はinactive fixtureから継続する。無効化自体は専用APIのテストが所有する。
+        LineChannel.objects.filter(public_id=channel_id).update(is_active=False)
+        channel.refresh_from_db()
+
+        completed_deactivation = ChannelDeactivationState.objects.create(
+            line_channel=channel,
+            operation_id=uuid4(),
+            owner_identity_public_id=self.identity.public_id,
+            provider_id=self.provider_id,
+            expected_channel_revision=channel.updated_at,
+            status="completed",
+            completed_at=timezone.now(),
+        )
+        rich_state = RichMenuChannelState.objects.create(
+            channel_public_id=channel.public_id
+        )
+        terminal_operation = RichMenuOperation.objects.create(
+            operation_id=uuid4(),
+            channel_state=rich_state,
+            owner_identity_public_id=self.identity.public_id,
+            provider_id=self.provider_id,
+            kind="apply",
+            request_fingerprint=uuid4().hex * 2,
+            expected_channel_revision=channel.updated_at,
+            status="succeeded",
+            stage="verifying",
+            result_code="succeeded",
+            accepted_at=timezone.now(),
+            completed_at=timezone.now(),
+        )
+        terminal_resource = ManagedRichMenu.objects.create(
+            channel_state=rich_state,
+            origin_operation=terminal_operation,
+            ownership_marker="lrm:v1:" + uuid4().hex,
+            lifecycle="deleted",
+            image_digest="b" * 64,
+            deleted_at=timezone.now(),
+        )
 
         deleted = self.unsafe(
             client,
             "delete",
             f"/api/line/channels/{channel_id}/",
-            {"expectedUpdatedAt": disabled.json()["updatedAt"]},
+            {"expectedUpdatedAt": channel.updated_at.isoformat()},
             csrf,
         )
         self.assertEqual(deleted.status_code, 200)
         self.assertEqual(deleted.json(), {"channelId": channel_id, "label": "更新後チャネル", "deleted": True})
         self.assertFalse(LineChannel.objects.filter(public_id=channel_id).exists())
         self.assertFalse(LineChannelCredential.objects.filter(line_channel__public_id=channel_id).exists())
+        self.assertFalse(
+            ChannelDeactivationState.objects.filter(pk=completed_deactivation.pk).exists()
+        )
+        self.assertFalse(RichMenuChannelState.objects.filter(pk=rich_state.pk).exists())
+        self.assertFalse(
+            RichMenuOperation.objects.filter(pk=terminal_operation.pk).exists()
+        )
+        self.assertFalse(
+            ManagedRichMenu.objects.filter(pk=terminal_resource.pk).exists()
+        )
 
-        rendered = " ".join(str(response.json()) for response in (created, metadata, replaced, disabled, deleted))
+        rendered = " ".join(str(response.json()) for response in (created, metadata, replaced, direct_disable, deleted))
         for canary in (
             "create-access-token-canary",
             "create-channel-secret-canary",
@@ -180,6 +237,157 @@ class AdminAPIIntegrationTests(TestCase):
             "replacement-channel-secret-canary",
         ):
             self.assertNotIn(canary, rendered)
+
+    # テストケース: rich-menu blockerが残るチャネルを公開delete APIで削除する。
+    # 期待値: 安全な阻止理由を返し、チャネル・資格情報・履歴を一件も削除しない。
+    def test_rich_menu_blocker_prevents_api_delete_without_partial_state_loss(self):
+        client, csrf = self.owner_client()
+        created = self.unsafe(
+            client, "post", "/api/line/channels/", self.create_body(), csrf
+        )
+        channel = LineChannel.objects.get(public_id=created.json()["channelId"])
+        state = RichMenuChannelState.objects.create(
+            channel_public_id=channel.public_id
+        )
+        operation = RichMenuOperation.objects.create(
+            operation_id=uuid4(),
+            channel_state=state,
+            owner_identity_public_id=self.identity.public_id,
+            provider_id=self.provider_id,
+            kind="apply",
+            request_fingerprint=uuid4().hex * 2,
+            expected_channel_revision=channel.updated_at,
+            status="unknown",
+            stage="creating",
+            result_code="response_unknown",
+            accepted_at=timezone.now(),
+        )
+
+        response = self.unsafe(
+            client,
+            "delete",
+            f"/api/line/channels/{channel.public_id}/",
+            {"expectedUpdatedAt": created.json()["updatedAt"]},
+            csrf,
+        )
+
+        self.assertEqual(
+            (response.status_code, response.json()["error"]["code"]),
+            (409, "channel_referenced"),
+        )
+        self.assertTrue(LineChannel.objects.filter(pk=channel.pk).exists())
+        self.assertTrue(LineChannelCredential.objects.filter(line_channel=channel).exists())
+        self.assertTrue(RichMenuChannelState.objects.filter(pk=state.pk).exists())
+        self.assertTrue(RichMenuOperation.objects.filter(pk=operation.pk).exists())
+
+    # テストケース: 未完了deactivation intentを持つチャネルを物理削除する。
+    # 期待値: 削除直前のlock区間で拒否し、全local stateを保持する。
+    def test_pending_deactivation_prevents_api_delete(self):
+        client, csrf = self.owner_client()
+        created = self.unsafe(
+            client, "post", "/api/line/channels/", self.create_body(), csrf
+        )
+        channel = LineChannel.objects.get(public_id=created.json()["channelId"])
+        pending = ChannelDeactivationState.objects.create(
+            line_channel=channel,
+            operation_id=uuid4(),
+            owner_identity_public_id=self.identity.public_id,
+            provider_id=self.provider_id,
+            expected_channel_revision=channel.updated_at,
+            status="checking",
+        )
+
+        response = self.unsafe(
+            client,
+            "delete",
+            f"/api/line/channels/{channel.public_id}/",
+            {"expectedUpdatedAt": created.json()["updatedAt"]},
+            csrf,
+        )
+
+        self.assertEqual(
+            (response.status_code, response.json()["error"]["code"]),
+            (409, "deactivation_conflict"),
+        )
+        self.assertTrue(LineChannel.objects.filter(pk=channel.pk).exists())
+        self.assertTrue(LineChannelCredential.objects.filter(line_channel=channel).exists())
+        self.assertTrue(ChannelDeactivationState.objects.filter(pk=pending.pk).exists())
+
+    # テストケース: terminal履歴purge成功後にchannel deleteを失敗させる。
+    # 期待値: transaction全体をrollbackし、チャネル・資格情報・履歴・無効化状態を復元する。
+    def test_delete_failure_after_history_purge_restores_every_local_row(self):
+        client, csrf = self.owner_client()
+        created = self.unsafe(
+            client, "post", "/api/line/channels/", self.create_body(), csrf
+        )
+        channel = LineChannel.objects.get(public_id=created.json()["channelId"])
+        completed_deactivation = ChannelDeactivationState.objects.create(
+            line_channel=channel,
+            operation_id=uuid4(),
+            owner_identity_public_id=self.identity.public_id,
+            provider_id=self.provider_id,
+            expected_channel_revision=channel.updated_at,
+            status="completed",
+            completed_at=timezone.now(),
+        )
+        rich_state = RichMenuChannelState.objects.create(
+            channel_public_id=channel.public_id
+        )
+        terminal_operation = RichMenuOperation.objects.create(
+            operation_id=uuid4(),
+            channel_state=rich_state,
+            owner_identity_public_id=self.identity.public_id,
+            provider_id=self.provider_id,
+            kind="apply",
+            request_fingerprint=uuid4().hex * 2,
+            expected_channel_revision=channel.updated_at,
+            status="succeeded",
+            stage="verifying",
+            result_code="succeeded",
+            accepted_at=timezone.now(),
+            completed_at=timezone.now(),
+        )
+        terminal_resource = ManagedRichMenu.objects.create(
+            channel_state=rich_state,
+            origin_operation=terminal_operation,
+            ownership_marker="lrm:v1:" + uuid4().hex,
+            lifecycle="deleted",
+            image_digest="c" * 64,
+            deleted_at=timezone.now(),
+        )
+        service = build_channel_admin_service()
+        service._repository.delete_locked = Mock(
+            side_effect=PersistenceError("storage_unavailable")
+        )
+
+        with patch(
+            "linechannels.admin_views.build_channel_admin_service",
+            return_value=service,
+        ):
+            response = self.unsafe(
+                client,
+                "delete",
+                f"/api/line/channels/{channel.public_id}/",
+                {"expectedUpdatedAt": created.json()["updatedAt"]},
+                csrf,
+            )
+
+        self.assertEqual(
+            (response.status_code, response.json()["error"]["code"]),
+            (503, "storage_unavailable"),
+        )
+        self.assertTrue(LineChannel.objects.filter(pk=channel.pk).exists())
+        self.assertTrue(LineChannelCredential.objects.filter(line_channel=channel).exists())
+        self.assertTrue(
+            ChannelDeactivationState.objects.filter(pk=completed_deactivation.pk).exists()
+        )
+        self.assertTrue(RichMenuChannelState.objects.filter(pk=rich_state.pk).exists())
+        self.assertTrue(
+            RichMenuOperation.objects.filter(pk=terminal_operation.pk).exists()
+        )
+        self.assertTrue(
+            ManagedRichMenu.objects.filter(pk=terminal_resource.pk).exists()
+        )
 
     # テストケース: owner providerと同一、legacy、別providerのチャネルを一覧・詳細取得する
     # 期待値: 同一とlegacyだけを返し、別provider詳細は不在と同じ404へ収束する

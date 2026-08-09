@@ -15,6 +15,7 @@ const item: ChannelAdminItem = {
   credentialsState: 'configured', credentialsUpdatedAt: '2026-07-29T10:00:00Z',
   createdAt: '2026-07-29T10:00:00Z', updatedAt: '2026-07-29T10:00:00Z',
   webhookUrl: 'https://example.com/api/line/webhooks/123e4567-e89b-42d3-a456-426614174000/',
+  deactivationSummary: null, richMenuRefreshRequired: false,
 }
 
 beforeEach(() => { container = document.createElement('div'); document.body.append(container); root = createRoot(container) })

@@ -307,11 +307,11 @@ class TemplateCatalog(Protocol):
 | Field | Detail |
 |-------|--------|
 | Intent | 同一normalized inputから同じcanonical pixel内容を生成する |
-| Requirements | 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7 |
+| Requirements | 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8 |
 
 **Responsibilities & Constraints**
 
-- Pillow 12.3.0、fixed palette/padding/font size/two-line wrap、`NotoSansJP-Regular.otf`だけを使う。
+- Pillow 12.3.0、fixed palette/padding、28〜112pxの決定的な最大適合font size、two-line wrap、`NotoSansJP-Regular.otf`だけを使う。
 - font SHA-256は`dff723ba59d57d136764a04b9b2d03205544f7cd785a711442d6d2d085ac5073`。startup checkでPillow version、font digest、OFL assetを検証する。
 - 全code pointをcmapで検証してから描画し、fallbackを無効にする。
 - digestはtemplate ID/version、width/height、canonical RGBA bytesのlength-prefix列をSHA-256する。PNGはmetadataなし固定optionでencodeし、format/dimension/aspect/1MBを再検証する。

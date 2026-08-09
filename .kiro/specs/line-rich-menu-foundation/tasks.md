@@ -39,12 +39,12 @@
   - _Requirements: 2.3, 2.4, 2.5, 2.6, 2.7, 2.8_
   - _Boundary: TemplateCatalog_
 - [x] 2.3 決定的な日本語画像rendererを実装する
-  - 固定palette・padding・font size・wrapとcmap全code point検証を使い、fallbackなしでcanonical RGBAからmetadataなしPNGを生成する。
+  - 固定palette・padding、判読性を優先した28〜112pxの最大適合font size、二行wrap、cmap全code point検証を使い、fallbackなしでcanonical RGBAからmetadataなしPNGを生成する。
   - template/version・寸法・canonical pixel bytesからdigestを求め、format・寸法・aspect・1MB上限をencode後にも検証する。
   - binaryの寿命をrender結果、preview応答、LINE uploadに限定し、repr・model・token・log・errorへ流さない。
   - 完了時には、同じ正規化入力が環境や時刻によらず同じpixel digestになり、未対応glyphまたはLINE画像制約違反は外部通信前に拒否される。
   - _Depends: 1.1, 1.3, 2.1, 2.2_
-  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8_
   - _Boundary: DeterministicRenderer_
 - [x] 2.4 (P) 10分間の確認bindingを実装する
   - owner・provider・channel/revision・default観測・template/version・全正規化入力・pixel digestをsnapshot fingerprintへ束ねる。
@@ -235,11 +235,11 @@
 
 - [x] 7. 機能・統合・安全性を検証する
 - [x] 7.1 (P) runtime・template・rendererのunit/golden検証を追加する
-  - 依存版/font digest/OFL、3 template geometry、strict field/URL、NFC、日本語golden pixel、glyph、PNG制約、binary非reprを検証する。
+  - 依存版/font digest/OFL、3 template geometry、strict field/URL、NFC、日本語golden pixel、短い表示名の判読可能な最大font size、長い表示名の二行適合、glyph、PNG制約、binary非reprを検証する。
   - 各Backend test定義直前に日本語の「テストケース:」「期待値:」コメントを置く。
   - 完了時には、固定環境でgolden digestが再現し、資産差替え・不正入力・未対応glyphがLINE call前に失敗するsuiteが通る。
   - _Depends: 1.1, 2.1, 2.2, 2.3_
-  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8_
   - _Boundary: test_templates_renderer.py_
 - [x] 7.2 (P) confirmationとpreviewのbinding検証を追加する
   - 全snapshot軸の一軸変更、tamper、未来時刻、10分expiry、nonce、同token別operation再利用、default unknown時token非発行を検証する。

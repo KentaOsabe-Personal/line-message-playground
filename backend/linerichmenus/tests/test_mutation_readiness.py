@@ -18,8 +18,10 @@ from linerichmenus.headless import HeadlessCommand
 from lineaccounts.admin_authorization import OwnerOperationContext
 from linerichmenus.services import DefaultRichMenuService, ServiceFailed
 from linerichmenus.types import (
+    EffectiveCapabilities,
     IntegrationNotReady,
     MutationReady,
+    NextAllowedAction,
     OperationCommand,
     OperationKind,
     SafeResultCode,
@@ -27,6 +29,72 @@ from linerichmenus.types import (
 
 
 class MutationReadinessTests(SimpleTestCase):
+    # テストケース: domainの候補操作へreadiness modeを合成する。
+    # 期待値: read_only、recovery_only、enabledが許可する積集合だけを返す。
+    def test_effective_capabilities_intersect_domain_actions_with_mode(self):
+        domain = tuple(NextAllowedAction)
+
+        read_only = build_mutation_readiness(mode="read_only").project(
+            domain, channel_active=True
+        )
+        recovery = self._build_integrated("recovery_only").project(
+            domain, channel_active=True
+        )
+        enabled = self._build_integrated("enabled").project(
+            domain, channel_active=True
+        )
+
+        self.assertEqual(
+            read_only,
+            EffectiveCapabilities(
+                mode="read_only",
+                actions=(NextAllowedAction.GET_STATE, NextAllowedAction.VIEW_HISTORY),
+            ),
+        )
+        self.assertEqual(
+            recovery.actions,
+            (
+                NextAllowedAction.UNLINK,
+                NextAllowedAction.RELEASE,
+                NextAllowedAction.RECHECK,
+                NextAllowedAction.CLEANUP,
+                NextAllowedAction.GET_STATE,
+                NextAllowedAction.VIEW_HISTORY,
+            ),
+        )
+        self.assertEqual(enabled.actions, domain)
+
+    # テストケース: inactive channelまたは不整合構成へdomain候補を合成する。
+    # 期待値: inactiveは保存projectionの読取だけ、不整合は空操作のunavailableへ閉じる。
+    def test_effective_capabilities_fail_closed_for_inactive_or_invalid_config(self):
+        domain = (NextAllowedAction.APPLY, NextAllowedAction.GET_STATE)
+
+        inactive = self._build_integrated("enabled").project(
+            domain, channel_active=False
+        )
+        invalid = build_mutation_readiness(
+            mode="enabled",
+            reference_probe_integrated=True,
+            history_purge_integrated=True,
+            integration_marker="wrong",
+        ).project(domain, channel_active=True)
+
+        self.assertEqual(
+            inactive,
+            EffectiveCapabilities(
+                mode="read_only",
+                actions=(NextAllowedAction.GET_STATE,),
+                unavailable_reason="channel_inactive",
+            ),
+        )
+        self.assertEqual(
+            invalid,
+            EffectiveCapabilities(
+                mode="unavailable",
+                actions=(),
+                unavailable_reason="integration_not_ready",
+            ),
+        )
     # テストケース: runtime composition rootからowner APIとheadless向けconcrete依存を構築する。
     # 期待値: service・lifecycle・reference/purgeが同じfail-closed設定で実体化される。
     def test_composition_root_builds_all_public_contracts(self):
@@ -84,6 +152,7 @@ class MutationReadinessTests(SimpleTestCase):
         cases = (
             {"reference_probe_integrated": False},
             {"history_purge_integrated": False},
+            {"deactivation_lifecycle_integrated": False},
             {"integration_marker": ""},
         )
         for mode in ("recovery_only", "enabled"):
@@ -92,6 +161,7 @@ class MutationReadinessTests(SimpleTestCase):
                     "mode": mode,
                     "reference_probe_integrated": True,
                     "history_purge_integrated": True,
+                    "deactivation_lifecycle_integrated": True,
                     "integration_marker": LIFECYCLE_INTEGRATION_MARKER,
                     **missing,
                 }
@@ -119,6 +189,7 @@ class MutationReadinessTests(SimpleTestCase):
                 mode="enabled",
                 reference_probe_integrated=True,
                 history_purge_integrated=True,
+                deactivation_lifecycle_integrated=True,
                 integration_marker="",
             ),
         )
@@ -164,28 +235,30 @@ class MutationReadinessTests(SimpleTestCase):
             IntegrationNotReady(reason="unsupported_operation"),
         )
 
-    # テストケース: elevated modeと不完全な統合設定をstartup checkへ渡す。
-    # 期待値: Django checkが安全な固定エラーで起動をfail closedにする。
     @override_settings(
         LINE_RICH_MENU_MUTATION_MODE="enabled",
         LINE_RICH_MENU_REFERENCE_PROBE_INTEGRATED=False,
         LINE_RICH_MENU_HISTORY_PURGE_INTEGRATED=True,
+        LINE_RICH_MENU_DEACTIVATION_LIFECYCLE_INTEGRATED=True,
         LINE_RICH_MENU_INTEGRATION_MARKER=LIFECYCLE_INTEGRATION_MARKER,
     )
+    # テストケース: elevated modeと不完全な統合設定をstartup checkへ渡す。
+    # 期待値: Django checkが安全な固定エラーで起動をfail closedにする。
     def test_startup_check_rejects_incomplete_elevated_configuration(self):
         errors = checks.run_checks()
 
         self.assertIn("linerichmenus.E010", {error.id for error in errors})
         self.assertNotIn(LIFECYCLE_INTEGRATION_MARKER, repr(errors))
 
-    # テストケース: foundation既定のread_only構成をstartup checkへ渡す。
-    # 期待値: 統合markerなしでも安全なread-only起動が許可される。
     @override_settings(
         LINE_RICH_MENU_MUTATION_MODE="read_only",
         LINE_RICH_MENU_REFERENCE_PROBE_INTEGRATED=False,
         LINE_RICH_MENU_HISTORY_PURGE_INTEGRATED=False,
+        LINE_RICH_MENU_DEACTIVATION_LIFECYCLE_INTEGRATED=False,
         LINE_RICH_MENU_INTEGRATION_MARKER="",
     )
+    # テストケース: foundation既定のread_only構成をstartup checkへ渡す。
+    # 期待値: 統合markerなしでも安全なread-only起動が許可される。
     def test_startup_check_accepts_foundation_read_only_configuration(self):
         self.assertEqual(validate_mutation_readiness_configuration(), ())
 
@@ -194,5 +267,6 @@ class MutationReadinessTests(SimpleTestCase):
             mode=mode,
             reference_probe_integrated=True,
             history_purge_integrated=True,
+            deactivation_lifecycle_integrated=True,
             integration_marker=LIFECYCLE_INTEGRATION_MARKER,
         )

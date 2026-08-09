@@ -16,6 +16,7 @@ from lineinteractions.models import InteractionAudit
 from lineinteractions.repositories import DjangoInteractionReferenceProbe
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.repositories import DjangoWebhookReferenceProbe
+from linerichmenus.headless import DjangoHeadlessReferenceContracts
 
 
 class RecordingProbe:
@@ -33,7 +34,7 @@ class RecordingProbe:
 
 class ChannelReferenceDirectoryTests(SimpleTestCase):
     # テストケース: production管理directoryを構築する
-    # 期待値: recipient、delivery、webhook、friendship、interactionの固定順序になる
+    # 期待値: recipient、delivery、webhook、friendship、interaction、rich menuの固定順序になる
     def test_production_directory_uses_fixed_probe_order(self):
         directory = build_channel_reference_directory()
 
@@ -45,8 +46,11 @@ class ChannelReferenceDirectoryTests(SimpleTestCase):
                 "DjangoWebhookReferenceProbe",
                 "DjangoFriendshipReferenceProbe",
                 "DjangoInteractionReferenceProbe",
+                "DjangoHeadlessReferenceContracts",
             ),
         )
+
+        self.assertIsInstance(directory._probes[-1], DjangoHeadlessReferenceContracts)
 
     # テストケース: 固定順序のprobe列で途中に参照が見つかる
     # 期待値: 最初の参照検出で停止し後続storeを照会しない

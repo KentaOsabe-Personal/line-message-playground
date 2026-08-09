@@ -21,6 +21,8 @@ const item = () => ({
   createdAt: '2026-07-01T10:00:00Z',
   updatedAt: '2026-08-01T10:00:00+09:00',
   webhookUrl: `https://example.test/api/line/webhooks/${channelId}/`,
+  deactivationSummary: null,
+  richMenuRefreshRequired: false,
 })
 
 describe('channel admin DTO', () => {
@@ -29,6 +31,15 @@ describe('channel admin DTO', () => {
   test('accepts exact safe channel values and list envelopes', () => {
     expect(parseChannelAdminItem(item())).toEqual({ ok: true, value: item() })
     expect(parseChannelAdminList({ items: [item()] })).toEqual({ ok: true, value: [item()] })
+  })
+
+  test('accepts only the closed deactivation summary used by lifecycle navigation', () => {
+    const value = { ...item(), deactivationSummary: {
+      operationId: '22222222-2222-4222-8222-222222222222', status: 'confirmation_required',
+      reason: 'external_default', updatedAt: '2026-08-01T10:02:00+09:00',
+    }, richMenuRefreshRequired: true }
+    expect(parseChannelAdminItem(value)).toEqual({ ok: true, value })
+    expect(parseChannelAdminItem({ ...value, deactivationSummary: { ...value.deactivationSummary, targetResourceId: 'secret' } })).toMatchObject({ ok: false })
   })
 
   // テストケース: secret様field、余分なfield、別channelのWebhook URLを解析する。

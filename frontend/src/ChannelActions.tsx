@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { ChannelAdminApiError } from './channelAdminApi'
 import type { ChannelAdminItem, ConnectionCheck } from './channelAdminDto'
@@ -10,6 +10,7 @@ type Props = {
   onSetState: (active: boolean, credentials?: CredentialRepair) => Promise<void>
   onDelete: () => Promise<void>
   onCheck: () => Promise<ConnectionCheck>
+  onManageLifecycle?: () => void
 }
 type Confirmation = 'enable' | 'disable' | 'delete' | null
 
@@ -28,10 +29,11 @@ const safeFailure = (error: unknown) => error instanceof ChannelAdminApiError
     : error.error.summary
   : '操作を完了できませんでした。最新状態を再取得してください。'
 
-export default function ChannelActions({ item, pending = false, onSetState, onDelete, onCheck }: Props) {
+export default function ChannelActions({ item, pending = false, onSetState, onDelete, onCheck, onManageLifecycle }: Props) {
   const [confirmation, setConfirmation] = useState<Confirmation>(null)
   const [notification, setNotification] = useState<string | null>(null)
   const [connection, setConnection] = useState<ConnectionCheck | null>(null)
+  const submissionLatch = useRef(false)
 
   useEffect(() => {
     setConnection(null)
@@ -60,7 +62,8 @@ export default function ChannelActions({ item, pending = false, onSetState, onDe
 
   const confirmState = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault()
-    if (pending || confirmation === null || confirmation === 'delete') return
+    if (pending || submissionLatch.current || confirmation === null || confirmation === 'delete') return
+    submissionLatch.current = true
     const form = event?.currentTarget
     try {
       let credentials: CredentialRepair | undefined
@@ -80,17 +83,21 @@ export default function ChannelActions({ item, pending = false, onSetState, onDe
     } catch (error) {
       setNotification(safeFailure(error))
     } finally {
+      submissionLatch.current = false
       form?.reset()
     }
   }
 
   const confirmDelete = async () => {
-    if (pending) return
+    if (pending || submissionLatch.current) return
+    submissionLatch.current = true
     try {
       await onDelete()
       setConfirmation(null)
     } catch (error) {
       setNotification(safeFailure(error))
+    } finally {
+      submissionLatch.current = false
     }
   }
 
@@ -99,10 +106,10 @@ export default function ChannelActions({ item, pending = false, onSetState, onDe
       <div className="actions">
         <button type="button" className="secondary" onClick={() => { void copyWebhook() }}>Webhook URLをコピー</button>
         <button type="button" className="secondary" disabled={pending} onClick={() => { void checkConnection() }}>接続を確認</button>
-        <button type="button" disabled={pending} onClick={() => setConfirmation(item.active ? 'disable' : 'enable')}>
+        <button type="button" disabled={pending} onClick={() => onManageLifecycle !== undefined && (item.active || item.credentialsState === 'configured') ? onManageLifecycle() : setConfirmation(item.active ? 'disable' : 'enable')}>
           {item.active ? '無効化' : '有効化'}
         </button>
-        <button type="button" className="danger" disabled={pending} onClick={() => setConfirmation('delete')}>削除</button>
+        <button type="button" className="danger" disabled={pending} onClick={() => onManageLifecycle !== undefined ? onManageLifecycle() : setConfirmation('delete')}>削除</button>
       </div>
       {pending && <p role="status">操作を処理しています…</p>}
       {notification !== null && <p className="notice" role="status">{notification}</p>}

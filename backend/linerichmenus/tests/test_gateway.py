@@ -12,6 +12,7 @@ from linerichmenus.gateway import (
     GatewayAccepted,
     GatewayRejected,
     GatewayUnknown,
+    ImageAbsent,
     ImageObserved,
     ImageObservationUnknown,
     RichMenuArea,
@@ -24,6 +25,7 @@ from linerichmenus.gateway import (
     RichMenuDefaultPresent,
     ResourceListAccepted,
     ResourceObserved,
+    _build_sdk_clients,
 )
 
 
@@ -59,8 +61,8 @@ class FakeJsonClient:
     def set_default_rich_menu(self, *args, **kwargs):
         return self._call("set_default_rich_menu", *args, **kwargs)
 
-    def get_default_rich_menu(self, *args, **kwargs):
-        return self._call("get_default_rich_menu", *args, **kwargs)
+    def get_default_rich_menu_id(self, *args, **kwargs):
+        return self._call("get_default_rich_menu_id", *args, **kwargs)
 
     def cancel_default_rich_menu(self, *args, **kwargs):
         return self._call("cancel_default_rich_menu", *args, **kwargs)
@@ -143,6 +145,16 @@ class GatewayContractTests(SimpleTestCase):
         self.context = context()
         self.request = menu_object()
 
+    # テストケース: gatewayが呼び出すdefault取得名を実際に導入済みのLINE SDKで確認する。
+    # 期待値: SDK更新やFakeの誤模倣で実在しないmethod名を受け入れない。
+    def test_default_observation_method_matches_installed_line_sdk(self):
+        clients = _build_sdk_clients("access-token-canary", retries=0)
+        try:
+            self.assertTrue(callable(getattr(clients.json, "get_default_rich_menu_id")))
+            self.assertFalse(hasattr(clients.json, "get_default_rich_menu"))
+        finally:
+            clients.close()
+
     # テストケース: JSON/defaultの全endpointを同一scoped tokenで呼び出す。
     # 期待値: SDK retryは0、timeoutを渡し、各clientが必ずcloseされる。
     def test_json_methods_use_scoped_token_once_with_sdk_retries_disabled(self):
@@ -156,7 +168,7 @@ class GatewayContractTests(SimpleTestCase):
                     "name": "marker-canary",
                 },
                 "set_default_rich_menu": None,
-                "get_default_rich_menu": {"richMenuId": "rich-menu-id-canary"},
+                "get_default_rich_menu_id": {"richMenuId": "rich-menu-id-canary"},
                 "cancel_default_rich_menu": None,
                 "delete_rich_menu": None,
             }
@@ -250,7 +262,7 @@ class GatewayContractTests(SimpleTestCase):
             ("get_rich_menu_list", lambda gateway: gateway.list_resources(self.context), {"richmenus": []}, True),
             ("get_rich_menu", lambda gateway: gateway.get_resource(self.context, "id"), {"richMenuId": "id", "name": "marker"}, True),
             ("set_default_rich_menu", lambda gateway: gateway.set_default(self.context, "id"), None, False),
-            ("get_default_rich_menu", lambda gateway: gateway.get_default(self.context), {"richMenuId": "id"}, True),
+            ("get_default_rich_menu_id", lambda gateway: gateway.get_default(self.context), {"richMenuId": "id"}, True),
             ("cancel_default_rich_menu", lambda gateway: gateway.clear_default(self.context), None, False),
             ("delete_rich_menu", lambda gateway: gateway.delete(self.context, "id"), None, False),
         )
@@ -297,7 +309,7 @@ class GatewayContractTests(SimpleTestCase):
         ):
             with self.subTest(expected=expected.__name__):
                 factory = FakeFactory()
-                factory.json.responses["get_default_rich_menu"] = response
+                factory.json.responses["get_default_rich_menu_id"] = response
                 result = DefaultRichMenuGateway(factory).get_default(self.context)
                 self.assertIsInstance(result, expected)
 
@@ -370,7 +382,42 @@ class GatewayImageContractTests(SimpleTestCase):
         self.assertEqual(upload_call[0], "set_rich_menu_image")
         self.assertEqual(upload_call[1][0], "rich-menu-id-canary")
         self.assertEqual(upload_call[1][1], binary)
+        self.assertEqual(upload_call[2]["_headers"], {"Content-Type": "image/png"})
         self.assertEqual(upload_call[2]["_request_timeout"], 5.0)
+
+    def test_real_sdk_upload_receives_binary_content_type(self):
+        from linebot.v3.messaging import MessagingApiBlob
+
+        from linerichmenus.types import RenderedImage
+
+        class RecordingApiClient:
+            def __init__(self):
+                self.call = None
+
+            def call_api(self, *args, **kwargs):
+                self.call = (args, kwargs)
+
+        api_client = RecordingApiClient()
+        blob = MessagingApiBlob(api_client)
+        binary = b"png-binary-canary"
+        blob.set_rich_menu_image(
+            "rich-menu-id-canary",
+            binary,
+            _headers={"Content-Type": "image/png"},
+            _request_timeout=5.0,
+        )
+
+        self.assertIsNotNone(api_client.call)
+        args, kwargs = api_client.call
+        self.assertEqual(args[4], {"Content-Type": "image/png"})
+        self.assertEqual(kwargs["body"], binary)
+
+    def test_download_404_is_observed_as_absent(self):
+        self.factory.blob.responses["get_rich_menu_image"] = ApiError(404)
+
+        result = self.gateway.download(self.context, "rich-menu-id-canary")
+
+        self.assertIsInstance(result, ImageAbsent)
 
     # テストケース: malformed image downloadとclient close failureを発生させる。
     # 期待値: 画像観測・mutation結果をunknownへ縮約し、失敗内容を露出しない。

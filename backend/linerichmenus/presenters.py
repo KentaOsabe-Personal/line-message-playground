@@ -110,6 +110,7 @@ class RichMenuPresenter:
 
     def state(self, result: StateSucceeded) -> dict[str, object]:
         state = result.state
+        capabilities = getattr(state, "capabilities", None)
         return {
             "channelId": str(state.channel_public_id),
             "currentResource": self._resource(state.current_resource),
@@ -129,6 +130,16 @@ class RichMenuPresenter:
                 ),
             },
             "nextAllowedActions": [item.value for item in state.next_allowed_actions],
+            "mode": "unavailable" if capabilities is None else capabilities.mode,
+            "effectiveActions": (
+                [] if capabilities is None
+                else [item.value for item in capabilities.actions]
+            ),
+            "unavailableReason": (
+                "integration_not_ready"
+                if capabilities is None
+                else capabilities.unavailable_reason
+            ),
         }
 
     def operation(self, result: OperationSucceeded | OperationView) -> dict[str, object]:

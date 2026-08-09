@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import secrets
+from hashlib import sha256
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Callable, Mapping, Protocol
@@ -70,6 +71,12 @@ class UnavailableOperationFence:
     def lock_exact(self, snapshot: OperationFenceSnapshot) -> OperationFenceResult:
         del snapshot
         return OperationFenceResult("unavailable")
+
+
+class AllowAllDeactivationFence:
+    def allows(self, command) -> bool:
+        del command
+        return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,12 +278,93 @@ class OperationConflict:
             raise ValueError("invalid operation conflict")
 
 
+def disable_assessment_proof(
+    *,
+    channel_public_id: UUID,
+    expected_channel_revision: datetime,
+    resource_id: UUID,
+    observation_fingerprint: str,
+    ownership_marker: str = "",
+) -> str:
+    if not all(isinstance(value, UUID) for value in (channel_public_id, resource_id)):
+        raise ValueError("invalid disable assessment identity")
+    if timezone.is_naive(expected_channel_revision):
+        raise ValueError("invalid disable assessment revision")
+    _require_digest(observation_fingerprint)
+    if not isinstance(ownership_marker, str):
+        raise ValueError("invalid ownership marker")
+    payload = {
+        "channel": str(channel_public_id),
+        "revision": expected_channel_revision.isoformat(),
+        "resource": str(resource_id),
+        "observation": observation_fingerprint,
+        "ownership": ownership_marker,
+    }
+    return sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class ReserveDisableUnlink:
+    owner_identity_public_id: UUID
+    provider_id: str
+    channel_public_id: UUID
+    expected_channel_revision: datetime
+    deactivation_operation_id: UUID
+    assessment_proof: str
+
+    def __post_init__(self) -> None:
+        if not all(
+            isinstance(value, UUID)
+            for value in (
+                self.owner_identity_public_id,
+                self.channel_public_id,
+                self.deactivation_operation_id,
+            )
+        ):
+            raise ValueError("invalid disable unlink command")
+        if not isinstance(self.provider_id, str) or not self.provider_id:
+            raise ValueError("invalid disable unlink provider")
+        if timezone.is_naive(self.expected_channel_revision):
+            raise ValueError("invalid disable unlink revision")
+        _require_digest(self.assessment_proof)
+
+
+@dataclass(frozen=True, slots=True)
+class ReservedDisableUnlink:
+    operation: OperationView
+    target_resource_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class DisableUnlinkReplay:
+    operation: OperationView
+    target_resource_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class DisableUnlinkRejected:
+    reason: str
+
+    def __post_init__(self) -> None:
+        if self.reason not in {
+            "stale_assessment",
+            "external_default",
+            "recheck_required",
+            "cleanup_required",
+            "unavailable",
+        }:
+            raise ValueError("invalid disable unlink rejection")
+
+
 class DjangoRichMenuRepository:
     def __init__(
         self,
         *,
         reference_fence: ChannelReferenceFence | None = None,
         operation_fence: OperationFence | None = None,
+        deactivation_fence=None,
         using: str = "default",
         clock: Callable[[], datetime] = timezone.now,
         in_flight_timeout: timedelta = timedelta(minutes=5),
@@ -284,6 +372,7 @@ class DjangoRichMenuRepository:
         self.using = using
         self._reference_fence = reference_fence or DjangoChannelReferenceFence(using=using)
         self._operation_fence = operation_fence or UnavailableOperationFence()
+        self._deactivation_fence = deactivation_fence or AllowAllDeactivationFence()
         self._clock = clock
         if not isinstance(in_flight_timeout, timedelta) or in_flight_timeout.total_seconds() <= 0:
             raise ValueError("invalid in-flight timeout")
@@ -526,6 +615,8 @@ class DjangoRichMenuRepository:
                     if fence.status == "channel_not_found"
                     else fence.status
                 )
+            if not self._deactivation_fence.allows(command):
+                return OperationConflict("operation_in_progress")
 
             existing = (
                 RichMenuOperation.objects.using(self.using)
@@ -616,6 +707,152 @@ class DjangoRichMenuRepository:
             state.active_operation = operation
             state.save(using=self.using, update_fields=("active_operation", "updated_at"))
             return OperationAccepted(_operation_view(operation), candidate_id)
+
+    def reserve_disable_unlink(
+        self, command: ReserveDisableUnlink
+    ) -> ReservedDisableUnlink | DisableUnlinkReplay | DisableUnlinkRejected:
+        if not isinstance(command, ReserveDisableUnlink):
+            raise TypeError("invalid disable unlink reservation")
+        with transaction.atomic(using=self.using):
+            fence = self._reference_fence.lock_existing(command.channel_public_id)
+            if fence.status != "locked":
+                return DisableUnlinkRejected("unavailable")
+            channel_fence = self._operation_fence.lock_exact(
+                OperationFenceSnapshot(
+                    owner_identity_public_id=command.owner_identity_public_id,
+                    provider_id=command.provider_id,
+                    channel_public_id=command.channel_public_id,
+                    expected_channel_revision=command.expected_channel_revision,
+                )
+            )
+            if channel_fence.status != "matched":
+                return DisableUnlinkRejected(
+                    "stale_assessment"
+                    if channel_fence.status == "stale"
+                    else "unavailable"
+                )
+            existing = (
+                RichMenuOperation.objects.using(self.using)
+                .select_for_update()
+                .filter(operation_id=command.deactivation_operation_id)
+                .first()
+            )
+            request_fingerprint = sha256(
+                (
+                    str(command.deactivation_operation_id)
+                    + command.assessment_proof
+                    + str(command.owner_identity_public_id)
+                    + command.provider_id
+                ).encode("utf-8")
+            ).hexdigest()
+            if existing is not None:
+                if (
+                    existing.request_fingerprint == request_fingerprint
+                    and existing.target_resource_id is not None
+                ):
+                    return DisableUnlinkReplay(
+                        _operation_view(existing), existing.target_resource_id
+                    )
+                return DisableUnlinkRejected("stale_assessment")
+            state = (
+                RichMenuChannelState.objects.using(self.using)
+                .select_for_update()
+                .filter(channel_public_id=command.channel_public_id)
+                .first()
+            )
+            if state is None:
+                return DisableUnlinkRejected("unavailable")
+            if state.active_operation_id is not None or state.blocking_operation_id is not None:
+                return DisableUnlinkRejected("recheck_required")
+            if ManagedRichMenu.objects.using(self.using).filter(
+                channel_state=state,
+                lifecycle=ResourceLifecycle.CLEANUP_REQUIRED.value,
+            ).exists():
+                return DisableUnlinkRejected("cleanup_required")
+            if state.last_observation_kind in {None, ObservationKind.UNKNOWN.value}:
+                return DisableUnlinkRejected("recheck_required")
+            if state.last_observation_kind != ObservationKind.MANAGED_DEFAULT.value:
+                return DisableUnlinkRejected("external_default")
+            target = (
+                ManagedRichMenu.objects.using(self.using)
+                .select_for_update()
+                .select_related("origin_operation")
+                .filter(
+                    public_id=state.current_resource_id,
+                    channel_state=state,
+                    lifecycle=ResourceLifecycle.APPLIED.value,
+                    origin_operation__owner_identity_public_id=command.owner_identity_public_id,
+                    origin_operation__provider_id=command.provider_id,
+                    ownership_marker__startswith="lrm:v1:",
+                )
+                .first()
+            )
+            if (
+                target is None
+                or state.last_observation_kind != ObservationKind.MANAGED_DEFAULT.value
+                or state.last_observation_fingerprint is None
+                or len(target.ownership_marker) <= len("lrm:v1:")
+            ):
+                return DisableUnlinkRejected("external_default")
+            current_proof = disable_assessment_proof(
+                channel_public_id=command.channel_public_id,
+                expected_channel_revision=command.expected_channel_revision,
+                resource_id=target.public_id,
+                observation_fingerprint=state.last_observation_fingerprint,
+                ownership_marker=target.ownership_marker,
+            )
+            if not secrets.compare_digest(current_proof, command.assessment_proof):
+                return DisableUnlinkRejected("stale_assessment")
+            operation = RichMenuOperation.objects.using(self.using).create(
+                operation_id=command.deactivation_operation_id,
+                channel_state=state,
+                owner_identity_public_id=command.owner_identity_public_id,
+                provider_id=command.provider_id,
+                kind=OperationKind.UNLINK.value,
+                target_resource=target,
+                request_fingerprint=request_fingerprint,
+                expected_channel_revision=command.expected_channel_revision,
+                status=OperationStatus.ACCEPTED.value,
+                stage=None,
+                result_code=SafeResultCode.ACCEPTED.value,
+                accepted_at=self._clock(),
+            )
+            state.active_operation = operation
+            state.save(using=self.using, update_fields=("active_operation", "updated_at"))
+            return ReservedDisableUnlink(_operation_view(operation), target.public_id)
+
+    def get_disable_assessment_proof(
+        self,
+        *,
+        scope: OwnerChannelScope,
+        expected_channel_revision: datetime,
+        resource_id: UUID,
+        observation_fingerprint: str,
+    ) -> str | None:
+        if not isinstance(scope, OwnerChannelScope):
+            raise TypeError("invalid disable assessment scope")
+        resource = (
+            ManagedRichMenu.objects.using(self.using)
+            .select_related("origin_operation")
+            .filter(
+                public_id=resource_id,
+                channel_state_id=scope.channel_public_id,
+                lifecycle=ResourceLifecycle.APPLIED.value,
+                origin_operation__owner_identity_public_id=scope.owner_identity_public_id,
+                origin_operation__provider_id=scope.provider_id,
+                ownership_marker__startswith="lrm:v1:",
+            )
+            .first()
+        )
+        if resource is None or len(resource.ownership_marker) <= len("lrm:v1:"):
+            return None
+        return disable_assessment_proof(
+            channel_public_id=scope.channel_public_id,
+            expected_channel_revision=expected_channel_revision,
+            resource_id=resource.public_id,
+            observation_fingerprint=observation_fingerprint,
+            ownership_marker=resource.ownership_marker,
+        )
 
     def list_managed_resources(
         self, scope: OwnerChannelScope
@@ -998,7 +1235,11 @@ class DjangoRichMenuRepository:
             if next_status is OperationStatus.FAILED:
                 operation.completed_at = self._clock()
             state.active_operation = None
-            state.blocking_operation = operation
+            state.blocking_operation = (
+                operation
+                if next_status is OperationStatus.UNKNOWN
+                else operation.subject_operation
+            )
             operation.save(
                 using=self.using,
                 update_fields=("status", "stage_started_at", "result_code", "completed_at", "updated_at"),
@@ -1070,6 +1311,8 @@ class DjangoRichMenuRepository:
                 return OperationConflict(
                     "channel_unavailable" if fence.status == "channel_not_found" else fence.status
                 )
+            if not self._deactivation_fence.allows(command):
+                return OperationConflict("operation_in_progress")
             existing = (
                 RichMenuOperation.objects.using(self.using)
                 .select_for_update()
@@ -1260,9 +1503,13 @@ class DjangoRichMenuRepository:
                 if outcome.subject_next_status in {OperationStatus.SUCCEEDED, OperationStatus.FAILED}:
                     subject.completed_at = now
                     state.active_operation = None
+                    state.blocking_operation = None
+                elif outcome.subject_next_status is OperationStatus.CLEANUP_REQUIRED:
+                    state.active_operation = None
+                    state.blocking_operation = subject
                 else:
                     state.active_operation = subject
-                state.blocking_operation = None
+                    state.blocking_operation = None
                 recovery_to = OperationStatus.SUCCEEDED
             self._append_transition(
                 operation=recovery,
@@ -1487,7 +1734,12 @@ class DjangoRichMenuRepository:
                 else (
                     (NextAllowedAction.GET_STATE, NextAllowedAction.VIEW_HISTORY)
                     if cleanup_resources
-                    else (NextAllowedAction.APPLY, NextAllowedAction.GET_STATE, NextAllowedAction.VIEW_HISTORY)
+                    else (
+                        NextAllowedAction.NEW_PREVIEW,
+                        NextAllowedAction.APPLY,
+                        NextAllowedAction.GET_STATE,
+                        NextAllowedAction.VIEW_HISTORY,
+                    )
                 )
             )
         )
@@ -1724,6 +1976,13 @@ def _valid_recovery_subject_handoff(
     current_stage = OperationStage(subject.stage)
     if outcome.subject_next_status in {OperationStatus.SUCCEEDED, OperationStatus.FAILED}:
         return outcome.subject_next_stage is current_stage
+    if outcome.subject_next_status is OperationStatus.CLEANUP_REQUIRED:
+        return (
+            subject.kind == OperationKind.APPLY.value
+            and current_stage in {OperationStage.CREATING, OperationStage.UPLOADING}
+            and outcome.subject_next_stage is OperationStage.CLEANING
+            and outcome.subject_result is SafeResultCode.CLEANUP_REQUIRED
+        )
     if outcome.subject_next_status is not OperationStatus.PROCESSING:
         return False
     successors = {

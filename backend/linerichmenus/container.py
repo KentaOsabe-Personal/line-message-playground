@@ -6,6 +6,7 @@ from lineaccounts.admin_authorization import DjangoOwnerOperationFence
 from lineaccounts.repositories import DjangoAccountRepository
 from linechannels import runtime as channel_runtime
 from linechannels.admin_repositories import DjangoAdminChannelRepository
+from linechannels.admin_lifecycle_repositories import DjangoPendingDeactivationFence
 from linechannels.admin_types import ChannelRevisionProof, ChannelRevisionUnchanged
 from linechannels.crypto import FernetCredentialCipher
 
@@ -37,11 +38,13 @@ def build_mutation_readiness(
     mode: str,
     reference_probe_integrated: bool = False,
     history_purge_integrated: bool = False,
+    deactivation_lifecycle_integrated: bool = False,
     integration_marker: str = "",
 ) -> DefaultMutationReadiness:
     integration_complete = (
         reference_probe_integrated is True
         and history_purge_integrated is True
+        and deactivation_lifecycle_integrated is True
         and integration_marker == LIFECYCLE_INTEGRATION_MARKER
     )
     return DefaultMutationReadiness(
@@ -55,6 +58,9 @@ def build_configured_mutation_readiness() -> MutationReadiness:
         mode=settings.LINE_RICH_MENU_MUTATION_MODE,
         reference_probe_integrated=settings.LINE_RICH_MENU_REFERENCE_PROBE_INTEGRATED,
         history_purge_integrated=settings.LINE_RICH_MENU_HISTORY_PURGE_INTEGRATED,
+        deactivation_lifecycle_integrated=(
+            settings.LINE_RICH_MENU_DEACTIVATION_LIFECYCLE_INTEGRATED
+        ),
         integration_marker=settings.LINE_RICH_MENU_INTEGRATION_MARKER,
     )
 
@@ -96,7 +102,8 @@ def build_rich_menu_service() -> DefaultRichMenuService:
     gateway = DefaultRichMenuGateway()
     catalog = DefaultTemplateCatalog()
     repository = DjangoRichMenuRepository(
-        operation_fence=_ChannelOperationFence(channel_port)
+        operation_fence=_ChannelOperationFence(channel_port),
+        deactivation_fence=DjangoPendingDeactivationFence(),
     )
     return DefaultRichMenuService(
         owner_fence=DjangoOwnerOperationFence(DjangoAccountRepository()),

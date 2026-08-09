@@ -33,6 +33,7 @@ from linechannels.types import (
     PublicChannelSummary,
 )
 from linechannels.validators import build_credential_pair
+from linerichmenus.headless import HistoryPurgeResult
 
 
 def channel_view(*, provider_id="000123", active=True):
@@ -71,6 +72,7 @@ class AdminChannelServiceTests(TransactionTestCase):
         self.foundation = Mock()
         self.references = Mock()
         self.gateway = Mock()
+        self.history_purge = Mock()
         self.clock = Mock(side_effect=lambda: timezone.now())
         self.service = DefaultChannelAdminService(
             self.fence,
@@ -78,6 +80,7 @@ class AdminChannelServiceTests(TransactionTestCase):
             self.foundation,
             self.references,
             self.gateway,
+            history_purge=self.history_purge,
             clock=self.clock,
         )
 
@@ -217,6 +220,33 @@ class AdminChannelServiceTests(TransactionTestCase):
         failed = self.service.set_state(self.owner, command)
         self.assertEqual(failed.code, "credential_unavailable")
 
+    # 2.4 RED: active:falseはrich-menu lifecycleを迂回できない。
+    def test_set_state_rejects_direct_disable(self):
+        view = channel_view(active=True)
+        result = self.service.set_state(
+            self.owner,
+            SetAdminChannelState(view.public_id, view.updated_at, False),
+        )
+        self.assertEqual(result.code, "lifecycle_required")
+        self.foundation.update.assert_not_called()
+
+    # 2.2 remediation RED: pending deactivation中は競合するchannel更新を拒否する。
+    def test_update_rejects_channel_mutation_during_pending_deactivation(self):
+        view = channel_view(active=True)
+        self.repository.lock_mutation_if_no_pending.return_value = (
+            "deactivation_conflict"
+        )
+
+        result = self.service.update(
+            self.owner,
+            UpdateAdminChannel(
+                view.public_id, view.updated_at, label="競合更新"
+            ),
+        )
+
+        self.assertEqual(result.code, "deactivation_conflict")
+        self.foundation.update.assert_not_called()
+
     # テストケース: 参照中と未参照のチャネルを削除する
     # 期待値: channel lockとrevision確認後に参照を調べ、未参照時だけ原子削除する
     def test_delete_checks_references_after_channel_lock(self):
@@ -231,12 +261,44 @@ class AdminChannelServiceTests(TransactionTestCase):
         self.repository.delete_locked.assert_not_called()
 
         self.references.is_referenced.return_value = ReferenceCheckResult("unreferenced")
+        self.history_purge.purge_history.return_value = HistoryPurgeResult("purged")
         self.repository.delete_locked.return_value = (view.public_id, view.label)
         deleted = self.service.delete(self.owner, command)
 
         self.assertEqual(deleted.channel_public_id, view.public_id)
         self.assertEqual(deleted.label, view.label)
+        self.history_purge.purge_history.assert_called_once_with(view.public_id)
         self.repository.delete_locked.assert_called_once_with(view)
+
+    # 3.3 RED: terminal履歴purgeはchannel削除の必須ゲートである。
+    def test_delete_requires_successful_history_purge_in_same_transaction(self):
+        view = channel_view(active=False)
+        command = DeleteAdminChannel(view.public_id, view.updated_at)
+        self.repository.lock_for_delete.return_value = view
+        self.references.is_referenced.return_value = ReferenceCheckResult("unreferenced")
+
+        for purge_status, expected_code in (
+            ("blocked", "channel_referenced"),
+            ("storage_unavailable", "storage_unavailable"),
+        ):
+            with self.subTest(purge_status=purge_status):
+                self.history_purge.reset_mock()
+                self.repository.delete_locked.reset_mock()
+                self.history_purge.purge_history.return_value = HistoryPurgeResult(
+                    purge_status
+                )
+
+                result = self.service.delete(self.owner, command)
+
+                self.assertEqual(result.code, expected_code)
+                self.repository.delete_locked.assert_not_called()
+
+        self.history_purge.purge_history.return_value = HistoryPurgeResult("not_found")
+        self.repository.delete_locked.return_value = (view.public_id, view.label)
+
+        deleted = self.service.delete(self.owner, command)
+
+        self.assertEqual(deleted.channel_public_id, view.public_id)
 
     # テストケース: snapshot取得から外部bot identity取得とrevision再検証まで実行する
     # 期待値: 外部call中はtransactionを保持せず、一致時だけconnectedを返す

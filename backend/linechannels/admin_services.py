@@ -42,6 +42,10 @@ class _AdminRepository(Protocol):
 
     def get_for_owner_provider(self, public_id: UUID, owner_provider_id: str): ...
 
+    def lock_mutation_if_no_pending(
+        self, public_id: UUID, owner_provider_id: str, expected_updated_at: datetime
+    ): ...
+
     def get_connection_snapshot(self, public_id: UUID, owner_provider_id: str): ...
 
     def lock_connection_revision(
@@ -63,6 +67,10 @@ class _ReferenceDirectory(Protocol):
     def is_referenced(self, channel_public_id: UUID) -> ReferenceCheckResult: ...
 
 
+class _HistoryPurge(Protocol):
+    def purge_history(self, channel_public_id: UUID): ...
+
+
 class _BotInfoGateway(Protocol):
     def get_bot_identity(self, access_token): ...
 
@@ -75,6 +83,8 @@ class DefaultChannelAdminService:
         foundation_service: _FoundationService,
         reference_directory: _ReferenceDirectory,
         bot_info_gateway: _BotInfoGateway,
+        lifecycle_coordinator=None,
+        history_purge: _HistoryPurge | None = None,
         *,
         using: str = "default",
         clock: Callable[[], datetime] = timezone.now,
@@ -84,6 +94,8 @@ class DefaultChannelAdminService:
         self._foundation_service = foundation_service
         self._reference_directory = reference_directory
         self._bot_info_gateway = bot_info_gateway
+        self._lifecycle_coordinator = lifecycle_coordinator
+        self._history_purge = history_purge
         self._using = using
         self._clock = clock
 
@@ -147,6 +159,17 @@ class DefaultChannelAdminService:
                     return proof
                 if command.provider_id is not None and command.provider_id != proof.provider_id:
                     return AdminServiceFailed("provider_mismatch")
+                mutation_fence = self._repository.lock_mutation_if_no_pending(
+                    command.channel_public_id,
+                    proof.provider_id,
+                    command.expected_updated_at,
+                )
+                if mutation_fence in {
+                    "channel_not_found", "stale_channel", "deactivation_conflict"
+                }:
+                    return AdminServiceFailed(mutation_fence)
+                if mutation_fence != "allowed" and isinstance(mutation_fence, str):
+                    return AdminServiceFailed("storage_unavailable")
                 return self._update_locked(proof, command, state_change=False)
         except (AttributeError, TypeError):
             return AdminServiceFailed("invalid_input")
@@ -155,6 +178,29 @@ class DefaultChannelAdminService:
 
     def set_state(self, owner: OwnerOperationContext, command: SetAdminChannelState):
         try:
+            if command.is_active is False:
+                return AdminServiceFailed("lifecycle_required")
+            if self._lifecycle_coordinator is not None:
+                from .admin_lifecycle_types import (
+                    DeactivationFailed,
+                    ReactivateChannel,
+                )
+
+                result = self._lifecycle_coordinator.reactivate(
+                    owner,
+                    ReactivateChannel(
+                        command.channel_public_id,
+                        command.expected_updated_at,
+                        command.repair_credentials,
+                    ),
+                )
+                if isinstance(result, DeactivationFailed):
+                    return AdminServiceFailed(
+                        self._mutation_code(result.code, state_change=True)
+                    )
+                return self._project_mutation(
+                    result.channel_public_id, result.provider_id
+                )
             with transaction.atomic(using=self._using):
                 proof = self._lock_owner(owner)
                 if isinstance(proof, AdminServiceFailed):
@@ -195,11 +241,20 @@ class DefaultChannelAdminService:
                     return AdminServiceFailed("channel_not_found")
                 if locked.updated_at != command.expected_updated_at:
                     return AdminServiceFailed("stale_channel")
+                if getattr(locked, "deactivation_pending", False):
+                    return AdminServiceFailed("deactivation_conflict")
                 reference = self._reference_directory.is_referenced(locked.public_id)
                 if reference.status == "referenced":
                     return AdminServiceFailed("channel_referenced")
                 if reference.status != "unreferenced":
                     return AdminServiceFailed(reference.status)
+                if self._history_purge is None:
+                    return AdminServiceFailed("storage_unavailable")
+                purge = self._history_purge.purge_history(locked.public_id)
+                if purge.status == "blocked":
+                    return AdminServiceFailed("channel_referenced")
+                if purge.status not in {"purged", "not_found"}:
+                    return AdminServiceFailed("storage_unavailable")
                 public_id, label = self._repository.delete_locked(locked)
                 return ChannelDeleteSucceeded(public_id, label)
         except (AttributeError, TypeError):
