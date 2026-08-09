@@ -148,5 +148,9 @@ LINE の rich-menu mutation には retry key がないため、タイムアウ�
 
 外部通信中はデータベース lock を保持せず、戻り時に owner、provider、チャネル revision、operation stage を再検証します。段階導入は `read_only`、`recovery_only`、`enabled` を区別し、下流の reference probe、履歴 purge、承認済み統合 marker が揃わない限り mutation を fail-closed で拒否します。
 
+チャネル無効化は、チャネルごとに一意な intent と operation ID を永続化し、LINE 上の実状態確認、必要な適用解除、明示的な再確認、完了へ段階的に収束させます。同じ操作の再実行は保存済み状態を返し、pending 中は同じ無効化に承認された回復・後片付け以外のチャネル更新とリッチメニュー変更を transaction 内の fence で拒否します。
+
+無効化前の評価と解除はリッチメニュー app の headless typed port を介し、所有権を証明できるチャネル既定資源だけを対象にします。外部既定、結果不明、後片付け待ち、revision 競合ではチャネルを無効化せず、確認待ちとして実状態の再取得を要求します。再有効化も owner、provider、revision を再検証し、必要な場合は資格情報ペアの修復と同じ操作で行います。mutation の有効化には reference probe、履歴 purge、無効化ライフサイクル、統合 marker の全条件を要求します。
+
 ---
-_更新日: 2026-08-02。決定的画像生成、リッチメニュー資源の照合・回復、fail-closed な段階導入を反映。技術判断と標準を記録し、依存パッケージ一覧にはしない。_
+_更新日: 2026-08-10。チャネル無効化・再有効化とリッチメニュー回復を結ぶライフサイクルを反映。技術判断と標準を記録し、依存パッケージ一覧にはしない。_
