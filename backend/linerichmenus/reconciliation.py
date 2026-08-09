@@ -7,6 +7,7 @@ from uuid import UUID
 
 from .gateway import (
     GatewayUnknown,
+    ImageAbsent,
     ImageObserved,
     ImageObservationUnknown,
     ResourceAbsent,
@@ -25,6 +26,7 @@ from .types import (
     NextAllowedAction,
     ObservationKind,
     OperationStage,
+    OperationKind,
     ResourceLifecycle,
 )
 
@@ -124,6 +126,7 @@ class RecheckContext:
     candidate: ManagedResourceTarget | None = None
     target: ManagedResourceTarget | None = None
     expected_image_digest: str | None = None
+    subject_kind: OperationKind | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.gateway_context, RichMenuGatewayContext):
@@ -143,6 +146,10 @@ class RecheckContext:
             self.expected_image_digest
         ):
             raise ValueError("invalid expected image digest")
+        if self.subject_kind is not None and not isinstance(
+            self.subject_kind, OperationKind
+        ):
+            raise ValueError("invalid subject kind")
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -229,6 +236,7 @@ class DefaultRichMenuReconciler:
                 now,
                 managed_resource_id=None,
                 actions=(
+                    NextAllowedAction.NEW_PREVIEW,
                     NextAllowedAction.APPLY,
                     NextAllowedAction.GET_STATE,
                     NextAllowedAction.VIEW_HISTORY,
@@ -240,6 +248,7 @@ class DefaultRichMenuReconciler:
                 now,
                 managed_resource_id=None,
                 actions=(
+                    NextAllowedAction.NEW_PREVIEW,
                     NextAllowedAction.APPLY,
                     NextAllowedAction.GET_STATE,
                     NextAllowedAction.VIEW_HISTORY,
@@ -280,10 +289,14 @@ class DefaultRichMenuReconciler:
             else:
                 kind = ObservationKind.OTHER_MANAGED_DEFAULT
                 resource_id = matching.public_id
+            edit_actions = (
+                NextAllowedAction.NEW_PREVIEW,
+                NextAllowedAction.APPLY,
+            )
             actions = (
-                (NextAllowedAction.UNLINK, NextAllowedAction.RELEASE)
+                edit_actions + (NextAllowedAction.UNLINK, NextAllowedAction.RELEASE)
                 if kind is ObservationKind.MANAGED_DEFAULT
-                else (NextAllowedAction.APPLY,)
+                else edit_actions
             )
             return self._result(
                 kind,
@@ -350,12 +363,16 @@ class DefaultRichMenuReconciler:
         image = self._gateway.download(
             context.gateway_context, candidate.line_rich_menu_id
         )
+        if isinstance(image, ImageAbsent):
+            return RecheckConfirmed(
+                context.stage,
+                line_rich_menu_id=candidate.line_rich_menu_id,
+                resource_id=candidate.public_id,
+            )
         if isinstance(image, ImageObservationUnknown):
             return RecheckUnknown(context.stage, "observation_unknown")
         if not isinstance(image, ImageObserved):
             return RecheckUnknown(context.stage, "observation_unknown")
-        if image.pixel_digest != context.expected_image_digest:
-            return RecheckUnknown(context.stage, "not_confirmed")
         return RecheckConfirmed(
             context.stage,
             line_rich_menu_id=candidate.line_rich_menu_id,
@@ -421,6 +438,16 @@ class DefaultRichMenuReconciler:
         if isinstance(resource, ResourceObservationUnknown):
             return RecheckUnknown(context.stage, "observation_unknown")
         if isinstance(resource, ResourceObserved):
+            if (
+                context.subject_kind is not OperationKind.CLEANUP
+                and resource.resource.line_rich_menu_id == target.line_rich_menu_id
+                and resource.resource.name == target.ownership_marker
+            ):
+                return RecheckConfirmed(
+                    context.stage,
+                    line_rich_menu_id=target.line_rich_menu_id,
+                    resource_id=target.public_id,
+                )
             return RecheckUnknown(context.stage, "not_confirmed")
         if not isinstance(resource, ResourceAbsent):
             return RecheckUnknown(context.stage, "observation_unknown")

@@ -32,7 +32,7 @@ describe('RichMenuPreview', () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null)
     await act(async () => root.render(<RichMenuPreview preview={preview} imageUrl="blob:preview" templateName="2リンク" now="2026-08-03T10:02:00+09:00" />))
     expect(open).not.toHaveBeenCalled()
-    for (const text of ['通知チャネル', '2リンク', 'jp-link-two', '版 3', '案内', 'https://example.com/guide', '予約', '外部の既定リッチメニューを置き換える可能性があります。', 'external_default', '残り 3分']) {
+    for (const text of ['通知チャネル', '2リンク', 'jp-link-two', '版 3', '案内', 'https://example.com/guide', '予約', '外部の既定リッチメニューを置き換える可能性があります。', 'LINE側で作成したメニューを適用中', '残り 3分']) {
       expect(container.textContent).toContain(text)
     }
     expect((container.querySelector('img') as HTMLImageElement).src).toContain('blob:preview')

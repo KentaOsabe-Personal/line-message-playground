@@ -84,7 +84,7 @@ test('opens one channel rich-menu console without putting the target in the URL'
   await act(async () => root.render(<ChannelAdminConsole api={client} richMenuApi={menus} />))
   const open = [...container.querySelectorAll('button')].find(button => button.textContent === 'リッチメニューを管理')
   await act(async () => open?.click())
-  expect(container.textContent).toContain('Rich menu console')
+  expect(container.textContent).toContain('リッチメニュー管理')
   expect(container.textContent).not.toContain('LINEチャネル管理')
   expect(window.location.href).toBe(originalUrl)
   const back = [...container.querySelectorAll('button')].find(button => button.textContent === 'チャネル一覧へ戻る')
@@ -160,9 +160,9 @@ test('waits for the one real credential-repair mutation before entering the refr
     form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }))
   })
   expect(client.setState).toHaveBeenCalledTimes(1)
-  expect(container.textContent).not.toContain('Rich menu console')
+  expect(container.textContent).not.toContain('リッチメニュー管理')
   await act(async () => finish(active))
-  expect(container.textContent).toContain('Rich menu console')
+  expect(container.textContent).toContain('リッチメニュー管理')
 })
 
 // テストケース: チャネル一覧取得を失敗させた後、ownerが明示再取得する。
@@ -216,7 +216,7 @@ test('routes card deletion through the rich-menu lifecycle screen', async () => 
   const remove = [...container.querySelectorAll('button')].find(button => button.textContent === '削除')
   await act(async () => remove?.click())
   expect(client.delete).not.toHaveBeenCalled()
-  expect(container.textContent).toContain('チャネルライフサイクル')
+  expect(container.textContent).toContain('チャネルの停止・削除')
   expect(container.textContent).toContain('チャネルを物理削除')
 })
 

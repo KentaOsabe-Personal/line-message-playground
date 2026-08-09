@@ -16,7 +16,7 @@ describe('RichMenuOperationPanel', () => {
   test('confirms the apply impact and prevents duplicate starts', async () => {
     const onApply = vi.fn()
     await act(async () => root.render(<RichMenuOperationPanel channelLabel="通知" preview={preview} currentDefault="アプリ外の既定" busy={false} result={null} onApply={onApply} />))
-    expect(container.textContent).toContain('適用の最終確認')
+    expect(container.textContent).toContain('LINEに反映')
     expect(container.textContent).toContain('アプリ外資源自体は削除しません')
     const button = container.querySelector('button')!
     await act(async () => { button.click(); button.click() })

@@ -2,11 +2,18 @@ import type { RichMenuAction, RichMenuStateView } from './richMenuAdminDto'
 
 type Props = { state: RichMenuStateView; readOnly: boolean }
 
-const observationLabels = {
+export const observationLabels = {
   default_none: '既定なし', managed_default: '管理対象が現在の既定',
   other_managed_default: '別の管理対象が現在の既定', external_default: 'アプリ外の既定', unknown: '結果不明',
 } as const
 const modeLabels = { read_only: '読取専用', recovery_only: '回復操作のみ', enabled: '通常提供', unavailable: '利用不可' } as const
+export const operationStatusLabels = {
+  accepted: '受付済み', processing: '処理中', failed: '失敗', unknown: '結果を確認できません',
+  cleanup_required: '後片付けが必要', recovery_active: '確認中', succeeded: '完了',
+} as const
+export const operationKindLabels = {
+  apply: 'リッチメニューを反映', unlink: '適用を解除', release: '管理を終了', recheck: '結果を再確認', cleanup: '後片付け',
+} as const
 export const richMenuActionLabels: Record<RichMenuAction, string> = {
   new_preview: '新しいプレビュー', apply: '適用', unlink: '適用解除', release: '管理終了',
   recheck: '結果を再確認', cleanup: '後片付け', get_state: '最新状態を再取得',
@@ -26,7 +33,7 @@ export default function RichMenuStatePanel({ state, readOnly }: Props) {
     : state.cleanupResources.length > 0 ? '管理資源の後片付けが完了するまで競合操作は禁止されています。'
       : state.latestObservation?.kind === 'other_managed_default' ? '別の管理対象が既定のため、最新状態に対して許可された操作だけ実行できます。' : null)
   return (
-    <section className="panel" aria-labelledby="rich-menu-state-heading">
+    <section className="rich-menu-state-card" aria-labelledby="rich-menu-state-heading">
       <h3 id="rich-menu-state-heading">リッチメニュー状態</h3>
       <dl>
         <div><dt>保存状態</dt><dd>{state.currentResource === null ? '管理対象なし' : `管理対象（${state.currentResource.lifecycle}）`}</dd></div>
@@ -38,9 +45,9 @@ export default function RichMenuStatePanel({ state, readOnly }: Props) {
       {state.latestObservation?.kind === 'external_default' && <p>アプリ外資源の内容や所有権は推測しません。LINE側で状態を確認してください。</p>}
       {state.latestObservation?.kind === 'unknown' && <p>結果を推測せず、明示的な再確認が必要です。</p>}
       {blockedReason !== null && <p role="alert">禁止理由: {blockedReason}</p>}
-      {!readOnly && <div aria-label="実行可能な操作"><h4>実行可能な操作</h4>{state.effectiveActions.length === 0
+      {!readOnly && <details className="technical-details"><summary>現在実行できる操作を確認</summary><div aria-label="実行可能な操作">{state.effectiveActions.length === 0
         ? <p>現在実行できる操作はありません。</p>
-        : <ul>{state.effectiveActions.map(action => <li key={action}>{richMenuActionLabels[action]}</li>)}</ul>}</div>}
+        : <ul>{state.effectiveActions.map(action => <li key={action}>{richMenuActionLabels[action]}</li>)}</ul>}</div></details>}
     </section>
   )
 }

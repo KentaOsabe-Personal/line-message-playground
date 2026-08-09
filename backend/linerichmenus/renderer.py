@@ -19,7 +19,9 @@ from .types import (
 )
 
 
-_FONT_SIZE = 28
+_MAX_FONT_SIZE = 112
+_MIN_FONT_SIZE = 28
+_FONT_SIZE_STEP = 4
 _PADDING = 48
 _LINE_SPACING = 12
 _MAX_IMAGE_BYTES = 1024 * 1024
@@ -49,7 +51,6 @@ class DefaultDeterministicRenderer:
             return _image_rejected()
         try:
             supported = _font_code_points(self._font_path)
-            font = ImageFont.truetype(str(self._font_path), _FONT_SIZE)
         except (OSError, ValueError, struct.error):
             return _image_rejected()
 
@@ -78,12 +79,12 @@ class DefaultDeterministicRenderer:
                 fill=_PALETTE[index],
             )
             try:
-                lines = _wrap_two_lines(
+                font, lines = _fit_font_and_lines(
                     field.display_name,
-                    font=font,
+                    font_path=self._font_path,
                     maximum_width=area.width - 2 * _PADDING,
                 )
-            except ValueError:
+            except (OSError, ValueError):
                 return _image_rejected()
             draw.multiline_text(
                 (area.x + area.width / 2, area.y + area.height / 2),
@@ -92,13 +93,11 @@ class DefaultDeterministicRenderer:
                 fill=_TEXT_COLOR,
                 anchor="mm",
                 align="center",
-                spacing=_LINE_SPACING,
+                spacing=max(_LINE_SPACING, font.size // 4),
             )
 
         rgba_bytes = image.tobytes()
         digest = _pixel_digest(
-            template_id=template.reference.template_id,
-            version=template.reference.version,
             width=descriptor.width,
             height=descriptor.height,
             rgba_bytes=rgba_bytes,
@@ -115,6 +114,27 @@ class DefaultDeterministicRenderer:
         )
 
 
+def _fit_font_and_lines(
+    text: str, *, font_path: Path, maximum_width: int
+) -> tuple[ImageFont.FreeTypeFont, tuple[str, ...]]:
+    for font_size in range(
+        _MAX_FONT_SIZE,
+        _MIN_FONT_SIZE - 1,
+        -_FONT_SIZE_STEP,
+    ):
+        font = ImageFont.truetype(str(font_path), font_size)
+        try:
+            lines = _wrap_two_lines(
+                text,
+                font=font,
+                maximum_width=maximum_width,
+            )
+        except ValueError:
+            continue
+        return font, lines
+    raise ValueError("normalized display name does not fit readable layout")
+
+
 def _wrap_two_lines(text: str, *, font, maximum_width: int) -> tuple[str, ...]:
     lines = [""]
     for character in text:
@@ -128,10 +148,8 @@ def _wrap_two_lines(text: str, *, font, maximum_width: int) -> tuple[str, ...]:
     return tuple(lines)
 
 
-def _pixel_digest(*, template_id, version, width, height, rgba_bytes) -> str:
+def _pixel_digest(*, width, height, rgba_bytes) -> str:
     components = (
-        template_id.encode("utf-8"),
-        str(version).encode("ascii"),
         str(width).encode("ascii"),
         str(height).encode("ascii"),
         rgba_bytes,

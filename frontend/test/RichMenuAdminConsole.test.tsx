@@ -262,14 +262,14 @@ describe('RichMenuAdminConsole', () => {
       templateId: 'jp-link-one', templateVersion: 1, channelRevision: now,
       fields: { whole: { displayName: '案内', uri: 'https://example.com/guide' } },
     })
-    expect(container.textContent).toContain('期限付きプレビュー')
+    expect(container.textContent).toContain('プレビュー')
     expect(container.textContent).toContain('1リンク')
     expect(createObjectURL).toHaveBeenCalledTimes(1)
 
     const editedName = container.querySelector('input') as HTMLInputElement
     await act(async () => { editedName.value = '変更'; editedName.dispatchEvent(new Event('input', { bubbles: true })) })
     expect(container.textContent).toContain('以前のプレビューは適用できません。新しいプレビューを生成してください。')
-    expect(container.textContent).not.toContain('期限付きプレビュー')
+    expect(container.textContent).not.toContain('表示を確認')
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:preview')
 
     await act(async () => root.render(<RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi} invalidated />))
@@ -329,7 +329,7 @@ describe('RichMenuAdminConsole', () => {
     await act(async () => { inputs[0].value = '案内'; inputs[0].dispatchEvent(new Event('input', { bubbles: true })) })
     await act(async () => { inputs[1].value = 'https://example.com/guide'; inputs[1].dispatchEvent(new Event('input', { bubbles: true })) })
     await act(async () => container.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })))
-    const apply = [...container.querySelectorAll('button')].find(button => button.textContent === '適用を確定')!
+    const apply = [...container.querySelectorAll('button')].find(button => button.textContent === 'この内容をLINEに反映')!
     await act(async () => apply.click())
     const refresh = [...container.querySelectorAll('button')].find(button => button.textContent === '操作完了を待っています…')!
     expect(refresh.disabled).toBe(true)
@@ -338,8 +338,8 @@ describe('RichMenuAdminConsole', () => {
     await act(async () => finishOperation({ operationId: input.operationId, kind: 'apply', status: 'unknown', stage: 'verifying', result: 'timeout_unknown', subjectOperationId: null, targetResourceId: null, acceptedAt: now, completedAt: null, nextAllowedActions: ['recheck'] }))
     expect(richApi.getState).toHaveBeenCalledTimes(2)
     expect(richApi.getHistory).toHaveBeenCalledTimes(2)
-    expect(container.textContent).toContain(`apply: ${input.operationId}`)
-    expect(container.textContent).toContain('次の明示操作: 結果を再確認')
+    expect(container.textContent).toContain(input.operationId)
+    expect(container.textContent).toContain('次にできること: 結果を再確認')
     expect(richApi.startOperation).toHaveBeenCalledTimes(1)
   })
 })

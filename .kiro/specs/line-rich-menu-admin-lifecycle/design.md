@@ -282,7 +282,7 @@ flowchart TB
 | 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10 | template編集、dirty確認、memory-only、field validation、scope制限 | RichMenuEditor, RichMenuAdminState | Template and preview DTO | Screen and Preview State |
 | 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 3.10 | 期限付きpreview、manual link、binding、cleanup、端末非保証 | RichMenuPreview, RichMenuAdminClient | Preview API, object URL lifecycle | Screen and Preview State |
 | 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8 | 保存状態とLINE観測の保守的表示 | RichMenuStatePanel, EffectiveCapabilityProjection | State DTO, effective actions | Explicit Operation Flow |
-| 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10 | apply/replace確認、一件性、追跡、unknown、非自動再試行 | RichMenuAdminConsole, RichMenuStatePanel | Operation API, operation detail | Explicit Operation Flow |
+| 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11 | apply/replace確認、一件性、追跡、unknown、非自動再試行、スマートフォンでの初期表示 | RichMenuAdminConsole, RichMenuStatePanel, RichMenuService | Operation API, operation detail, LINE rich menu `selected` | Explicit Operation Flow |
 | 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9 | unlinkとreleaseの効果分離、結果分類、競合禁止 | RichMenuRecoveryPanel, EffectiveCapabilityProjection | Discriminated OperationCommand | Explicit Operation Flow |
 | 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10 | subject recheck、一件cleanup、ownership拒否、自動retry禁止 | RichMenuRecoveryPanel, Foundation service | recheck and cleanup commands | Explicit Operation Flow |
 | 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9 | scoped cursor history、snapshot、inactive read、秘密除外 | RichMenuHistory, RichMenuAdminClient | History API | Screen and Preview State |

@@ -101,6 +101,7 @@ class RichMenuRepositoryQueryTests(TransactionTestCase):
         self.state.save(update_fields=("active_operation",))
         active_view = self.repository.get_state(self._scope())
         self.assertNotIn("apply", {action.value for action in active_view.next_allowed_actions})
+        self.assertNotIn("new_preview", {action.value for action in active_view.next_allowed_actions})
 
         self.state.active_operation = None
         self.state.save(update_fields=("active_operation",))
@@ -111,6 +112,7 @@ class RichMenuRepositoryQueryTests(TransactionTestCase):
         )
         cleanup_view = self.repository.get_state(self._scope())
         self.assertNotIn("apply", {action.value for action in cleanup_view.next_allowed_actions})
+        self.assertNotIn("new_preview", {action.value for action in cleanup_view.next_allowed_actions})
 
     def _scope(self):
         return OwnerChannelScope(

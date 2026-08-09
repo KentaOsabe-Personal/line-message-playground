@@ -10,7 +10,7 @@ import RichMenuPreview from './RichMenuPreview'
 import RichMenuOperationPanel from './RichMenuOperationPanel'
 import RichMenuRecoveryPanel from './RichMenuRecoveryPanel'
 import RichMenuHistory from './RichMenuHistory'
-import RichMenuStatePanel, { richMenuActionLabels } from './RichMenuStatePanel'
+import RichMenuStatePanel, { operationKindLabels, operationStatusLabels, richMenuActionLabels } from './RichMenuStatePanel'
 import { initialRichMenuAdminState, transitionRichMenuAdmin } from './richMenuAdminState'
 import type { EditorDraft } from './richMenuAdminState'
 import type { OperationKind, OperationView } from './richMenuAdminDto'
@@ -257,18 +257,26 @@ export default function RichMenuAdminConsole({ channelId, channelApi: suppliedCh
   })()
   return (
     <section className="rich-menu-admin" aria-labelledby="rich-menu-admin-heading">
-      <header><p className="eyebrow">Rich menu console</p><h2 id="rich-menu-admin-heading">{state.channel.label}</h2>
-        {onBack !== undefined && <button type="button" className="secondary" onClick={goBack}>チャネル一覧へ戻る</button>}
+      <header className="rich-menu-header"><div>{onBack !== undefined && <button type="button" className="back-button" onClick={goBack}>チャネル一覧へ戻る</button>}<p className="eyebrow">リッチメニュー管理</p><h2 id="rich-menu-admin-heading">{state.channel.label}</h2><p>メニューの内容を作成し、見た目を確認してからLINEに反映できます。</p></div>
+        <span className={state.channel.active ? 'status active' : 'status inactive'}>{state.channel.active ? '利用中' : '停止中'}</span>
       </header>
-      <dl>
-        <div><dt>チャネル状態</dt><dd>{state.channel.active ? '有効' : '無効'}</dd></div>
-        <div><dt>提供モード</dt><dd>{readOnly ? '読取専用' : state.rich.mode}</dd></div>
-        <div><dt>更新時点</dt><dd>{new Date(state.channel.updatedAt).toLocaleString('ja-JP')}</dd></div>
-        <div><dt>履歴件数</dt><dd>{state.rich.historySummary.totalCount}</dd></div>
+      <dl className="rich-menu-overview">
+        <div><dt>LINEの状態</dt><dd>{state.rich.latestObservation === null ? '未確認' : state.rich.latestObservation.kind === 'default_none' ? 'メニューなし' : state.rich.latestObservation.kind === 'managed_default' ? 'このアプリで反映中' : state.rich.latestObservation.kind === 'external_default' ? 'LINE側のメニューを反映中' : '確認が必要'}</dd></div>
+        <div><dt>管理中のメニュー</dt><dd>{state.rich.currentResource === null ? 'なし' : 'あり'}</dd></div>
+        <div><dt>操作履歴</dt><dd>{state.rich.historySummary.totalCount}件</dd></div>
       </dl>
       {state.deactivation !== null && <p>無効化状態: {state.deactivation.status}</p>}
-      <section className="panel" aria-label="チャネルライフサイクル">
-        <h3>チャネルライフサイクル</h3>
+      {!readOnly && !lifecycleLocked && <RichMenuRecoveryPanel channelLabel={state.channel.label} actions={state.rich.effectiveActions}
+        currentResource={state.rich.currentResource} cleanupResources={state.rich.cleanupResources}
+        subjectOperation={state.rich.activeOperation ?? state.rich.blockingOperation} observation={state.rich.latestObservation}
+        busy={operationBusy || lifecycleBusy} result={operationKind !== null && operationKind !== 'apply' ? operationResult : null}
+        onStart={(kind, targetResourceId) => { void startRecovery(kind, targetResourceId) }} />}
+      <RichMenuStatePanel state={state.rich} readOnly={readOnly} />
+      {readOnly && <p className="panel uncertain" role="status">このチャネルは停止中のため、保存済み状態だけを表示しています。</p>}
+      <details className="admin-details">
+        <summary>チャネルの停止・削除</summary>
+      <section className="lifecycle-settings" aria-label="チャネルライフサイクル">
+        <h3>チャネル設定</h3>
         {state.channel.richMenuRefreshRequired && <p role="status">再有効化後の最新チャネル状態とリッチメニュー実状態を取得しました。過去の入力やプレビューは復元していません。</p>}
         {state.channel.active && (state.deactivation === null || state.deactivation.status === 'completed') && !deactivationConfirm && (
           <button type="button" disabled={operationBusy || lifecycleBusy} onClick={() => setDeactivationConfirm(true)}>チャネルを無効化</button>
@@ -309,16 +317,8 @@ export default function RichMenuAdminConsole({ channelId, channelApi: suppliedCh
           <button type="button" disabled={lifecycleBusy || operationBusy} onClick={() => { void recheckDeactivation() }}>同じ無効化を再確認</button></>
         )}
       </section>
-      <RichMenuStatePanel state={state.rich} readOnly={readOnly} />
-      {!readOnly && !lifecycleLocked && (
-        <div aria-label="許可された操作">
-          <h3>許可された操作</h3>
-          {state.rich.effectiveActions.length === 0
-            ? <p>現在実行できる操作はありません。</p>
-            : <ul>{state.rich.effectiveActions.map(action => <li key={action}>{richMenuActionLabels[action]}</li>)}</ul>}
-        </div>
-      )}
-      {readOnly && <p role="status">このチャネルは保存済み状態だけを表示する読取専用です。</p>}
+      </details>
+      <div className="rich-menu-workflow">
       {!readOnly && !lifecycleLocked && state.rich.effectiveActions.includes('new_preview') && (
         <RichMenuEditor
           templates={state.templates}
@@ -338,15 +338,18 @@ export default function RichMenuAdminConsole({ channelId, channelApi: suppliedCh
       )}
       {!readOnly && !lifecycleLocked && state.editor.state === 'preview_invalid' && <p role="alert">以前のプレビューは適用できません。新しいプレビューを生成してください。</p>}
       {!readOnly && !lifecycleLocked && state.editor.state === 'preview_expired' && <p role="alert">プレビューは期限切れです。新しいプレビューを生成してください。</p>}
-      {!readOnly && !lifecycleLocked && <RichMenuRecoveryPanel channelLabel={state.channel.label} actions={state.rich.effectiveActions}
-        currentResource={state.rich.currentResource} cleanupResources={state.rich.cleanupResources}
-        subjectOperation={state.rich.activeOperation ?? state.rich.blockingOperation} observation={state.rich.latestObservation}
-        busy={operationBusy || lifecycleBusy} result={operationKind !== null && operationKind !== 'apply' ? operationResult : null}
-        onStart={(kind, targetResourceId) => { void startRecovery(kind, targetResourceId) }} />}
+      </div>
       {operationBusy && operationId !== null && <p role="status">操作 {operationId} を開始しています。競合する操作は実行できません。</p>}
-      {operationResult !== null && <section className="panel" aria-label="保存済み操作結果"><h3>保存済み操作結果</h3><p>{operationResult.kind}: {operationResult.operationId}</p><p>段階: {operationResult.stage ?? '完了'} / 状態: {operationResult.status}（{operationResult.result}）</p><p>次の明示操作: {operationResult.nextAllowedActions.length === 0 ? 'なし' : operationResult.nextAllowedActions.map(action => richMenuActionLabels[action]).join('、')}</p></section>}
-      <RichMenuHistory key={`${state.channel.updatedAt}-${state.rich.historySummary.latestOperationId ?? 'empty'}`} initialPage={state.history} readOnly={readOnly} loadNext={cursor => richApi.getHistory(channelId, cursor)} />
-      <button type="button" disabled={operationBusy || lifecycleBusy} onClick={() => { void load() }}>{operationBusy || lifecycleBusy ? '操作完了を待っています…' : '最新状態を再取得'}</button>
+      {operationResult !== null && <section className={`operation-result operation-result-banner ${operationResult.status === 'succeeded' ? 'success' : operationResult.status === 'unknown' || operationResult.status === 'cleanup_required' ? 'uncertain' : ''}`} aria-label="保存済み操作結果" role="status">
+        <div><div><p className="eyebrow">操作結果</p><h3>{operationKindLabels[operationResult.kind]}</h3></div><span className={`status ${operationResult.status === 'succeeded' ? 'active' : 'inactive'}`}>{operationStatusLabels[operationResult.status]}</span></div>
+        <p>次にできること: {operationResult.nextAllowedActions.length === 0 ? 'ありません' : operationResult.nextAllowedActions.map(action => richMenuActionLabels[action]).join('、')}</p>
+        <details className="technical-details"><summary>操作IDと技術情報</summary><code>{operationResult.operationId}</code><p>{operationResult.kind} / {operationResult.stage ?? 'completed'} / {operationResult.status}（{operationResult.result}）</p></details>
+      </section>}
+      <details className="history-details" open={state.rich.historySummary.latestStatus === 'unknown' || state.rich.historySummary.latestStatus === 'cleanup_required'}>
+        <summary>操作履歴 <span>{state.rich.historySummary.totalCount}件</span></summary>
+        <RichMenuHistory key={`${state.channel.updatedAt}-${state.rich.historySummary.latestOperationId ?? 'empty'}`} initialPage={state.history} readOnly={readOnly} loadNext={cursor => richApi.getHistory(channelId, cursor)} />
+      </details>
+      <div className="refresh-row"><span>最終更新: {new Date(state.channel.updatedAt).toLocaleString('ja-JP')}</span><button type="button" className="secondary" disabled={operationBusy || lifecycleBusy} onClick={() => { void load() }}>{operationBusy || lifecycleBusy ? '操作完了を待っています…' : '最新状態を再取得'}</button></div>
     </section>
   )
 }

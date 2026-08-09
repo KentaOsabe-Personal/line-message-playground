@@ -346,6 +346,11 @@ class ImageObservationUnknown:
             raise ValueError("invalid image observation unknown")
 
 
+@dataclass(frozen=True, slots=True)
+class ImageAbsent:
+    status: Literal["absent"] = "absent"
+
+
 MutationResult = GatewayAccepted | GatewayRejected | GatewayUnknown
 CreateResult = CreateAccepted | GatewayRejected | GatewayUnknown
 ResourceListObservation = ResourceListAccepted | GatewayRejected | GatewayUnknown
@@ -359,7 +364,7 @@ DefaultObservation = (
     | RichMenuDefaultUnknown
     | GatewayRejected
 )
-ImageObservation = ImageObserved | ImageObservationUnknown | GatewayRejected
+ImageObservation = ImageObserved | ImageAbsent | ImageObservationUnknown | GatewayRejected
 
 
 class RichMenuGateway(Protocol):
@@ -485,7 +490,14 @@ class DefaultRichMenuGateway:
             return GatewayRejected("invalid_input")
         if not isinstance(image, RenderedImage) or not _valid_upload_image(image):
             return GatewayRejected("image_invalid")
-        return self._run_blob(context, "set_rich_menu_image", rich_menu_id, image.binary, mutation=True)
+        return self._run_blob(
+            context,
+            "set_rich_menu_image",
+            rich_menu_id,
+            image.binary,
+            mutation=True,
+            headers={"Content-Type": image.content_type},
+        )
 
     def download(self, context: RichMenuGatewayContext, rich_menu_id: str) -> ImageObservation:
         if not _valid_line_id(rich_menu_id):
@@ -497,7 +509,13 @@ class DefaultRichMenuGateway:
                 return ImageObservationUnknown("response_unknown")
             return _decode_image(binary)
 
-        return self._run_blob(context, "get_rich_menu_image", rich_menu_id, handler=handle)
+        return self._run_blob(
+            context,
+            "get_rich_menu_image",
+            rich_menu_id,
+            handler=handle,
+            not_found=ImageAbsent(),
+        )
 
     def list_resources(self, context: RichMenuGatewayContext) -> ResourceListObservation:
         def handle(response):
@@ -554,7 +572,7 @@ class DefaultRichMenuGateway:
 
         return self._run_json(
             context,
-            "get_default_rich_menu",
+            "get_default_rich_menu_id",
             handler=handle,
             not_found=RichMenuDefaultNone(),
             forbidden=RichMenuDefaultExternal(),
@@ -566,7 +584,13 @@ class DefaultRichMenuGateway:
     def delete(self, context: RichMenuGatewayContext, rich_menu_id: str) -> MutationResult:
         if not _valid_line_id(rich_menu_id):
             return GatewayRejected("invalid_input")
-        return self._run_json(context, "delete_rich_menu", rich_menu_id, mutation=True)
+        return self._run_json(
+            context,
+            "delete_rich_menu",
+            rich_menu_id,
+            mutation=True,
+            not_found=GatewayAccepted(),
+        )
 
     def _run_json(
         self,
@@ -596,7 +620,10 @@ class DefaultRichMenuGateway:
         *args: object,
         handler: Callable[[object], object] | None = None,
         mutation: bool = False,
+        not_found: object | None = None,
+        headers: Mapping[str, str] | None = None,
     ):
+        kwargs = {"_headers": dict(headers)} if headers is not None else {}
         return self._run(
             context,
             "blob",
@@ -604,6 +631,8 @@ class DefaultRichMenuGateway:
             *args,
             handler=handler,
             mutation=mutation,
+            not_found=not_found,
+            method_kwargs=kwargs,
         )
 
     def _run(
@@ -616,6 +645,7 @@ class DefaultRichMenuGateway:
         mutation: bool,
         not_found: object | None = None,
         forbidden: object | None = None,
+        method_kwargs: Mapping[str, object] | None = None,
     ):
         if not isinstance(context, RichMenuGatewayContext):
             raise TypeError("rich menu gateway context required")
@@ -628,7 +658,11 @@ class DefaultRichMenuGateway:
             )
             client = getattr(clients, client_kind)
             method = getattr(client, method_name)
-            response = method(*args, _request_timeout=self._timeout_seconds)
+            response = method(
+                *args,
+                **dict(method_kwargs or {}),
+                _request_timeout=self._timeout_seconds,
+            )
             if handler is not None:
                 result = handler(response)
             elif mutation:

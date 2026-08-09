@@ -4,8 +4,10 @@ from unittest.mock import patch
 from django.test import SimpleTestCase
 from PIL import Image
 
+from linerichmenus.apps import FONT_PATH
 from linerichmenus.catalog import DefaultTemplateCatalog
-from linerichmenus.renderer import DefaultDeterministicRenderer
+from linerichmenus.renderer import DefaultDeterministicRenderer, _fit_font_and_lines
+from linerichmenus.gateway import ImageObserved, _decode_image
 from linerichmenus.types import (
     NormalizedTemplate,
     RenderRejected,
@@ -40,10 +42,9 @@ class DeterministicRendererTests(SimpleTestCase):
         self.assertEqual(first, second)
         self.assertEqual(first.content_type, "image/png")
         self.assertEqual((first.width, first.height), (2500, 843))
-        self.assertEqual(
-            first.pixel_digest,
-            "a85e7f1617185cb699971e5a0887d8759ee25ab17279e5ed1e229443c36ec6dc",
-        )
+        downloaded = _decode_image(first.binary)
+        self.assertIsInstance(downloaded, ImageObserved)
+        self.assertEqual(first.pixel_digest, downloaded.pixel_digest)
         self.assertLessEqual(len(first.binary), 1024 * 1024)
         with Image.open(BytesIO(first.binary)) as image:
             self.assertEqual(image.format, "PNG")
@@ -65,6 +66,18 @@ class DeterministicRendererTests(SimpleTestCase):
         )
 
         self.assertNotEqual(one.pixel_digest, two.pixel_digest)
+
+    # テストケース: スマートフォン表示で短いラベルを判読可能な大きさへ描画する。
+    # 期待値: 3分割の最小領域でも短いラベルには最大112pxのfontを使用する。
+    def test_short_label_uses_readable_maximum_font_size(self):
+        font, lines = _fit_font_and_lines(
+            "お問い合わせ",
+            font_path=FONT_PATH,
+            maximum_width=833 - 2 * 48,
+        )
+
+        self.assertEqual(font.size, 112)
+        self.assertLessEqual(len(lines), 2)
 
     # テストケース: 固定fontのcmapに存在しないcode pointを描画する。
     # 期待値: fallback glyphを使わず該当fieldの安全な理由で拒否する。

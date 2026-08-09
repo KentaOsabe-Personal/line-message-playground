@@ -3,6 +3,8 @@ from unittest.mock import Mock, patch
 from uuid import uuid4
 
 from django.db import transaction
+from django.conf import settings
+from django.middleware.csrf import get_token
 from django.test import SimpleTestCase
 from django.utils import timezone as django_timezone
 from rest_framework.test import APIClient, APIRequestFactory, APITestCase, force_authenticate
@@ -58,13 +60,17 @@ class OwnerRichMenuAPITests(SimpleTestCase):
         self.channel_id = uuid4()
 
     def request(self, method, path, body=None):
+        seed = self.factory.get("/api/account/session/")
+        masked_token = get_token(seed)
+        secret = seed.META["CSRF_COOKIE"]
         request = getattr(self.factory, method)(
             path,
             body,
             format="json",
-            HTTP_ORIGIN="https://test.example.ngrok.app",
+            HTTP_ORIGIN=settings.CSRF_TRUSTED_ORIGINS[0],
+            HTTP_X_CSRFTOKEN=masked_token,
         )
-        request._dont_enforce_csrf_checks = True
+        request.COOKIES[settings.CSRF_COOKIE_NAME] = secret
         force_authenticate(request, user=self.principal)
         return request
 

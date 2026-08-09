@@ -56,9 +56,9 @@ export default function RichMenuEditor({ templates, draft, onDraftChange, onPrev
   }
 
   return (
-    <section aria-labelledby="rich-menu-editor-heading">
-      <h3 id="rich-menu-editor-heading">テンプレート編集</h3>
-      <label>組み込みテンプレート
+    <section className="rich-menu-editor" aria-labelledby="rich-menu-editor-heading">
+      <div className="card-heading"><div><span className="step-number">1</span><div><p className="eyebrow">内容を入力</p><h3 id="rich-menu-editor-heading">リッチメニューを作成</h3></div></div></div>
+      <label className="field-label">レイアウト
         <select value={selected.templateId} onChange={event => {
           const next = templates.find(template => template.templateId === event.target.value)
           if (next === undefined || next.templateId === selected.templateId) return
@@ -68,32 +68,31 @@ export default function RichMenuEditor({ templates, draft, onDraftChange, onPrev
           {templates.map(template => <option key={`${template.templateId}:${template.version}`} value={template.templateId}>{template.displayName}</option>)}
         </select>
       </label>
-      <p>{selected.displayName} / 版 {selected.version}</p>
-      <p>表示名 {selected.limits.displayName}文字以内 / URL {selected.limits.uri}文字以内</p>
+      <p className="field-help">{selected.displayName} / 版 {selected.version}・表示名 {selected.limits.displayName}文字以内 / URL {selected.limits.uri}文字以内</p>
       <form onSubmit={event => {
         event.preventDefault()
         if (Object.keys(errors).length === 0) onPreview(current)
       }} noValidate>
-        {selected.areas.map(area => {
+        <div className="rich-menu-field-list">{selected.areas.map((area, index) => {
           const value = current.fields[area.field] ?? { displayName: '', uri: '' }
           return (
-            <fieldset key={area.field}>
-              <legend>{area.description}（{area.bounds.x}, {area.bounds.y}, {area.bounds.width}×{area.bounds.height}）</legend>
-              <label>表示名
-                <input value={value.displayName} maxLength={selected.limits.displayName + 1} onInput={event => update(area.field, 'displayName', event.currentTarget.value)} />
+            <fieldset className="rich-menu-link-field" key={area.field}>
+              <legend><span>{index + 1}</span>{area.description}</legend>
+              <label className="field-label">メニューに表示する文字
+                <input placeholder="例：予約する" value={value.displayName} maxLength={selected.limits.displayName + 1} onInput={event => update(area.field, 'displayName', event.currentTarget.value)} />
               </label>
               {errors[area.field]?.displayName && <p role="alert">{errors[area.field].displayName}</p>}
-              <label>完全なHTTPS URL
-                <input type="url" value={value.uri} maxLength={selected.limits.uri + 1} onInput={event => update(area.field, 'uri', event.currentTarget.value)} />
+              <label className="field-label">タップ時に開くURL
+                <input type="url" placeholder="https://example.com/" value={value.uri} maxLength={selected.limits.uri + 1} onInput={event => update(area.field, 'uri', event.currentTarget.value)} />
               </label>
               {errors[area.field]?.uri && <p role="alert">{errors[area.field].uri}</p>}
             </fieldset>
           )
-        })}
-        <p>{draft === null ? '未適用入力はありません。' : '未適用の変更があります。'}</p>
-        <button type="submit">プレビューを生成</button>
+        })}</div>
+        <div className="editor-submit"><p>{draft === null ? '入力するとプレビューを作成できます。' : '未反映の変更があります。'}</p>
+        <button type="submit">プレビューを作成</button></div>
       </form>
-      <p>組み込みテンプレートの表示名とURIリンクだけを編集できます。</p>
+      <p className="field-help">画像は選んだレイアウトと入力内容から自動生成されます。</p>
     </section>
   )
 }

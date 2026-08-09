@@ -1235,7 +1235,11 @@ class DjangoRichMenuRepository:
             if next_status is OperationStatus.FAILED:
                 operation.completed_at = self._clock()
             state.active_operation = None
-            state.blocking_operation = operation
+            state.blocking_operation = (
+                operation
+                if next_status is OperationStatus.UNKNOWN
+                else operation.subject_operation
+            )
             operation.save(
                 using=self.using,
                 update_fields=("status", "stage_started_at", "result_code", "completed_at", "updated_at"),
@@ -1499,9 +1503,13 @@ class DjangoRichMenuRepository:
                 if outcome.subject_next_status in {OperationStatus.SUCCEEDED, OperationStatus.FAILED}:
                     subject.completed_at = now
                     state.active_operation = None
+                    state.blocking_operation = None
+                elif outcome.subject_next_status is OperationStatus.CLEANUP_REQUIRED:
+                    state.active_operation = None
+                    state.blocking_operation = subject
                 else:
                     state.active_operation = subject
-                state.blocking_operation = None
+                    state.blocking_operation = None
                 recovery_to = OperationStatus.SUCCEEDED
             self._append_transition(
                 operation=recovery,
@@ -1726,7 +1734,12 @@ class DjangoRichMenuRepository:
                 else (
                     (NextAllowedAction.GET_STATE, NextAllowedAction.VIEW_HISTORY)
                     if cleanup_resources
-                    else (NextAllowedAction.APPLY, NextAllowedAction.GET_STATE, NextAllowedAction.VIEW_HISTORY)
+                    else (
+                        NextAllowedAction.NEW_PREVIEW,
+                        NextAllowedAction.APPLY,
+                        NextAllowedAction.GET_STATE,
+                        NextAllowedAction.VIEW_HISTORY,
+                    )
                 )
             )
         )
@@ -1963,6 +1976,13 @@ def _valid_recovery_subject_handoff(
     current_stage = OperationStage(subject.stage)
     if outcome.subject_next_status in {OperationStatus.SUCCEEDED, OperationStatus.FAILED}:
         return outcome.subject_next_stage is current_stage
+    if outcome.subject_next_status is OperationStatus.CLEANUP_REQUIRED:
+        return (
+            subject.kind == OperationKind.APPLY.value
+            and current_stage in {OperationStage.CREATING, OperationStage.UPLOADING}
+            and outcome.subject_next_stage is OperationStage.CLEANING
+            and outcome.subject_result is SafeResultCode.CLEANUP_REQUIRED
+        )
     if outcome.subject_next_status is not OperationStatus.PROCESSING:
         return False
     successors = {

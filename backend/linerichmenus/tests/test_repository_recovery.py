@@ -86,6 +86,20 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
         self.assertEqual(accepted.operation.status, OperationStatus.RECOVERY_ACTIVE)
         self.assertEqual(accepted.operation.stage, OperationStage.VERIFYING)
 
+    def test_failed_recheck_preserves_original_subject_as_blocker(self):
+        self.repository.accept_recovery(self.recheck)
+
+        result = self.repository.complete_recovery(
+            self.recheck.operation_id,
+            OperationStatus.FAILED,
+            SafeResultCode.OBSERVATION_UNKNOWN,
+        )
+
+        self.assertEqual(result.status, OperationStatus.FAILED)
+        state = RichMenuOperation.objects.get(pk=self.apply.operation_id).channel_state
+        self.assertEqual(state.blocking_operation_id, self.apply.operation_id)
+        self.assertIsNone(state.active_operation_id)
+
     # テストケース: subjectが旧revisionでunknownになった後、現在revisionでrecheckを受付する。
     # 期待値: childへ現在revisionを独立bindし、受付時exact fenceを検証する。
     def test_recovery_binds_current_revision_independently_from_subject(self):
@@ -322,6 +336,27 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
         self.assertEqual(state.active_operation_id, self.apply.operation_id)
         self.assertIsNone(RichMenuOperation.objects.get(pk=self.apply.operation_id).stage_started_at)
         self.assertEqual(self.operation_fence.calls[-1].expected_channel_revision, NOW)
+
+    def test_apply_recheck_can_handoff_to_cleanup_without_leaving_active_operation(self):
+        self.repository.accept_recovery(self.recheck)
+
+        result = self.repository.handoff_recovery(
+            RecoveryOutcome(
+                recovery_operation_id=self.recheck.operation_id,
+                subject_operation_id=self.apply.operation_id,
+                subject_next_status=OperationStatus.CLEANUP_REQUIRED,
+                subject_next_stage=OperationStage.CLEANING,
+                subject_result=SafeResultCode.CLEANUP_REQUIRED,
+                blocker_moves_to_recovery=False,
+            )
+        )
+
+        self.assertEqual(result.subject.status, OperationStatus.CLEANUP_REQUIRED)
+        self.assertEqual(result.subject.stage, OperationStage.CLEANING)
+        self.assertEqual(result.recovery.status, OperationStatus.SUCCEEDED)
+        state = RichMenuOperation.objects.get(pk=self.apply.operation_id).channel_state
+        self.assertEqual(state.blocking_operation_id, self.apply.operation_id)
+        self.assertIsNone(state.active_operation_id)
 
     # テストケース: recovery観測中にowner/provider/channel revision fenceが変わる。
     # 期待値: subject blockerを不変に保ちchildだけを安全終了してactiveを解放する。

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { OperationView, PreviewView } from './richMenuAdminDto'
-import { richMenuActionLabels } from './RichMenuStatePanel'
+import { operationStatusLabels, richMenuActionLabels } from './RichMenuStatePanel'
 
 type Props = {
   channelLabel: string; preview: PreviewView; currentDefault: string
@@ -11,16 +11,12 @@ export default function RichMenuOperationPanel({ channelLabel, preview, currentD
   const submitted = useRef(false)
   useEffect(() => { if (!busy) submitted.current = false }, [busy, result])
   const submit = () => { if (busy || submitted.current) return; submitted.current = true; onApply() }
-  return <section className="panel" aria-labelledby="rich-menu-apply-heading">
-    <h3 id="rich-menu-apply-heading">適用の最終確認</h3>
-    <dl>
-      <div><dt>対象チャネル</dt><dd>{channelLabel}</dd></div>
-      <div><dt>テンプレート</dt><dd>{preview.templateId} v{preview.templateVersion}</dd></div>
-      <div><dt>現在既定</dt><dd>{currentDefault}</dd></div>
-    </dl>
-    <ul>{preview.fields.map((field, index) => <li key={`${index}-${field.displayName}`}>{field.displayName}: {field.uri}</li>)}</ul>
-    {preview.observation.kind === 'external_default' && <p>適用すると既定を置き換えますが、アプリ外資源自体は削除しません。</p>}
-    <button type="button" disabled={busy || result !== null} onClick={submit}>{busy ? '開始中…' : result !== null ? '保存済み操作を表示中' : '適用を確定'}</button>
-    {result !== null && <div role="status"><p>保存済み適用操作: {result.operationId}</p><p>段階: {result.stage ?? '完了'} / 状態: {result.status}（{result.result}）</p><p>次の明示操作: {result.nextAllowedActions.length === 0 ? 'なし' : result.nextAllowedActions.map(action => richMenuActionLabels[action]).join('、')}</p></div>}
+  return <section className="rich-menu-apply-card" aria-labelledby="rich-menu-apply-heading">
+    <div className="card-heading"><div><span className="step-number">3</span><div><p className="eyebrow">公開する</p><h3 id="rich-menu-apply-heading">LINEに反映</h3></div></div></div>
+    <p><strong>{channelLabel}</strong> のリッチメニューとして反映します。</p>
+    {preview.observation.kind === 'external_default' && <p className="notice warning">適用すると既定を置き換えますが、アプリ外資源自体は削除しません。現在LINE側で設定されているリッチメニューから切り替わります。</p>}
+    <button type="button" className="primary-action" disabled={busy || result !== null} onClick={submit}>{busy ? '反映しています…' : result !== null ? '操作結果を確認してください' : 'この内容をLINEに反映'}</button>
+    {result !== null && <div className={`operation-result ${result.status === 'succeeded' ? 'success' : result.status === 'unknown' ? 'uncertain' : ''}`} role="status"><strong>{operationStatusLabels[result.status]}</strong><p>次にできること: {result.nextAllowedActions.length === 0 ? 'ありません' : result.nextAllowedActions.map(action => richMenuActionLabels[action]).join('、')}</p><details className="technical-details"><summary>操作IDを確認</summary><code>{result.operationId}</code></details></div>}
+    <details className="technical-details"><summary>反映内容の詳細</summary><p>{preview.templateId} v{preview.templateVersion} / 現在の状態: {currentDefault}</p><ul>{preview.fields.map((field, index) => <li key={`${index}-${field.displayName}`}>{field.displayName}: {field.uri}</li>)}</ul></details>
   </section>
 }

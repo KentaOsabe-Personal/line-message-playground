@@ -1149,6 +1149,16 @@ class DefaultRichMenuService:
                 result_code=SafeResultCode.OBSERVATION_UNKNOWN,
             )
         elif isinstance(result, RecheckConfirmed):
+            cleanup_after_observation = subject.kind is OperationKind.APPLY and subject.stage in {
+                OperationStage.CREATING,
+                OperationStage.UPLOADING,
+            }
+            if cleanup_after_observation and context.candidate is not None:
+                cleanup_failure = self._mark_resource_cleanup_required(
+                    context.candidate.public_id
+                )
+                if cleanup_failure is not None:
+                    return cleanup_failure
             handoff = self._complete_recovery_confirmed(
                 recovery_operation_id=command.operation_id,
                 subject=subject,
@@ -1158,6 +1168,7 @@ class DefaultRichMenuService:
                 else context.target.public_id
                 if context.target is not None
                 else None,
+                cleanup_required=cleanup_after_observation,
             )
         else:
             return ServiceFailed(SafeResultCode.OBSERVATION_UNKNOWN)
@@ -1399,6 +1410,7 @@ class DefaultRichMenuService:
                 candidate=candidate,
                 target=target,
                 expected_image_digest=image_digest,
+                subject_kind=subject.kind,
             )
         except ValueError:
             return ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
@@ -1412,16 +1424,25 @@ class DefaultRichMenuService:
     ) -> OperationView | ServiceFailed:
         completer = getattr(self._repository, "complete_recovery", None)
         if callable(completer):
+            recovery_status = (
+                OperationStatus.UNKNOWN
+                if subject.kind is OperationKind.CLEANUP
+                or (
+                    subject.status is OperationStatus.CLEANUP_REQUIRED
+                    and subject.stage is OperationStage.CLEANING
+                )
+                else OperationStatus.FAILED
+            )
             try:
                 result = completer(
                     recovery_operation_id,
-                    OperationStatus.UNKNOWN,
+                    recovery_status,
                     result_code,
                 )
             except TypeError:
                 result = completer(
                     recovery_operation_id=recovery_operation_id,
-                    next_status=OperationStatus.UNKNOWN,
+                    next_status=recovery_status,
                     result=result_code,
                 )
             except Exception:
@@ -1452,6 +1473,7 @@ class DefaultRichMenuService:
         subject: OperationView,
         confirmation: RecheckConfirmed,
         target_resource_id: UUID | None,
+        cleanup_required: bool = False,
     ) -> OperationView | ServiceFailed:
         if (
             confirmation.line_rich_menu_id is not None
@@ -1477,7 +1499,11 @@ class DefaultRichMenuService:
         handoff = getattr(self._repository, "handoff_recovery", None)
         if not callable(handoff):
             return ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
-        if subject.stage is OperationStage.VERIFYING:
+        if cleanup_required:
+            next_status = OperationStatus.CLEANUP_REQUIRED
+            next_stage = OperationStage.CLEANING
+            result_code = SafeResultCode.CLEANUP_REQUIRED
+        elif subject.stage is OperationStage.VERIFYING:
             next_status = OperationStatus.SUCCEEDED
             next_stage = OperationStage.VERIFYING
             result_code = SafeResultCode.SUCCEEDED
@@ -2536,6 +2562,7 @@ class DefaultRichMenuService:
                 latest_status=None,
             ),
             next_allowed_actions=(
+                NextAllowedAction.NEW_PREVIEW,
                 NextAllowedAction.APPLY,
                 NextAllowedAction.GET_STATE,
                 NextAllowedAction.VIEW_HISTORY,
@@ -2624,6 +2651,7 @@ class DefaultRichMenuService:
             height=descriptor.height,
             name=name,
             chat_bar_text="メニュー",
+            selected=True,
             areas=tuple(
                 RichMenuArea(
                     bounds=RichMenuBounds(
