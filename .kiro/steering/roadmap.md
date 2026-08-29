@@ -103,5 +103,40 @@ LINE Message Playground を、固定設定の自分宛て配信から、LIFF／L
 - [x] line-rich-menu-foundation -- 組み込みテンプレートと決定的画像生成から、チャネル既定リッチメニューの冪等な適用・照合・解除・履歴・後片付けまでを提供する。Dependencies: line-channel-foundation, line-account-linking
 - [x] line-rich-menu-admin-lifecycle -- foundationの契約をowner向け管理画面へ接続し、状態・履歴・回復操作とチャネル無効化・再有効化・物理削除を統合する。Dependencies: line-rich-menu-foundation, line-channel-admin-ui
 
+## Phase 3: アプリ画面分割
+
+### Overview
+
+完了済みのowner認証、チャネル管理、アカウント管理、リッチメニュー管理、メッセージ配信を一画面から独立URLへ分割する。共通headerとトップ画面を追加し、現在routeの機能だけをmountして必要なAPIだけを読み込む。既存の業務・安全性契約とBackend APIは変更しない。
+
+### Approach Decision
+
+- **Chosen**: 共通基盤から段階移行する。Router／認証layout／共通headerを先に導入し、既存Componentをroute単位で移し、リッチメニューの選択／詳細URLと認証状態を統合した後、全画面をTailwind CSSへ移行する
+- **Why**: 既存API client、DTO validation、reducer、競合・二重送信・結果不明の安全性契約を維持しながら、画面構造とUIを段階的に検証できる
+- **Rejected alternatives**: 薄いroute wrapperでは`AuthGate`、リッチメニューlocal state、重複CSSが残り確定要件を満たしにくい。画面層の全面再構築は既存業務状態の回帰リスクとタスク数を増やす
+
+### Scope
+
+- **In**: `/liff`トップ、4機能route、リッチメニュー選択／詳細route、404、共通header、認証後の安全なroute復帰、logout・session失効・全連携解除の制御、route単位mount／API読込み、title／focus、responsive／accessibility、Tailwind CSSによる全画面統一、既存機能回帰test
+- **Out**: Backend、API schema、Database、新しい業務機能、E2E／visual regression framework、Mobile-first、LINEアプリ内browserの正式保証
+
+### Constraints
+
+- React RouterのDeclarative modeと`BrowserRouter`を使用する
+- Tailwind CSSと`@tailwindcss/vite`はVite 8対応の4.2.2以降を同じstable versionで固定する
+- LIFF Endpoint URLとLINEログインredirect URIは`/liff`のまま維持する
+- 既存の確認、冪等性、結果不明、回復操作、秘密情報非露出を維持する
+
+### Spec Size Assessment
+
+- **Verdict**: PASS (single-spec)
+- **Projected executable tasks**: 30〜38件
+- **Independent responsibility seams**: 5（Router／認証layout、共通UI shell、既存機能page分離、リッチメニューroute、design system／検証）
+- **Rationale**: review attention帯だが、一つのFrontend利用者成果へ収束し、新しいBackend状態機械、migration、外部API workflow、独立rolloutを持たない。内部workstreamの依存順と統合test境界を明示して単一Specとする
+
+### Specs (dependency order)
+
+- [ ] app-screen-separation -- 既存4機能を独立URLへ分割し、共通navigation、認証route制御、route単位読込み、Tailwind CSSの統一UIを提供する。Dependencies: line-account-linking, line-channel-admin-ui, line-rich-menu-admin-lifecycle, linked-recipient-delivery
+
 ---
-_更新日: 2026-08-10。LINEリッチメニューの2 Specが完了し、owner管理画面とチャネルライフサイクルまで統合済み。_
+_更新日: 2026-08-29。Phase 3としてFrontendのアプリ画面分割を追加。_
