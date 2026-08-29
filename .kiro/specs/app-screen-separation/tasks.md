@@ -1,7 +1,7 @@
 # Implementation Plan
 
-- [ ] 1. Frontend実行基盤と安全な境界を整える
-- [ ] 1.1 Routerと統一UIの再現可能な実行前提を追加する
+- [x] 1. Frontend実行基盤と安全な境界を整える
+- [x] 1.1 Routerと統一UIの再現可能な実行前提を追加する
   - React RouterのDeclarative modeとTailwind CSS／Vite pluginを設計指定のexact versionで導入し、lockfileへ固定する。
   - React／React DOM 19.2.7、Vite 8.1.4、TypeScript 6.0.3、Node 24 containerの既存toolchainを維持する。
   - 既存のAPI proxy、host allowlist、Vitest設定、strict TypeScript buildを維持したままSPA配信設定を有効にする。
@@ -9,7 +9,7 @@
   - 完了時、全定義pathを処理できるFrontend依存が`npm ci`で再現され、production buildが新しいplugin構成を解決できる。
   - _Requirements: 1.3, 12.1, 12.4_
   - _Boundary: TailwindTheme, AppRouter_
-- [ ] 1.2 (P) 定義済みrouteと安全な復帰先のregistryを構築する
+- [x] 1.2 (P) 定義済みrouteと安全な復帰先のregistryを構築する
   - static path、root redirect、rich-menu動的path、wildcard not-foundを一つのroute契約で分類する。
   - canonical UUIDだけからrich-menu detail pathを生成し、外部URL、query、hash、encoded traversal、未知pathを復帰先から除外する。
   - 各routeのnavigation key、page title、h1を一意に返す。
@@ -18,7 +18,7 @@
   - _Requirements: 1.1, 1.2, 1.4, 1.5, 2.2, 10.1, 10.2, 12.6_
   - _Boundary: RouteRegistry_
   - _Depends: 1.1_
-- [ ] 1.3 owner単位の最小tab-local状態を安全に保持する
+- [x] 1.3 owner単位の最小tab-local状態を安全に保持する
   - 許可済み復帰path、全連携解除の再認証marker、canonicalな配信operation IDだけをsession scopeで扱う。
   - 復帰pathを一回消費とし、不正値や利用不能なstorageを例外や秘密露出なしで安全な初期状態へ縮約する。
   - 明示logoutと全連携解除完了でowner一時情報を一括消去し、session失効では安全な復帰に必要な値だけを保持する。
@@ -26,7 +26,7 @@
   - 完了時、本文、資格情報、preview、LINE user ID、tokenを保存できないadapter境界が成立する。
   - _Requirements: 2.2, 2.8, 2.9, 8.5, 8.6, 12.6_
   - _Boundary: OwnerSessionStorage_
-- [ ] 1.4 (P) 安全なreadだけを中止できるHTTP境界を追加する
+- [x] 1.4 (P) 安全なreadだけを中止できるHTTP境界を追加する
   - GETと明示された状態確認readへoptionalなAbortSignalを渡し、mutation contractへは渡さない。
   - abortを通常のnetwork failureから区別し、利用者向けerror stateを発生させない分類にする。
   - 既存のCSRF、cookie、401通知、DTO validation、safe error変換を維持する。

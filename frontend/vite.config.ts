@@ -1,3 +1,4 @@
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { loadEnv } from 'vite'
 import { defineConfig } from 'vitest/config'
@@ -25,7 +26,8 @@ export default defineConfig(({ mode }) => {
   const allowedHosts = [validatePublicHost(env.NGROK_DOMAIN)]
 
   return {
-    plugins: [react()],
+    appType: 'spa',
+    plugins: [react(), tailwindcss()],
     server: {
       allowedHosts,
       proxy: {

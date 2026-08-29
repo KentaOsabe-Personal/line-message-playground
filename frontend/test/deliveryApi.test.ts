@@ -62,6 +62,7 @@ describe('DeliveryApiClient', () => {
   // テストケース: linked配信のtarget取得・preview・send・statusを保護HTTP境界へ委譲する。
   // 期待値: GETは相対path、unsafe操作は正確な公開request DTOで呼ばれ、strict parser済みDTOだけを返す。
   test('calls every linked delivery endpoint with strict relative requests', async () => {
+    const signal = new AbortController().signal
     const request = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ items: [{
         channelId,
@@ -83,26 +84,26 @@ describe('DeliveryApiClient', () => {
       .mockResolvedValueOnce(jsonResponse(linkedStatus))
     const client = createLinkedDeliveryApiClient({ request } as ProtectedHttpClient)
 
-    await expect(client.listChannels()).resolves.toHaveLength(1)
-    await expect(client.listRecipients(channelId)).resolves.toHaveLength(1)
+    await expect(client.listChannels({ signal })).resolves.toHaveLength(1)
+    await expect(client.listRecipients(channelId, { signal })).resolves.toHaveLength(1)
     await expect(client.preview(linkedInput)).resolves.toEqual(linkedPreview)
     await expect(client.send({
       ...linkedInput,
       operationId,
       confirmationToken: 'opaque-confirmation',
     })).resolves.toEqual(linkedStatus)
-    await expect(client.checkStatus(operationId)).resolves.toEqual(linkedStatus)
+    await expect(client.checkStatus(operationId, { signal })).resolves.toEqual(linkedStatus)
 
     expect(request.mock.calls).toEqual([
-      [{ path: '/api/deliveries/targets/channels/', method: 'GET' }],
-      [{ path: `/api/deliveries/targets/channels/${channelId}/recipients/`, method: 'GET' }],
+      [{ path: '/api/deliveries/targets/channels/', method: 'GET', signal }],
+      [{ path: `/api/deliveries/targets/channels/${channelId}/recipients/`, method: 'GET', signal }],
       [{ path: '/api/deliveries/preview/', method: 'POST', body: linkedInput }],
       [{
         path: '/api/deliveries/',
         method: 'POST',
         body: { ...linkedInput, operationId, confirmationToken: 'opaque-confirmation' },
       }],
-      [{ path: `/api/deliveries/${operationId}/status/`, method: 'POST' }],
+      [{ path: `/api/deliveries/${operationId}/status/`, method: 'POST', signal }],
     ])
   })
 

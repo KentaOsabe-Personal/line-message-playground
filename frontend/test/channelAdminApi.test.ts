@@ -30,6 +30,7 @@ describe('channel admin API', () => {
   // テストケース: 7種類の管理操作を各一回実行する。
   // 期待値: 正しい相対path/method/bodyへ写像し、requestを自動再試行しない。
   test('maps every operation to exactly one protected request', async () => {
+    const signal = new AbortController().signal
     const request = vi.fn()
       .mockResolvedValueOnce(response({ items: [channel] }))
       .mockResolvedValueOnce(response(channel))
@@ -45,8 +46,8 @@ describe('channel admin API', () => {
       }))
     const client = createChannelAdminApiClient({ request } as ProtectedHttpClient)
 
-    await client.listChannels()
-    await client.getChannel(channelId)
+    await client.listChannels({ signal })
+    await client.getChannel(channelId, { signal })
     await client.register({
       label: channel.label,
       messagingApiChannelId: channel.messagingApiChannelId,
@@ -63,8 +64,8 @@ describe('channel admin API', () => {
 
     expect(request).toHaveBeenCalledTimes(7)
     expect(request.mock.calls.map(([input]) => input)).toEqual([
-      { path: '/api/line/channels/', method: 'GET' },
-      { path: `/api/line/channels/${channelId}/`, method: 'GET' },
+      { path: '/api/line/channels/', method: 'GET', signal },
+      { path: `/api/line/channels/${channelId}/`, method: 'GET', signal },
       { path: '/api/line/channels/', method: 'POST', body: expect.objectContaining({ accessToken: 'access-secret' }) },
       { path: `/api/line/channels/${channelId}/`, method: 'PATCH', body: { expectedUpdatedAt: channel.updatedAt, label: '更新後' } },
       { path: `/api/line/channels/${channelId}/state/`, method: 'POST', body: { expectedUpdatedAt: channel.updatedAt, active: false } },

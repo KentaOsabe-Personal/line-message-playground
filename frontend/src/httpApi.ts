@@ -1,10 +1,12 @@
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE'
+export type ReadRequestOptions = Readonly<{ signal?: AbortSignal }>
 
 export interface ProtectedHttpClient {
   request(input: {
     path: string
     method: HttpMethod
     body?: unknown
+    signal?: AbortSignal
   }): Promise<Response>
 }
 
@@ -17,12 +19,14 @@ export type ProtectedHttpClientOptions = {
 export class ProtectedHttpClientError extends Error {
   readonly summary: string
 
-  constructor(public readonly code: 'csrf_missing' | 'network_error') {
+  constructor(public readonly code: 'csrf_missing' | 'network_error' | 'aborted') {
     super(code)
     this.name = 'ProtectedHttpClientError'
     this.summary = code === 'csrf_missing'
       ? '安全な送信準備を確認できません。'
-      : 'Backendに接続できません。'
+      : code === 'aborted'
+        ? '読み込みを中止しました。'
+        : 'Backendに接続できません。'
   }
 }
 
@@ -45,12 +49,13 @@ export function createProtectedHttpClient(options: ProtectedHttpClientOptions = 
   const readCookie = options.readCookie ?? (() => document.cookie)
 
   return Object.freeze({
-    async request(input: { path: string; method: HttpMethod; body?: unknown }) {
+    async request(input: { path: string; method: HttpMethod; body?: unknown; signal?: AbortSignal }) {
       const headers: Record<string, string> = {}
       const request: RequestInit = {
         method: input.method,
         credentials: 'same-origin',
       }
+      if (input.signal !== undefined) request.signal = input.signal
 
       if (unsafeMethods.has(input.method)) {
         const csrfToken = readCookieValue(readCookie(), 'csrftoken')
@@ -66,7 +71,13 @@ export function createProtectedHttpClient(options: ProtectedHttpClientOptions = 
       let response: Response
       try {
         response = await fetchRequest(input.path, request)
-      } catch {
+      } catch (error) {
+        if (
+          input.signal?.aborted === true ||
+          (typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError')
+        ) {
+          throw new ProtectedHttpClientError('aborted')
+        }
         throw new ProtectedHttpClientError('network_error')
       }
       if (response.status === 401) options.onSessionInvalid?.()
