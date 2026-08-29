@@ -1,11 +1,11 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import ChannelAdminConsole from '../src/ChannelAdminConsole'
 import { ChannelAdminApiError, type ChannelAdminApiClient } from '../src/channelAdminApi'
 import type { ChannelAdminItem } from '../src/channelAdminDto'
-import type { RichMenuAdminApiClient } from '../src/richMenuAdminApi'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -26,13 +26,6 @@ const channel = (): ChannelAdminItem => ({
   webhookUrl: 'https://example.com/api/line/webhooks/123e4567-e89b-42d3-a456-426614174000/',
   deactivationSummary: null,
   richMenuRefreshRequired: false,
-})
-
-const richApi = (): RichMenuAdminApiClient => ({
-  listTemplates: vi.fn().mockResolvedValue([]), createPreview: vi.fn(),
-  getState: vi.fn().mockImplementation((channelId: string) => Promise.resolve({ channelId, currentResource: null, blockingOperation: null, activeOperation: null, cleanupResources: [], latestObservation: null, historySummary: { totalCount: 0, latestOperationId: null, latestStatus: null }, nextAllowedActions: [], mode: 'read_only', effectiveActions: [], unavailableReason: null })),
-  startOperation: vi.fn(), getOperation: vi.fn(), getHistory: vi.fn().mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
-  getDeactivation: vi.fn().mockResolvedValue(null), startDeactivation: vi.fn(), recheckDeactivation: vi.fn(),
 })
 
 const api = (items: ChannelAdminItem[]): ChannelAdminApiClient => ({
@@ -75,20 +68,17 @@ test('renders empty and ready states without treating inactive channels as avail
   expect(container.textContent).not.toContain('受付可能')
 })
 
-// テストケース: exact providerのチャネルカードからリッチメニュー管理を開く。
-// 期待値: 対象をmemory-onlyで渡し、URLへチャネル情報を載せない。
-test('opens one channel rich-menu console without putting the target in the URL', async () => {
+// テストケース: exact providerのチャネルカードへroute navigationを接続する。
+// 期待値: canonical channel IDだけをdetail pathへ載せ、Consoleをinline mountしない。
+test('exposes one channel rich-menu detail link without inline mounting its console', async () => {
   const scoped = { ...channel(), providerId: '456' }
-  const client = api([scoped]); vi.mocked(client.getChannel).mockResolvedValue(scoped)
-  const menus = richApi(); const originalUrl = window.location.href
-  await act(async () => root.render(<ChannelAdminConsole api={client} richMenuApi={menus} />))
-  const open = [...container.querySelectorAll('button')].find(button => button.textContent === 'リッチメニューを管理')
-  await act(async () => open?.click())
-  expect(container.textContent).toContain('リッチメニュー管理')
-  expect(container.textContent).not.toContain('LINEチャネル管理')
-  expect(window.location.href).toBe(originalUrl)
-  const back = [...container.querySelectorAll('button')].find(button => button.textContent === 'チャネル一覧へ戻る')
-  await act(async () => back?.click())
+  const client = api([scoped])
+  await act(async () => root.render(
+    <MemoryRouter><ChannelAdminConsole api={client} onNavigateRichMenu={vi.fn()} /></MemoryRouter>,
+  ))
+  const open = [...container.querySelectorAll('a')].find(link => link.textContent === 'リッチメニューを管理')
+  expect(open?.getAttribute('href')).toBe(`/liff/rich-menus/${scoped.channelId}`)
+  expect(container.querySelector('.rich-menu-admin')).toBeNull()
   expect(container.textContent).toContain('LINEチャネル管理')
 })
 
@@ -96,20 +86,22 @@ test('opens one channel rich-menu console without putting the target in the URL'
 // 期待値: リッチメニューライフサイクル導線を公開しない。
 test('does not expose rich-menu lifecycle navigation for a legacy null-provider channel', async () => {
   const client = api([channel()])
-  await act(async () => root.render(<ChannelAdminConsole api={client} richMenuApi={richApi()} />))
+  await act(async () => root.render(<ChannelAdminConsole api={client} />))
   expect([...container.querySelectorAll('button')].some(button => button.textContent === 'リッチメニューを管理')).toBe(false)
 })
 
 // テストケース: 設定済みinactiveチャネルの再有効化導線を選ぶ。
-// 期待値: 直接更新せず、複合ライフサイクル再取得gateへ移る。
+// 期待値: 直接更新せず、channel detail routeへ対象IDを渡す。
 test('routes configured reactivation through the composite lifecycle refresh gate', async () => {
   const scoped = { ...channel(), providerId: '456', credentialsState: 'configured' as const }
-  const client = api([scoped]); vi.mocked(client.getChannel).mockResolvedValue(scoped)
-  await act(async () => root.render(<ChannelAdminConsole api={client} richMenuApi={richApi()} />))
+  const client = api([scoped]); const navigate = vi.fn()
+  await act(async () => root.render(
+    <MemoryRouter><ChannelAdminConsole api={client} onNavigateRichMenu={navigate} /></MemoryRouter>,
+  ))
   const enable = [...container.querySelectorAll('button')].find(button => button.textContent === '有効化')
   await act(async () => enable?.click())
   expect(client.setState).not.toHaveBeenCalled()
-  expect(container.textContent).toContain('チャネルを再有効化')
+  expect(navigate).toHaveBeenCalledWith(scoped.channelId)
 })
 
 // テストケース: 保存済み無効化intentがあるチャネルカードを描画する。
@@ -120,49 +112,10 @@ test('keeps channel-card mutations closed for a persisted deactivation intent', 
     reason: null, updatedAt: channel().updatedAt,
   } }
   const client = api([pending]); vi.mocked(client.getChannel).mockResolvedValue(pending)
-  await act(async () => root.render(<ChannelAdminConsole api={client} richMenuApi={richApi()} />))
+  await act(async () => root.render(<ChannelAdminConsole api={client} />))
   const edit = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '編集')
   expect(edit?.disabled).toBe(true)
   expect(container.textContent).toContain('無効化 checking')
-})
-
-// テストケース: 資格情報修復を伴う再有効化が成功する。
-// 期待値: channel detailとrich stateの複合再取得gateへ移り、完了後だけ操作を開く。
-test('enters the composite refresh gate after credential-repair reactivation succeeds', async () => {
-  const inactive = { ...channel(), providerId: '456' }
-  const active = { ...inactive, active: true, credentialsState: 'configured' as const, richMenuRefreshRequired: true }
-  const client = api([inactive]); vi.mocked(client.setState).mockResolvedValue(active); vi.mocked(client.getChannel).mockResolvedValue(active)
-  await act(async () => root.render(<ChannelAdminConsole api={client} richMenuApi={richApi()} />))
-  const enable = [...container.querySelectorAll('button')].find(button => button.textContent === '有効化')
-  await act(async () => enable?.click())
-  const form = container.querySelector('.confirmation form')!
-  container.querySelector<HTMLInputElement>('input[name="accessToken"]')!.value = 'token'
-  container.querySelector<HTMLInputElement>('input[name="channelSecret"]')!.value = 'secret'
-  await act(async () => form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true })))
-  expect(client.setState).toHaveBeenCalledTimes(1)
-  expect(container.textContent).toContain('再有効化後の最新チャネル状態とリッチメニュー実状態を取得しました')
-})
-
-// テストケース: 資格情報修復mutationの応答を保留して再有効化する。
-// 期待値: 一件の実mutation完了前にrefresh gateへ進まず、重複操作もしない。
-test('waits for the one real credential-repair mutation before entering the refresh gate', async () => {
-  const inactive = { ...channel(), providerId: '456' }
-  const active = { ...inactive, active: true, credentialsState: 'configured' as const, richMenuRefreshRequired: true }
-  let finish!: (value: ChannelAdminItem) => void
-  const client = api([inactive]); vi.mocked(client.setState).mockReturnValue(new Promise(resolve => { finish = resolve })); vi.mocked(client.getChannel).mockResolvedValue(active)
-  await act(async () => root.render(<ChannelAdminConsole api={client} richMenuApi={richApi()} />))
-  await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '有効化')?.click())
-  const form = container.querySelector('.confirmation form')!
-  container.querySelector<HTMLInputElement>('input[name="accessToken"]')!.value = 'token'
-  container.querySelector<HTMLInputElement>('input[name="channelSecret"]')!.value = 'secret'
-  await act(async () => {
-    form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }))
-    form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }))
-  })
-  expect(client.setState).toHaveBeenCalledTimes(1)
-  expect(container.textContent).not.toContain('リッチメニュー管理')
-  await act(async () => finish(active))
-  expect(container.textContent).toContain('リッチメニュー管理')
 })
 
 // テストケース: チャネル一覧取得を失敗させた後、ownerが明示再取得する。
@@ -211,13 +164,14 @@ test('starts the same create operation only once before React can rerender', asy
 test('routes card deletion through the rich-menu lifecycle screen', async () => {
   const scoped = { ...channel(), providerId: '456' }
   const client = api([scoped]); vi.mocked(client.getChannel).mockResolvedValue(scoped)
-  const menus = richApi()
-  await act(async () => root.render(<ChannelAdminConsole api={client} richMenuApi={menus} />))
+  const navigate = vi.fn()
+  await act(async () => root.render(
+    <MemoryRouter><ChannelAdminConsole api={client} onNavigateRichMenu={navigate} /></MemoryRouter>,
+  ))
   const remove = [...container.querySelectorAll('button')].find(button => button.textContent === '削除')
   await act(async () => remove?.click())
   expect(client.delete).not.toHaveBeenCalled()
-  expect(container.textContent).toContain('チャネルの停止・削除')
-  expect(container.textContent).toContain('チャネルを物理削除')
+  expect(navigate).toHaveBeenCalledWith(scoped.channelId)
 })
 
 // テストケース: 接続確認完了時にstale_channelを受け取る

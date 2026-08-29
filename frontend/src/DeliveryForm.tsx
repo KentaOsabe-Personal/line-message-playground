@@ -128,7 +128,10 @@ function LinkedDeliveryForm({
   const previewRequestSequence = useRef(0)
   const submitInFlight = useRef(false)
   const [statusError, setStatusError] = useState<SafeError | null>(null)
+  const lifetime = useRef(0)
   const selectedChannelId = state.input.channelId
+
+  useEffect(() => () => { lifetime.current += 1 }, [])
 
   useEffect(() => {
     let active = true
@@ -197,6 +200,7 @@ function LinkedDeliveryForm({
       channelId: state.input.channelId,
       recipientId: state.input.recipientId,
     }
+    const operationLifetime = lifetime.current
     dispatch({ type: 'previewStarted', requestId })
     try {
       const result = await deliveryClient.preview({
@@ -206,8 +210,10 @@ function LinkedDeliveryForm({
         body: input.body,
         receiptRequested: input.receiptRequested,
       })
+      if (lifetime.current !== operationLifetime) return
       dispatch({ type: 'previewSucceeded', requestId, preview: result })
     } catch (error) {
+      if (lifetime.current !== operationLifetime) return
       dispatch({
         type: 'previewRejected',
         requestId,
@@ -231,10 +237,14 @@ function LinkedDeliveryForm({
       operationId,
       confirmationToken: state.preview.confirmationToken,
     }
+    const operationLifetime = lifetime.current
     dispatch({ type: 'submitted', operationId })
     try {
-      dispatch({ type: 'deliveryUpdated', result: await deliveryClient.send(request) })
+      const result = await deliveryClient.send(request)
+      if (lifetime.current !== operationLifetime) return
+      dispatch({ type: 'deliveryUpdated', result })
     } catch (error) {
+      if (lifetime.current !== operationLifetime) return
       const safeError = normalizeError(error, '配信処理を完了できませんでした。')
       if (safeError.code === 'network_error') dispatch({ type: 'networkFailed' })
       else dispatch({ type: 'sendRejected', error: safeError })
@@ -251,14 +261,15 @@ function LinkedDeliveryForm({
       state.phase !== 'uncertain'
     ) return
     const operationId = state.operationId
+    const operationLifetime = lifetime.current
     setStatusError(null)
     dispatch({ type: 'checkStarted' })
     try {
-      dispatch({
-        type: 'deliveryUpdated',
-        result: await deliveryClient.checkStatus(operationId),
-      })
+      const result = await deliveryClient.checkStatus(operationId)
+      if (lifetime.current !== operationLifetime) return
+      dispatch({ type: 'deliveryUpdated', result })
     } catch (error) {
+      if (lifetime.current !== operationLifetime) return
       const safeError = normalizeError(error, '配信状態を確認できませんでした。')
       setStatusError(safeError)
       if (error instanceof DeliveryApiError && error.httpStatus === 404) {
@@ -273,7 +284,7 @@ function LinkedDeliveryForm({
 
   return (
     <section className="delivery" aria-labelledby="delivery-title">
-      <h2 id="delivery-title">LINEテスト配信</h2>
+      <h2 id="delivery-title">配信内容</h2>
 
       {editing && (
         <form onSubmit={(event) => { event.preventDefault(); void preview() }}>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { AccountApiError, createAccountApiClient } from './accountApi'
 import type { AccountApiClient } from './accountApi'
@@ -56,6 +56,9 @@ export default function AccountConsole({
   const [targetErrors, setTargetErrors] = useState<Record<string, string>>({})
   const [globalError, setGlobalError] = useState<string | null>(null)
   const [preview, setPreview] = useState<UnlinkPreview | null>(null)
+  const lifetime = useRef(0)
+
+  useEffect(() => () => { lifetime.current += 1 }, [])
 
   useEffect(() => {
     if (session.state !== 'authenticated') return
@@ -92,16 +95,19 @@ export default function AccountConsole({
     if (operation !== null) return
     setOperation(key)
     setTargetErrors((errors) => ({ ...errors, [key]: '' }))
+    const operationLifetime = lifetime.current
     try {
       const next = await operationCall()
+      if (lifetime.current !== operationLifetime) return
       if (next) replaceChannel(next)
     } catch (caught) {
+      if (lifetime.current !== operationLifetime) return
       setTargetErrors((errors) => ({
         ...errors,
         [key]: caught instanceof AccountApiError ? caught.error.summary : '操作を完了できませんでした。',
       }))
     } finally {
-      setOperation(null)
+      if (lifetime.current === operationLifetime) setOperation(null)
     }
   }
 
@@ -110,13 +116,13 @@ export default function AccountConsole({
     const recipientId = channel.recipientId
     await runTargetOperation(channel.channelId, async () => {
       await client.unlinkRecipient(recipientId)
-      replaceChannel({
+      return {
         ...channel,
         linkState: 'unlinked',
         friendshipState: 'unknown',
         deliveryAvailable: false,
         recipientId: null,
-      })
+      }
     })
   }
 
@@ -124,12 +130,15 @@ export default function AccountConsole({
     if (operation !== null) return
     setOperation('unlink-preview')
     setGlobalError(null)
+    const operationLifetime = lifetime.current
     try {
-      setPreview(await client.previewUnlink())
+      const result = await client.previewUnlink()
+      if (lifetime.current === operationLifetime) setPreview(result)
     } catch (caught) {
+      if (lifetime.current !== operationLifetime) return
       setGlobalError(caught instanceof AccountApiError ? caught.error.summary : '解除内容を取得できませんでした。')
     } finally {
-      setOperation(null)
+      if (lifetime.current === operationLifetime) setOperation(null)
     }
   }
 
@@ -142,13 +151,16 @@ export default function AccountConsole({
     }
     setOperation('unlink-execute')
     setGlobalError(null)
+    const operationLifetime = lifetime.current
     try {
       const result = await client.executeUnlink({
         confirmationToken: preview.confirmationToken,
         userAccessToken,
       })
+      if (lifetime.current !== operationLifetime) return
       onSessionReceived(resultToSession(result))
     } catch (caught) {
+      if (lifetime.current !== operationLifetime) return
       if (caught instanceof AccountApiError && caught.error.code === 'invalid_line_proof') {
         reauthenticate()
       } else if (caught instanceof AccountApiError && caught.error.code === 'stale_confirmation') {
@@ -163,13 +175,13 @@ export default function AccountConsole({
         setGlobalError(caught instanceof AccountApiError ? caught.error.summary : '全連携解除を開始できませんでした。')
       }
     } finally {
-      setOperation(null)
+      if (lifetime.current === operationLifetime) setOperation(null)
     }
   }
 
   return (
     <section className="account-console" aria-labelledby="account-console-title">
-      <h2 id="account-console-title">アカウント管理</h2>
+      <h2 id="account-console-title">LINE連携と配信先</h2>
       <section aria-labelledby="recipient-title">
         <h3 id="recipient-title">配信先管理</h3>
         {loading && <p aria-live="polite">配信先を読み込んでいます…</p>}

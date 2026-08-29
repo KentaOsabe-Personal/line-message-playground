@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { Link } from 'react-router'
 
 import ChannelActions from './ChannelActions'
 import ChannelEditor from './ChannelEditor'
@@ -7,10 +8,13 @@ import type { ChannelAdminApiClient, CreateChannelInput, UpdateChannelInput } fr
 import type { ChannelAdminItem } from './channelAdminDto'
 import { initialChannelAdminState, transitionChannelAdmin } from './channelAdminState'
 import { createProtectedHttpClient } from './httpApi'
-import RichMenuAdminConsole from './RichMenuAdminConsole'
-import type { RichMenuAdminApiClient } from './richMenuAdminApi'
+import { richMenuPath } from './appRoutes'
 
-type Props = { api?: ChannelAdminApiClient; richMenuApi?: RichMenuAdminApiClient; onSessionInvalid?: () => void }
+type Props = {
+  api?: ChannelAdminApiClient
+  onSessionInvalid?: () => void
+  onNavigateRichMenu?: (channelId: string) => void
+}
 
 const safeError = (error: unknown) => error instanceof ChannelAdminApiError
   ? error.error
@@ -18,12 +22,11 @@ const safeError = (error: unknown) => error instanceof ChannelAdminApiError
 
 const formatDate = (value: string | null) => value === null ? '未記録' : new Date(value).toLocaleString('ja-JP')
 
-export default function ChannelAdminConsole({ api: providedApi, richMenuApi, onSessionInvalid }: Props) {
+export default function ChannelAdminConsole({ api: providedApi, onSessionInvalid, onNavigateRichMenu }: Props) {
   const [state, dispatch] = useReducer(transitionChannelAdmin, initialChannelAdminState)
   const [showCreate, setShowCreate] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [selectedRichMenuChannelId, setSelectedRichMenuChannelId] = useState<string | null>(null)
   const generation = useRef(0)
   const operationLocks = useRef(new Set<string>())
   const api = useMemo(() => providedApi ?? createChannelAdminApiClient(createProtectedHttpClient({ onSessionInvalid })), [providedApi, onSessionInvalid])
@@ -54,14 +57,17 @@ export default function ChannelAdminConsole({ api: providedApi, richMenuApi, onS
     operationLocks.current.add(key)
     dispatch({ type: 'operationStarted', key })
     setNotice(null)
+    const operationGeneration = generation.current
     try {
       const item = await request()
+      if (generation.current !== operationGeneration) return false
       dispatch({ type: 'mutationSucceeded', key, item })
       setNotice(success)
       setShowCreate(false)
       setEditingId(null)
       return true
     } catch (error) {
+      if (generation.current !== operationGeneration) return false
       dispatch({ type: 'operationFailed', key, error: safeError(error) })
       throw error
     } finally {
@@ -81,7 +87,7 @@ export default function ChannelAdminConsole({ api: providedApi, richMenuApi, onS
       () => api.setState(item.channelId, { expectedUpdatedAt: item.updatedAt, active, ...credentials }),
       active ? 'チャネルを有効にしました。' : 'チャネルを無効にしました。',
     )
-    if (completed && active && item.providerId !== null) setSelectedRichMenuChannelId(item.channelId)
+    if (completed && active && item.providerId !== null) onNavigateRichMenu?.(item.channelId)
   }
   const deleteChannel = async (item: ChannelAdminItem) => {
     const key = `${item.channelId}:delete`
@@ -89,11 +95,14 @@ export default function ChannelAdminConsole({ api: providedApi, richMenuApi, onS
     operationLocks.current.add(key)
     dispatch({ type: 'operationStarted', key })
     setNotice(null)
+    const operationGeneration = generation.current
     try {
       const deleted = await api.delete(item.channelId, item.updatedAt)
+      if (generation.current !== operationGeneration) return
       dispatch({ type: 'deleteSucceeded', key, channelId: deleted.channelId })
       setNotice(`${deleted.label} を削除しました。`)
     } catch (error) {
+      if (generation.current !== operationGeneration) return
       dispatch({ type: 'operationFailed', key, error: safeError(error) })
       throw error
     } finally {
@@ -105,32 +114,20 @@ export default function ChannelAdminConsole({ api: providedApi, richMenuApi, onS
     if (operationLocks.current.has(key)) throw new Error('duplicate operation')
     operationLocks.current.add(key)
     dispatch({ type: 'operationStarted', key })
+    const operationGeneration = generation.current
     try {
       const result = await api.checkConnection(item.channelId)
+      if (generation.current !== operationGeneration) throw new Error('stale operation result')
       dispatch({ type: 'operationCompleted', key })
       return result
     } catch (error) {
+      if (generation.current !== operationGeneration) throw error
       dispatch({ type: 'operationFailed', key, error: safeError(error) })
       throw error
     } finally {
       operationLocks.current.delete(key)
     }
   }
-
-  if (selectedRichMenuChannelId !== null) return (
-    <RichMenuAdminConsole
-      channelId={selectedRichMenuChannelId}
-      channelApi={api}
-      richApi={richMenuApi}
-      onBack={() => setSelectedRichMenuChannelId(null)}
-      onDeleted={(deleted) => {
-        setNotice(`${deleted.label} を削除しました。`)
-        setSelectedRichMenuChannelId(null)
-        void load()
-      }}
-      onSessionInvalid={() => { setSelectedRichMenuChannelId(null); onSessionInvalid?.() }}
-    />
-  )
 
   return (
     <section className="channel-admin" aria-labelledby="channel-admin-heading">
@@ -176,7 +173,9 @@ export default function ChannelAdminConsole({ api: providedApi, richMenuApi, onS
                   <div><dt>Webhook URL</dt><dd><code>{item.webhookUrl}</code></dd></div>
                 </dl>
                 <button type="button" className="secondary" disabled={operationPending || lifecyclePending} onClick={() => setEditingId(item.channelId)}>編集</button>
-                {richMenuEligible && <button type="button" className="secondary" disabled={operationPending} onClick={() => setSelectedRichMenuChannelId(item.channelId)}>リッチメニューを管理</button>}
+                {richMenuEligible && onNavigateRichMenu !== undefined && (
+                  <Link className="secondary button-link" to={richMenuPath(item.channelId)}>リッチメニューを管理</Link>
+                )}
                 {editingId === item.channelId && !lifecyclePending && <ChannelEditor mode="edit" item={item} pending={operations[`${item.channelId}:update`] !== undefined} onSubmit={(input) => update(item, input)} onCancel={() => setEditingId(null)} />}
                 <ChannelActions
                   item={item}
@@ -184,7 +183,9 @@ export default function ChannelAdminConsole({ api: providedApi, richMenuApi, onS
                   onSetState={(active, credentials) => setState(item, active, credentials)}
                   onDelete={() => deleteChannel(item)}
                   onCheck={() => check(item)}
-                  onManageLifecycle={richMenuEligible ? () => setSelectedRichMenuChannelId(item.channelId) : undefined}
+                  onManageLifecycle={richMenuEligible && onNavigateRichMenu !== undefined
+                    ? () => onNavigateRichMenu(item.channelId)
+                    : undefined}
                 />
               </article>
             )

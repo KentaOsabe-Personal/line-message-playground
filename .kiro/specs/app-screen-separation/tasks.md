@@ -102,8 +102,8 @@
   - _Boundary: HomePage, NotFoundPage, AppRouter, AppLayout_
   - _Depends: 3.1, 3.2_
 
-- [ ] 4. 既存機能を独立pageへ分離する
-- [ ] 4.1 (P) チャネル管理を専用route pageへ移す
+- [x] 4. 既存機能を独立pageへ分離する
+- [x] 4.1 (P) チャネル管理を専用route pageへ移す
   - 登録、編集、write-only資格情報、接続確認、有効化、無効化、回復、物理削除の既存操作を専用page内で維持する。
   - page h1と既存Consoleのsection headingを整理する。
   - rich-menu、配信先、配信のinline表示を除外する。
@@ -112,7 +112,7 @@
   - _Requirements: 4.1, 4.3, 4.4, 8.1, 8.2, 9.1, 9.4, 12.3_
   - _Boundary: ChannelAdminPage_
   - _Depends: 3.3_
-- [ ] 4.2 (P) アカウント管理を専用route pageへ移す
+- [x] 4.2 (P) アカウント管理を専用route pageへ移す
   - owner連携状態、channel別recipient管理、channel単位解除、全連携解除を一つの専用pageへ接続する。
   - 資格情報、rich-menu、配信、画面固有logoutを除外し、共通headerのlogoutと責務を分離する。
   - 既存の再認証、確認、競合、許可済み回復、秘密非露出をroute wrapper下で維持する。
@@ -120,7 +120,7 @@
   - _Requirements: 5.1, 5.2, 5.3, 8.1, 8.2, 9.1, 9.4, 12.3_
   - _Boundary: AccountPage_
   - _Depends: 3.3_
-- [ ] 4.3 (P) LINEテスト配信を専用route pageへ移す
+- [x] 4.3 (P) LINEテスト配信を専用route pageへ移す
   - channel、recipient、件名、本文、受取確認、preview、確認済みsend、現在operationの状態を専用pageへ接続する。
   - 共通navigationでは「メッセージ配信」、page h1では「LINEテスト配信」を使用する。
   - broadcast、予約、履歴一覧、template、分析を追加せず、既存確認、二重送信防止、unknown状態を維持する。
@@ -128,7 +128,7 @@
   - _Requirements: 7.1, 7.2, 7.4, 7.5, 8.1, 8.2, 9.1, 9.4, 12.3_
   - _Boundary: DeliveryPage_
   - _Depends: 3.3_
-- [ ] 4.4 機能pageのmountと離脱契約を統合する
+- [x] 4.4 機能pageのmountと離脱契約を統合する
   - 各URLで対応Console一つだけをmountし、他機能のAPIとstateを起動しない。
   - Link、back、forward、reload、tab closeで破棄確認を追加せず、draftとpreviewをunmount時に破棄して再訪時に復元しない。
   - 同一画面の削除、send、外部状態変更、入力消去の既存確認は維持する。
