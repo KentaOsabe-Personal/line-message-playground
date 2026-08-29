@@ -75,8 +75,8 @@
   - _Boundary: AppRouter_
   - _Depends: 2.1, 2.2, 2.3_
 
-- [ ] 3. 共通application UIを構築する
-- [ ] 3.1 (P) page title、単一h1、route focus、状態通知を共通化する
+- [x] 3. 共通application UIを構築する
+- [x] 3.1 (P) page title、単一h1、route focus、状態通知を共通化する
   - routeごとに可視h1を一つだけ描画し、定義済みmetadataからdocument titleを更新する。
   - URLに対応する画面が変わった時だけh1へfocusし、同一画面の再取得や状態更新では入力focusを維持する。
   - loading／successはstatus、failureはalertとして色以外でも通知し、headerとheadingを残す。
@@ -84,7 +84,7 @@
   - _Requirements: 3.5, 9.5, 9.7, 10.1, 10.2, 10.3, 10.4, 10.5, 11.8_
   - _Boundary: PageFrame_
   - _Depends: 2.4_
-- [ ] 3.2 (P) owner向け共通headerとnavigationを提供する
+- [x] 3.2 (P) owner向け共通headerとnavigationを提供する
   - app名を`/liff`へのLinkとして表示し、指定順の4機能navigation、owner表示、logoutを通常認証済み画面へ配置する。
   - 現在機能を視覚表示と`aria-current`で示し、topを経由せず各機能へ移動させる。
   - narrow viewport用disclosureはroute変更で閉じ、Escape、Tab、focus-visibleを阻害しない。
@@ -92,7 +92,7 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 11.3, 11.4, 11.6, 11.8_
   - _Boundary: AppLayout_
   - _Depends: 2.4_
-- [ ] 3.3 topと404を共通shellへ統合する
+- [x] 3.3 topと404を共通shellへ統合する
   - topには指定順の4機能カードだけを置き、カード全体を対応routeへのLinkにする。
   - topでは機能説明、機能state、管理操作、認証確認以外の機能dataを表示・取得しない。
   - 404では保護情報を取得せず、`/liff`へ戻る明示Linkと専用title／h1を表示する。

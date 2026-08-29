@@ -268,15 +268,7 @@ export default function AuthGate({
       state: 'authenticated',
       profile: state.profile,
     }
-    return (
-      <section className="auth-console" aria-label="認証済みコンソール">
-        <header className="auth-profile">
-          <p><span className="eyebrow">認証済みowner</span><strong>{state.profile.displayName}</strong></p>
-          <button type="button" className="secondary" onClick={() => void logout()}>この端末からログアウト</button>
-        </header>
-        {renderProtectedContent(session)}
-      </section>
-    )
+    return <>{renderProtectedContent(session)}</>
   }
   if (state.kind === 'login_required' || state.kind === 'anonymous') {
     return (

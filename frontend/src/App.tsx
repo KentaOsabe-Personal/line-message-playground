@@ -1,31 +1,32 @@
-import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router'
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router'
 
 import AuthGate from './AuthGate'
 import type { AuthGateProps } from './AuthGate'
-import { parseProtectedPath } from './appRoutes'
+import AppLayout from './AppLayout'
+import HomePage from './HomePage'
+import NotFoundPage from './NotFoundPage'
+import PageFrame from './PageFrame'
+import { meta, parseProtectedPath } from './appRoutes'
 import AccountConsole from './AccountConsole'
 
 type AppRouterProps = {
   authGateProps?: Omit<AuthGateProps, 'children' | 'currentPathname' | 'replacePath'>
 }
 
-function RouteScreen({ name }: { name: string }) {
-  return <section aria-label={name}><h1>{name}</h1></section>
+function RouteScreen() {
+  const location = useLocation()
+  const pageMeta = meta(location.pathname)
+  return (
+    <PageFrame title={pageMeta.title} heading={pageMeta.heading} routeFocusKey={location.pathname}>
+      <section aria-label={`${pageMeta.heading}コンテンツ`} />
+    </PageFrame>
+  )
 }
 
 function RichMenuDetailRoute() {
   const { channelId = '' } = useParams()
   if (parseProtectedPath(`/liff/rich-menus/${channelId}`) === null) return <NotFoundPage />
-  return <RouteScreen name="リッチメニュー管理画面" />
-}
-
-function NotFoundPage() {
-  return (
-    <main>
-      <h1>ページが見つかりません</h1>
-      <Link to="/liff">トップへ戻る</Link>
-    </main>
-  )
+  return <RouteScreen />
 }
 
 function AuthenticatedApplication({ authGateProps }: AppRouterProps) {
@@ -40,7 +41,11 @@ function AuthenticatedApplication({ authGateProps }: AppRouterProps) {
     >
       {(context) => context.session.state === 'unlinking'
         ? <AccountConsole {...context} />
-        : <Outlet />}
+        : (
+            <AppLayout displayName={context.session.profile.displayName} onLogout={context.logout}>
+              <Outlet />
+            </AppLayout>
+          )}
     </AuthGate>
   )
 }
@@ -50,12 +55,12 @@ export function AppRouter({ authGateProps }: AppRouterProps) {
     <Routes>
       <Route path="/" element={<Navigate to="/liff" replace />} />
       <Route path="/liff" element={<AuthenticatedApplication authGateProps={authGateProps} />}>
-        <Route index element={<RouteScreen name="トップ" />} />
-        <Route path="channels" element={<RouteScreen name="チャネル管理画面" />} />
-        <Route path="account" element={<RouteScreen name="アカウント管理画面" />} />
-        <Route path="rich-menus" element={<RouteScreen name="リッチメニュー選択画面" />} />
+        <Route index element={<HomePage />} />
+        <Route path="channels" element={<RouteScreen />} />
+        <Route path="account" element={<RouteScreen />} />
+        <Route path="rich-menus" element={<RouteScreen />} />
         <Route path="rich-menus/:channelId" element={<RichMenuDetailRoute />} />
-        <Route path="deliveries" element={<RouteScreen name="LINEテスト配信画面" />} />
+        <Route path="deliveries" element={<RouteScreen />} />
       </Route>
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

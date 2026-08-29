@@ -50,18 +50,17 @@ describe('AppRouter', () => {
   test('replaces root with the data-free top route', async () => {
     await renderAt('/')
     expect(container.textContent).toContain('トップ')
-    expect(container.textContent).not.toContain('チャネル管理画面')
-    expect(container.textContent).not.toContain('LINEテスト配信画面')
+    expect(container.querySelector('h1')?.textContent).toBe('トップ')
   })
 
   // テストケース: 各定義済み保護URLへ直接アクセスする。
   // 期待値: URLに対応するroute elementだけをmountする。
   test.each([
-    ['/liff/channels', 'チャネル管理画面'],
-    ['/liff/account', 'アカウント管理画面'],
-    ['/liff/rich-menus', 'リッチメニュー選択画面'],
-    ['/liff/rich-menus/123e4567-e89b-42d3-a456-426614174000', 'リッチメニュー管理画面'],
-    ['/liff/deliveries', 'LINEテスト配信画面'],
+    ['/liff/channels', 'チャネル管理'],
+    ['/liff/account', 'アカウント管理'],
+    ['/liff/rich-menus', 'リッチメニュー管理'],
+    ['/liff/rich-menus/123e4567-e89b-42d3-a456-426614174000', 'リッチメニュー管理'],
+    ['/liff/deliveries', 'LINEテスト配信'],
   ])('mounts only the route element for %s', async (path, expected) => {
     await renderAt(path)
     expect(container.textContent).toContain(expected)
@@ -100,7 +99,7 @@ describe('AppRouter', () => {
       </MemoryRouter>,
     ))
     expect(container.textContent).toContain('全連携解除を処理中です')
-    expect(container.textContent).not.toContain('LINEテスト配信画面')
+    expect(container.textContent).not.toContain('LINEテスト配信')
     expect(container.textContent).not.toContain('認証済みowner')
   })
 })

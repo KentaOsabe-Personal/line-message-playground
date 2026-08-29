@@ -77,7 +77,7 @@ describe('AuthGate', () => {
         config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
         liffAdapter={liffAdapter}
         authApi={authApi}
-      ><p>保護画面</p></AuthGate>,
+      >{({ session }) => <><p>{session.state === 'authenticated' ? session.profile.displayName : ''}</p><p>保護画面</p></>}</AuthGate>,
     ))
 
     expect(authApi.login).toHaveBeenCalledWith('raw-id-token')
@@ -97,7 +97,7 @@ describe('AuthGate', () => {
         config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
         liffAdapter={adapter()}
         authApi={authApi}
-      ><p>保護画面</p></AuthGate>,
+      >{({ logout }) => <><p>保護画面</p><button type="button" onClick={() => void logout()}>この端末からログアウト</button></>}</AuthGate>,
     ))
 
     const logout = [...container.querySelectorAll('button')].find((button) => button.textContent === 'この端末からログアウト')
@@ -180,7 +180,7 @@ describe('AuthGate', () => {
         config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
         liffAdapter={adapter()}
         authApi={authApi}
-      ><p>保護画面</p></AuthGate>,
+      >{({ logout }) => <><p>保護画面</p><button type="button" onClick={() => void logout()}>この端末からログアウト</button></>}</AuthGate>,
     ))
 
     const logout = [...container.querySelectorAll('button')].find((button) => button.textContent === 'この端末からログアウト')
@@ -316,7 +316,7 @@ describe('AuthGate', () => {
       <AuthGate currentPathname="/liff/account" replacePath={replacePath} ownerStorage={storage}
         config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
         liffAdapter={liffAdapter} authApi={api({ bootstrap: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }) })}>
-        <p>保護画面</p>
+        {({ logout }) => <><p>保護画面</p><button type="button" onClick={() => void logout()}>この端末からログアウト</button></>}
       </AuthGate>,
     ))
     await clickButton(container, 'この端末からログアウト')
@@ -345,7 +345,7 @@ describe('AuthGate', () => {
           isLoggedIn: vi.fn().mockReturnValue(true), getIdToken: vi.fn().mockReturnValue('old-owner-token'),
         })}
         authApi={authApi}>
-        <p>保護画面</p>
+        {({ logout }) => <><p>保護画面</p><button type="button" onClick={() => void logout()}>この端末からログアウト</button></>}
       </AuthGate>,
     ))
     await clickButton(container, 'この端末からログアウト')
