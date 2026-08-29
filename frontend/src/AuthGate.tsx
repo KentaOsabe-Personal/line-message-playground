@@ -10,41 +10,29 @@ import { createLinePlatformLiffAdapter } from './liffClient'
 import type { LinePlatformLiffAdapter } from './liffClient'
 import { createLiffRuntimeConfig } from './liffConfig'
 import type { LiffRuntimeConfig } from './liffConfig'
+import { parseProtectedPath } from './appRoutes'
+import { createOwnerSessionStorage } from './ownerSessionStorage'
+import type { OwnerSessionStorage } from './ownerSessionStorage'
 
-type Props = {
+export type AuthGateProps = {
   children: ReactNode | ((context: AuthGateContext) => ReactNode)
   config?: LiffRuntimeConfig
   liffAdapter?: LinePlatformLiffAdapter
   authApi?: AuthApiClient
+  currentPathname?: string
+  replacePath?: (path: string) => void
+  ownerStorage?: OwnerSessionStorage
 }
 
 export type AuthGateContext = {
   session: Extract<SessionStatus, { state: 'authenticated' | 'unlinking' }>
+  logout: () => Promise<void>
   getAccessToken: () => string | null
   reauthenticate: () => void
   reauthenticateForUnlink: () => void
   unlinkReauthenticationReady: boolean
   onSessionReceived: (session: SessionStatus) => void
   refreshSession: () => Promise<void>
-}
-
-const unlinkReauthenticationMarker = 'line-account-unlink-reauthentication'
-
-const readUnlinkReauthenticationMarker = () => {
-  try {
-    return window.sessionStorage.getItem(unlinkReauthenticationMarker) === 'pending'
-  } catch {
-    return false
-  }
-}
-
-const writeUnlinkReauthenticationMarker = (value: boolean) => {
-  try {
-    if (value) window.sessionStorage.setItem(unlinkReauthenticationMarker, 'pending')
-    else window.sessionStorage.removeItem(unlinkReauthenticationMarker)
-  } catch {
-    // Storage unavailable: remain fail closed and require another explicit reauthentication.
-  }
 }
 
 const errorMessage: Record<SafeAuthErrorCode, string> = {
@@ -55,11 +43,20 @@ const errorMessage: Record<SafeAuthErrorCode, string> = {
   logout_failed: 'この端末からログアウトできませんでした。',
 }
 
-export default function AuthGate({ children, config, liffAdapter, authApi }: Props) {
+export default function AuthGate({
+  children,
+  config,
+  liffAdapter,
+  authApi,
+  currentPathname = window.location.pathname,
+  replacePath = (path) => window.history.replaceState(null, '', path),
+  ownerStorage,
+}: AuthGateProps) {
   const [state, dispatch] = useReducer(transitionAuth, initialAuthState)
   const [unlinkReauthenticationReady, setUnlinkReauthenticationReady] = useState(false)
   const generation = useRef(0)
   const adapter = useMemo(() => liffAdapter ?? createLinePlatformLiffAdapter(), [liffAdapter])
+  const storage = useMemo(() => ownerStorage ?? createOwnerSessionStorage(), [ownerStorage])
   const api = useMemo(() => authApi ?? createAuthApiClient(createProtectedHttpClient({
     onSessionInvalid: () => {
       generation.current += 1
@@ -95,13 +92,13 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
         if (
           session.state === 'unlinking' &&
           session.stage === 'deauthorization_pending' &&
-          readUnlinkReauthenticationMarker() &&
+          storage.readUnlinkReauthenticationPending() &&
           adapter.getAccessToken() !== null
         ) {
-          writeUnlinkReauthenticationMarker(false)
+          storage.setUnlinkReauthenticationPending(false)
           setUnlinkReauthenticationReady(true)
         } else {
-          writeUnlinkReauthenticationMarker(false)
+          storage.setUnlinkReauthenticationPending(false)
         }
         dispatch({ type: 'session_received', session })
         return
@@ -139,7 +136,7 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
         dispatch({ type: 'failed', code: 'initialization_failed', retryable: true })
       }
     }
-  }, [adapter, api, runtimeConfig])
+  }, [adapter, api, runtimeConfig, storage])
 
   useEffect(() => {
     void authenticate()
@@ -148,6 +145,8 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
 
   const startLogin = () => {
     try {
+      const returnPath = parseProtectedPath(currentPathname)
+      if (returnPath !== null) storage.saveReturnPath(returnPath)
       generation.current += 1
       dispatch({ type: 'verification_started' })
       adapter.login(runtimeConfig().redirectUri)
@@ -156,16 +155,31 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
     }
   }
 
+  const finishOwnerSession = useCallback((error: SafeAuthErrorCode | null = null) => {
+    storage.clearAll()
+    setUnlinkReauthenticationReady(false)
+    replacePath('/liff')
+    if (error === null) dispatch({ type: 'session_received', session: { state: 'anonymous' } })
+    else dispatch({ type: 'failed', code: error, retryable: false })
+  }, [replacePath, storage])
+
   const logout = async () => {
     const currentGeneration = ++generation.current
     dispatch({ type: 'verification_started' })
     try {
-      const session = await api.logout()
-      if (generation.current === currentGeneration) dispatch({ type: 'session_received', session })
+      await api.logout()
+      if (generation.current !== currentGeneration) return
+      try {
+        adapter.logout()
+        finishOwnerSession()
+      } catch {
+        finishOwnerSession('logout_failed')
+      }
     } catch (error) {
       if (generation.current !== currentGeneration) return
       if (error instanceof AuthApiError && error.httpStatus === 401) {
-        dispatch({ type: 'session_invalidated' })
+        try { adapter.logout() } catch { /* Local owner state is still cleared below. */ }
+        finishOwnerSession()
       } else {
         dispatch({ type: 'failed', code: 'logout_failed', retryable: true })
       }
@@ -175,8 +189,14 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
   const onSessionReceived = useCallback((session: SessionStatus) => {
     generation.current += 1
     setUnlinkReauthenticationReady(false)
+    if (session.state === 'anonymous') {
+      storage.clearAll()
+      replacePath('/liff')
+    } else if (session.state === 'unlinking' && currentPathname !== '/liff/account') {
+      replacePath('/liff/account')
+    }
     dispatch({ type: 'session_received', session })
-  }, [])
+  }, [currentPathname, replacePath, storage])
 
   const refreshSession = useCallback(async () => {
     const currentGeneration = ++generation.current
@@ -208,21 +228,32 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
   const reauthenticateForUnlink = useCallback(() => {
     generation.current += 1
     setUnlinkReauthenticationReady(false)
-    writeUnlinkReauthenticationMarker(true)
+    storage.setUnlinkReauthenticationPending(true)
     dispatch({ type: 'verification_started' })
     try {
       adapter.reauthenticate(runtimeConfig().redirectUri)
     } catch {
-      writeUnlinkReauthenticationMarker(false)
+      storage.setUnlinkReauthenticationPending(false)
       dispatch({ type: 'failed', code: 'initialization_failed', retryable: true })
     }
-  }, [adapter, runtimeConfig])
+  }, [adapter, runtimeConfig, storage])
+
+  useEffect(() => {
+    if (state.kind === 'unlinking') {
+      if (currentPathname !== '/liff/account') replacePath('/liff/account')
+      return
+    }
+    if (state.kind !== 'authenticated' || currentPathname !== '/liff') return
+    const returnPath = storage.consumeReturnPath()
+    if (returnPath !== null && returnPath !== '/liff') replacePath(returnPath)
+  }, [currentPathname, replacePath, state.kind, storage])
 
   const renderProtectedContent = (
     session: Extract<SessionStatus, { state: 'authenticated' | 'unlinking' }>,
   ) => typeof children === 'function'
     ? children({
         session,
+        logout,
         getAccessToken,
         reauthenticate,
         reauthenticateForUnlink,

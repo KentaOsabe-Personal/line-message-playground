@@ -1,5 +1,10 @@
 # Implementation Plan
 
+## 全実装タスク共通のtest記述契約
+
+- 各実装タスクで新規追加または変更する全ての`test`／`test.each`直前に、日本語の`テストケース:`コメントと`期待値:`コメントを必ず記載する。
+- task-local verificationと親タスクreviewでは、対象testに両コメントがあることを完了条件として機械的または目視で確認する。欠落時は`READY_FOR_REVIEW`または`APPROVED`にしない。
+
 - [x] 1. Frontend実行基盤と安全な境界を整える
 - [x] 1.1 Routerと統一UIの再現可能な実行前提を追加する
   - React RouterのDeclarative modeとTailwind CSS／Vite pluginを設計指定のexact versionで導入し、lockfileへ固定する。
@@ -36,8 +41,8 @@
   - _Boundary: ScopedReadContract_
   - _Depends: 1.1_
 
-- [ ] 2. 認証とrouteを安全に収束させる
-- [ ] 2.1 LIFFの固定redirectと定義済みsubroute accessを両立する
+- [x] 2. 認証とrouteを安全に収束させる
+- [x] 2.1 LIFFの固定redirectと定義済みsubroute accessを両立する
   - 定義済み保護pathのdirect accessをconfiguration errorにせず、LIFF endpoint／login redirectは`/liff`へ固定する。
   - LIFF SDKの明示logoutをadapter契約に追加し、画面ComponentからSDKを直接操作させない。
   - 不正pathや外部値をLIFF復帰先として渡さず、認証前の許可pathはowner session adapterへ委譲する。
@@ -45,7 +50,7 @@
   - _Requirements: 1.3, 2.1, 2.2, 12.3, 12.4, 12.6_
   - _Boundary: AuthGate_
   - _Depends: 1.2, 1.3_
-- [ ] 2.2 AuthGateへ安全な復帰とsession失効制御を統合する
+- [x] 2.2 AuthGateへ安全な復帰とsession失効制御を統合する
   - 未認証時は現在の定義済みURLを維持してlogin UIだけを表示し、認証直前に許可済み復帰pathを保存する。
   - 認証成功後は復帰pathを一回だけ消費し、不正値なら`/liff`へ収束する。
   - 401／session失効では保護contentを即時unmountし、同じ許可URLで再認証後に最新GETを開始する。
@@ -53,7 +58,7 @@
   - 完了時、失効前の保護表示やmutationが再認証を越えて再表示・再送されない。
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 9.4, 12.3, 12.6_
   - _Boundary: AuthGate_
-- [ ] 2.3 全連携解除と明示logoutの終端遷移をAuthGateへ統合する
+- [x] 2.3 全連携解除と明示logoutの終端遷移をAuthGateへ統合する
   - unlinking中は`/liff/account`へreplaceし、回復contentだけを表示して通常navigationを除外する。
   - 全連携解除完了時はowner一時情報を消去して未認証へ移り、再利用時にloginを要求する。
   - 明示logout成功時はBackend session、LIFF login state、owner一時情報を消去し、`/liff`へreplaceする。
@@ -61,7 +66,7 @@
   - 完了時、unlink完了またはlogout後の再認証は以前の機能画面へ自動復帰しない。
   - _Requirements: 2.6, 2.7, 2.8, 2.9, 5.3, 12.3, 12.6_
   - _Boundary: AuthGate, OwnerSessionStorage_
-- [ ] 2.4 route treeと認証済みapplication shellを合成する
+- [x] 2.4 route treeと認証済みapplication shellを合成する
   - `/`だけを`/liff`へreplaceし、通常Linkはpush、未知pathは自動redirectしない404として構成する。
   - 保護routeをAuthGate内へ置き、認証済み通常画面、unlink回復、anonymous、404の表示境界を分ける。
   - URLに対応するroute elementだけをmountし、root／top／unknown routeで不要な機能contentを作らない。
@@ -345,3 +350,8 @@
   - _Requirements: 1.3, 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 12.1, 12.2_
   - _Boundary: AppRouter, TailwindTheme, Validation Suite_
   - _Depends: 9.1_
+
+## Implementation Notes
+
+- LIFF logout失敗後は認証再試行を出さずfail-closedを維持し、route registryによるpath検証はAuthGateのmount前に行う。
+- testを追加・変更する全タスクで、各test直前の日本語`テストケース:`／`期待値:`コメントをreview必須項目として扱う。

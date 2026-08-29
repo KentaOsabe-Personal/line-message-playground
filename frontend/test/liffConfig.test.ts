@@ -18,6 +18,18 @@ describe('LiffRuntimeConfig', () => {
     })
   })
 
+  // テストケース: 定義済みsubrouteからLIFF runtime設定を生成する。
+  // 期待値: subrouteを許可しつつendpointとlogin redirectを固定`/liff`へ収束させる。
+  test('accepts defined application subroutes while keeping the LIFF redirect fixed', () => {
+    expect(createLiffRuntimeConfig({
+      liffId: '1234567890-AbCdEf', currentOrigin: 'https://example.ngrok-free.app', currentPathname: '/liff/channels',
+    }).redirectUri).toBe('https://example.ngrok-free.app/liff')
+    expect(createLiffRuntimeConfig({
+      liffId: '1234567890-AbCdEf', currentOrigin: 'https://example.ngrok-free.app',
+      currentPathname: '/liff/rich-menus/123e4567-e89b-42d3-a456-426614174000',
+    }).endpointUrl).toBe('https://example.ngrok-free.app/liff')
+  })
+
   // テストケース: LIFF entry URLにLINE復帰用queryとfragmentが付いた状態から設定を導出する。
   // 期待値: 安全性判定はoriginとpathnameだけを使い、query・fragmentを変更せずredirect URIへ混入させない。
   test('ignores query and fragment for safety while preserving the browser URL', () => {
@@ -39,6 +51,7 @@ describe('LiffRuntimeConfig', () => {
   test.each([
     { liffId: '123-a', currentOrigin: 'http://example.com', currentPathname: '/liff' },
     { liffId: '123-a', currentOrigin: 'https://example.com', currentPathname: '/liff/' },
+    { liffId: '123-a', currentOrigin: 'https://example.com', currentPathname: '/liff/unknown' },
     { liffId: '', currentOrigin: 'https://example.com', currentPathname: '/liff' },
     { liffId: '123-a?token=secret', currentOrigin: 'https://example.com', currentPathname: '/liff' },
   ])('rejects unsafe configuration %#', (input) => {

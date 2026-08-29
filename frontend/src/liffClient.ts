@@ -7,6 +7,7 @@ export interface LinePlatformLiffAdapter {
   isLoggedIn(): boolean
   login(redirectUri: string): void
   reauthenticate(redirectUri: string): void
+  logout(): void
   getIdToken(): string | null
   getAccessToken(): string | null
 }
@@ -43,6 +44,7 @@ export function createLinePlatformLiffAdapter(
       if (sdk.isLoggedIn()) sdk.logout()
       sdk.login({ redirectUri })
     },
+    logout: () => sdk.logout(),
     getIdToken: () => rawToken(sdk.getIDToken()),
     getAccessToken: () => rawToken(sdk.getAccessToken()),
   })

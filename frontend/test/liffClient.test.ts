@@ -21,6 +21,8 @@ describe('LinePlatformLiffAdapter', () => {
     expect(adapter.isLoggedIn()).toBe(true)
     expect(adapter.getIdToken()).toBe('raw-id-token')
     expect(adapter.getAccessToken()).toBe('raw-access-token')
+    adapter.logout()
+    expect(sdk.logout).toHaveBeenCalledTimes(1)
     expect(adapter).not.toHaveProperty('getDecodedIDToken')
     expect(adapter).not.toHaveProperty('getProfile')
   })
