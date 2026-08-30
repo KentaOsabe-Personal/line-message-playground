@@ -297,8 +297,8 @@
   - _Boundary: TailwindTheme, AppLayout, PageFrame, FeaturePageAdapters_
   - _Depends: 7.2, 7.3, 7.4, 7.5, 7.6, 7.7_
 
-- [ ] 8. 自動testでtask graphと既存契約を検証する
-- [ ] 8.1 route、認証、共通shellのintegration contractを固定する
+- [x] 8. 自動testでtask graphと既存契約を検証する
+- [x] 8.1 route、認証、共通shellのintegration contractを固定する
   - direct access、root replace、Link push、back／forward、reload相当、wildcard 404、safe channel not-foundを検証する。
   - protected path login、fixed redirect、safe return、401 unmount、reauth remount、mutation非再送を検証する。
   - unlinking account replace／nav非表示、completion anonymous、logout clear、再login top開始を検証する。
@@ -308,7 +308,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 10.1, 10.2, 10.3, 10.4, 10.5_
   - _Boundary: AppRouter, AuthGate, AppLayout, PageFrame_
   - _Depends: 3.3, 6.6_
-- [ ] 8.2 チャネルとアカウントのroute分離回帰を固定する
+- [x] 8.2 チャネルとアカウントのroute分離回帰を固定する
   - 各URLで対応ConsoleだけがAPIを呼び、top／他routeから不要なaccount／channel requestが出ないことを検証する。
   - チャネルのcredential、競合、unknown、回復、rich-menu Linkと、アカウントのrecipient、unlink、再認証を維持する。
   - route離脱でdraftを復元せず、同一画面の危険操作確認だけが残ることを検証する。
@@ -316,7 +316,7 @@
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 5.1, 5.2, 5.3, 8.1, 8.2, 9.1, 9.2, 12.3, 12.5_
   - _Boundary: ChannelAdminPage, AccountPage_
   - _Depends: 6.1, 7.4, 7.5_
-- [ ] 8.3 rich-menuと配信のroute分離回帰を固定する
+- [x] 8.3 rich-menuと配信のroute分離回帰を固定する
   - selectorの全mode／empty、detail Link、back、dynamic title、read-only、safe not-found、既存operation回復を検証する。
   - 配信のtarget、preview、send、unknown、保存ID hydrate、status-only再訪、新しい配信clearを検証する。
   - rich-menu／delivery mutationがnavigationや再認証で自動再送されないことを検証する。
@@ -324,7 +324,7 @@
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 7.1, 7.2, 7.3, 7.4, 7.5, 8.3, 8.4, 8.5, 12.3, 12.5_
   - _Boundary: RichMenuChannelSelectionPage, RichMenuAdminPage, DeliveryPage_
   - _Depends: 6.2, 6.6, 7.6, 7.7_
-- [ ] 8.4 async lifecycleとaccessibilityのintegration contractを固定する
+- [x] 8.4 async lifecycleとaccessibilityのintegration contractを固定する
   - route離脱時のabort、abort不能なlate response、read retry、mutation継続、draft／preview破棄を検証する。
   - loading、success、failure、unknownのtext／role、入力focus維持、keyboard操作、label、landmark、target用classを検証する。
   - responsive disclosure、2列／1列、current state、focus-visible、横overflow防止のobservable DOM contractを検証する。
