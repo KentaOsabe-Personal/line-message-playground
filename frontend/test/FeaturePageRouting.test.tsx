@@ -1,6 +1,6 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, useNavigate } from 'react-router'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { AppRouter } from '../src/App'
@@ -10,6 +10,11 @@ import type { ChannelAdminApiClient } from '../src/channelAdminApi'
 import type { ChannelAdminItem } from '../src/channelAdminDto'
 import type { LinkedDeliveryApiClient } from '../src/deliveryApi'
 import type { LinePlatformLiffAdapter } from '../src/liffClient'
+import type { RichMenuAdminApiClient } from '../src/richMenuAdminApi'
+
+vi.mock('../src/RichMenuAdminConsole', () => ({
+  default: ({ channelId }: { channelId: string }) => `rich-console:${channelId}`,
+}));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -54,7 +59,8 @@ const clients = () => {
   const deliveryApi: LinkedDeliveryApiClient = {
     listChannels: vi.fn().mockResolvedValue([]), listRecipients: vi.fn(), preview: vi.fn(), send: vi.fn(), checkStatus: vi.fn(),
   }
-  return { channelApi, accountApi, deliveryApi }
+  const richMenuApi = {} as RichMenuAdminApiClient
+  return { channelApi, accountApi, deliveryApi, richMenuApi }
 }
 
 const routedChannel: ChannelAdminItem = {
@@ -70,6 +76,7 @@ const routedChannel: ChannelAdminItem = {
 test('4.1 navigates rich-menu management out of the channel page', async () => {
   const featureClients = clients()
   vi.mocked(featureClients.channelApi.listChannels).mockResolvedValue([routedChannel])
+  vi.mocked(featureClients.channelApi.getChannel).mockResolvedValue(routedChannel)
   await act(async () => root.render(
     <MemoryRouter initialEntries={['/liff/channels']}>
       <AppRouter authGateProps={authGateProps} featureClients={featureClients} />
@@ -82,8 +89,36 @@ test('4.1 navigates rich-menu management out of the channel page', async () => {
   await act(async () => link.click())
 
   expect(container.querySelector('h1')?.textContent).toBe('リッチメニュー管理')
-  expect(container.querySelector('.rich-menu-admin')).toBeNull()
+  expect(container.textContent).toContain(`rich-console:${routedChannel.channelId}`)
   expect(container.textContent).not.toContain('LINEチャネル管理')
+})
+
+// テストケース: selectorからdetailへ通常遷移し、browser back相当を実行する。
+// 期待値: selector履歴へ戻り、最新channel一覧を再取得してdetail Consoleを破棄する。
+test('5.4 pushes detail navigation and restores the selector on browser back', async () => {
+  const featureClients = clients()
+  vi.mocked(featureClients.channelApi.listChannels).mockResolvedValue([routedChannel])
+  vi.mocked(featureClients.channelApi.getChannel).mockResolvedValue(routedChannel)
+  const HistoryBack = () => {
+    const navigate = useNavigate()
+    return <button type="button" data-testid="history-back" onClick={() => navigate(-1)}>戻る</button>
+  }
+  await act(async () => root.render(
+    <MemoryRouter initialEntries={['/liff/rich-menus']}>
+      <AppRouter authGateProps={authGateProps} featureClients={featureClients} />
+      <HistoryBack />
+    </MemoryRouter>,
+  ))
+
+  const detail = container.querySelector(`a[href="/liff/rich-menus/${routedChannel.channelId}"]`) as HTMLAnchorElement
+  expect(detail).not.toBeNull()
+  await act(async () => detail.click())
+  expect(container.textContent).toContain(`rich-console:${routedChannel.channelId}`)
+
+  await act(async () => (container.querySelector('[data-testid="history-back"]') as HTMLButtonElement).click())
+  expect(container.textContent).not.toContain('rich-console:')
+  expect(container.querySelector(`a[href="/liff/rich-menus/${routedChannel.channelId}"]`)).not.toBeNull()
+  expect(featureClients.channelApi.listChannels).toHaveBeenCalledTimes(2)
 })
 
 // テストケース: メッセージ配信URLへ直接アクセスする。

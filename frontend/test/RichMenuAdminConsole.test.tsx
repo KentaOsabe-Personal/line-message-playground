@@ -34,6 +34,20 @@ describe('RichMenuAdminConsole', () => {
     expect(richApi.getHistory).toHaveBeenCalledTimes(1)
   })
 
+  // テストケース: route pageからread lifetime signalを渡して管理状態を読み込む。
+  // 期待値: channel、template、state、history、deactivationの安全なGETだけへ同じsignalを伝播する。
+  test('5.3 propagates the page lifetime signal to every initial safe read', async () => {
+    const channelApi = channels(); const richApi = menus(); const controller = new AbortController()
+    await act(async () => root.render(
+      <RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi} readSignal={controller.signal} />,
+    ))
+    expect(channelApi.getChannel).toHaveBeenCalledWith(channelId, { signal: controller.signal })
+    expect(richApi.listTemplates).toHaveBeenCalledWith({ signal: controller.signal })
+    expect(richApi.getState).toHaveBeenCalledWith(channelId, { signal: controller.signal })
+    expect(richApi.getHistory).toHaveBeenCalledWith(channelId, undefined, { signal: controller.signal })
+    expect(richApi.getDeactivation).toHaveBeenCalledWith(channelId, { signal: controller.signal })
+  })
+
   // テストケース: 成功表示後の再取得で一領域が失敗する。
   // 期待値: 再取得開始時点で古い操作を消し、失敗後は安全な再取得だけを表示する。
   test('does not retain stale actions while refresh fails', async () => {
@@ -58,23 +72,23 @@ describe('RichMenuAdminConsole', () => {
     expect(container.textContent).toBe('')
   })
 
-  // テストケース: dirty editorを持つmemory-only管理画面から戻る操作を選ぶ。
-  // 期待値: 破棄確認を行い、取消時は維持し承認時だけ入力を消去する。
-  test('confirms a dirty in-app back navigation and clears it on approval', async () => {
-    const channelApi = channels(); const richApi = menus(); const onBack = vi.fn()
+  // テストケース: dirty editorを持つmemory-only管理画面からroute離脱する。
+  // 期待値: 破棄確認とConsole固有の戻る操作を表示せず、unmountで入力を破棄する。
+  test('discards a dirty editor on route leave without confirmation', async () => {
+    const channelApi = channels(); const richApi = menus()
     vi.mocked(richApi.listTemplates).mockResolvedValue([template])
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
-    await act(async () => root.render(<RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi} onBack={onBack} />))
+    const confirm = vi.spyOn(window, 'confirm')
+    await act(async () => root.render(<RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi} />))
 
     const name = container.querySelector('input') as HTMLInputElement
     await act(async () => { name.value = '未適用'; name.dispatchEvent(new Event('input', { bubbles: true })) })
-    const back = [...container.querySelectorAll('button')].find(button => button.textContent === 'チャネル一覧へ戻る')
-    await act(async () => back?.click())
-    expect(onBack).not.toHaveBeenCalled()
-    expect(container.querySelector<HTMLInputElement>('input')?.value).toBe('未適用')
-    await act(async () => back?.click())
-    expect(onBack).toHaveBeenCalledTimes(1)
-    expect(confirm).toHaveBeenCalledTimes(2)
+    expect(container.textContent).not.toContain('チャネル一覧へ戻る')
+    const unload = new Event('beforeunload', { cancelable: true }) as BeforeUnloadEvent
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(false)
+    await act(async () => root.render(<p>別画面</p>))
+    expect(confirm).not.toHaveBeenCalled()
+    expect(container.textContent).toBe('別画面')
   })
 
   // テストケース: owner・provider・channel scopeが拒否された管理画面を読み込む。
@@ -85,6 +99,19 @@ describe('RichMenuAdminConsole', () => {
     await act(async () => root.render(<RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi} onBack={onBack} />))
     expect(onBack).toHaveBeenCalledTimes(1)
     expect(container.textContent).not.toContain('private target')
+  })
+
+  // テストケース: detail Consoleのread中にowner sessionが失効する。
+  // 期待値: 対象not-foundへ誤分類せず、共通認証境界へ失効を通知する。
+  test('notifies the authentication boundary when a detail read loses its session', async () => {
+    const channelApi = channels(); const richApi = menus(); const onBack = vi.fn(); const onSessionInvalid = vi.fn()
+    vi.mocked(channelApi.getChannel).mockRejectedValue(new ChannelAdminApiError({ code: 'authentication_required', summary: 'login' }, 401))
+    await act(async () => root.render(
+      <RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi}
+        onBack={onBack} onSessionInvalid={onSessionInvalid} />,
+    ))
+    expect(onSessionInvalid).toHaveBeenCalledTimes(1)
+    expect(onBack).not.toHaveBeenCalled()
   })
 
   // テストケース: rich状態を確認してチャネル無効化を二重clickする。
@@ -234,7 +261,7 @@ describe('RichMenuAdminConsole', () => {
   })
 
   // テストケース: editor入力からpreviewを生成し、未保存確認後に破棄する。
-  // 期待値: 有効入力だけを送信し、object URLとbeforeunloadを画面境界で解放する。
+  // 期待値: 有効入力だけを送信し、object URLを画面境界で解放し、beforeunloadを妨げない。
   test('creates and clears one memory-only expiring preview', async () => {
     const channelApi = channels(); const richApi = menus()
     vi.mocked(richApi.listTemplates).mockResolvedValue([template])
@@ -256,7 +283,7 @@ describe('RichMenuAdminConsole', () => {
     await act(async () => { inputs[1].value = 'https://example.com/guide'; inputs[1].dispatchEvent(new Event('input', { bubbles: true })) })
     const unload = new Event('beforeunload', { cancelable: true }) as BeforeUnloadEvent
     window.dispatchEvent(unload)
-    expect(unload.defaultPrevented).toBe(true)
+    expect(unload.defaultPrevented).toBe(false)
     await act(async () => container.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })))
     expect(richApi.createPreview).toHaveBeenCalledWith(channelId, {
       templateId: 'jp-link-one', templateVersion: 1, channelRevision: now,

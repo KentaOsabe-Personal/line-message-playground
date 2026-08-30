@@ -138,8 +138,8 @@
   - _Boundary: FeaturePageAdapters, AppRouter_
   - _Depends: 4.1, 4.2, 4.3_
 
-- [ ] 5. リッチメニュー選択とchannel別管理を分離する
-- [ ] 5.1 (P) 全channelのリッチメニュー利用可否を選択pageへ投影する
+- [x] 5. リッチメニュー選択とchannel別管理を分離する
+- [x] 5.1 (P) 全channelのリッチメニュー利用可否を選択pageへ投影する
   - 既存channel一覧からeditable、readOnly、unavailable、recoveryOnlyをpureに導出し、新API／DTOを追加しない。
   - 全登録channelへ状態と利用不可理由を示し、provider IDなしはchannel設定Linkだけ、provider IDありはdetail Linkを示す。
   - 0件ではempty stateとchannel管理Linkだけを表示し、登録formを重複させない。
@@ -149,7 +149,7 @@
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 9.1, 9.5, 9.6, 9.7_
   - _Boundary: RichMenuChannelSelectionPage_
   - _Depends: 3.3_
-- [ ] 5.2 (P) channel別rich-menu routeを非開示error付きで提供する
+- [x] 5.2 (P) channel別rich-menu routeを非開示error付きで提供する
   - URL parameterをcanonical UUIDとして検証し、形式不正、not-found、owner scope外を同じ「対象が見つからない」表示へ縮約する。
   - channel名取得後だけdynamic titleを更新し、h1は「リッチメニュー管理」のまま維持する。
   - inactiveは既存read-only／recovery projectionに従い、provider IDなしのdirect accessでは管理操作を表示しない。
@@ -158,7 +158,7 @@
   - _Requirements: 1.5, 6.3, 6.4, 6.5, 6.7, 10.2, 12.6_
   - _Boundary: RichMenuAdminPage_
   - _Depends: 3.3_
-- [ ] 5.3 channel管理と既存rich-menu Consoleをrouteへ接続する
+- [x] 5.3 channel管理と既存rich-menu Consoleをrouteへ接続する
   - チャネル管理のinline selection stateを削除し、対象channelのdetail Linkへ置換する。
   - 既存rich-menu Consoleへchannel ID、read signal、session失効通知を渡し、管理、履歴、回復、unknown契約を維持する。
   - dirty back confirmationとbeforeunloadだけを削除し、editor resetや外部状態変更の確認は残す。
@@ -167,7 +167,7 @@
   - _Requirements: 4.2, 4.3, 6.3, 6.5, 6.7, 6.9, 8.1, 8.2, 12.3_
   - _Boundary: ChannelAdminPage, RichMenuAdminPage_
   - _Depends: 4.1, 5.2_
-- [ ] 5.4 selectorとdetailのbrowser履歴を統合する
+- [x] 5.4 selectorとdetailのbrowser履歴を統合する
   - selectorからdetailへの通常遷移をpushし、browser backでselectorへ戻せるようにする。
   - direct detail access、selectorへの明示Link、再読み込みで同じchannel routeを再構成する。
   - 再訪時は最新channel／rich-menu状態を取得し、以前のeditor draftやpreviewを復元しない。
@@ -355,3 +355,4 @@
 
 - LIFF logout失敗後は認証再試行を出さずfail-closedを維持し、route registryによるpath検証はAuthGateのmount前に行う。
 - testを追加・変更する全タスクで、各test直前の日本語`テストケース:`／`期待値:`コメントをreview必須項目として扱う。
+- Frontend依存更新後はbind mountに隠れる`frontend_node_modules` volumeへ`docker compose run --rm frontend npm ci`を実行してからコンテナを再起動する。

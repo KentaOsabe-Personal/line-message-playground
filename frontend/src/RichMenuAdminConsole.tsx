@@ -22,12 +22,13 @@ type Props = {
   channelApi?: ChannelAdminApiClient
   richApi?: RichMenuAdminApiClient
   invalidated?: boolean
+  readSignal?: AbortSignal
   onSessionInvalid?: () => void
   onBack?: () => void
   onDeleted?: (result: DeletedChannel) => void
 }
 
-export default function RichMenuAdminConsole({ channelId, channelApi: suppliedChannelApi, richApi: suppliedRichApi, invalidated = false, onSessionInvalid, onBack, onDeleted }: Props) {
+export default function RichMenuAdminConsole({ channelId, channelApi: suppliedChannelApi, richApi: suppliedRichApi, invalidated = false, readSignal, onSessionInvalid, onBack, onDeleted }: Props) {
   const [state, dispatch] = useReducer(transitionRichMenuAdmin, initialRichMenuAdminState)
   const generation = useRef(0)
   const previewGeneration = useRef(0)
@@ -60,9 +61,13 @@ export default function RichMenuAdminConsole({ channelId, channelApi: suppliedCh
     }
     dispatch({ type: 'loadStarted', generation: current })
     try {
+      const channelRead = readSignal === undefined ? channelApi.getChannel(channelId) : channelApi.getChannel(channelId, { signal: readSignal })
+      const templatesRead = readSignal === undefined ? richApi.listTemplates() : richApi.listTemplates({ signal: readSignal })
+      const stateRead = readSignal === undefined ? richApi.getState(channelId) : richApi.getState(channelId, { signal: readSignal })
+      const historyRead = readSignal === undefined ? richApi.getHistory(channelId) : richApi.getHistory(channelId, undefined, { signal: readSignal })
+      const deactivationRead = readSignal === undefined ? richApi.getDeactivation(channelId) : richApi.getDeactivation(channelId, { signal: readSignal })
       const [channel, templates, rich, history, deactivation] = await Promise.all([
-        channelApi.getChannel(channelId), richApi.listTemplates(), richApi.getState(channelId),
-        richApi.getHistory(channelId), richApi.getDeactivation(channelId),
+        channelRead, templatesRead, stateRead, historyRead, deactivationRead,
       ])
       const scoped = channel.channelId === channelId && rich.channelId === channelId &&
         history.items.every(item => item.channelId === channelId) &&
@@ -75,13 +80,17 @@ export default function RichMenuAdminConsole({ channelId, channelApi: suppliedCh
       dispatch({ type: 'loadSucceeded', generation: current, value: { channel, templates, rich, history, deactivation } })
     } catch (error) {
       const code = error instanceof ChannelAdminApiError || error instanceof RichMenuAdminApiError ? error.error.code : null
-      if (code !== null && ['authentication_required', 'owner_operation_blocked', 'provider_mismatch', 'channel_not_found'].includes(code)) {
+      if (code === 'authentication_required') {
+        onSessionInvalid?.()
+        return
+      }
+      if (code !== null && ['owner_operation_blocked', 'provider_mismatch', 'channel_not_found'].includes(code)) {
         onBack?.()
         return
       }
       dispatch({ type: 'loadFailed', generation: current, error: { code: 'load_failed', summary: '管理状態を取得できませんでした。' } })
     }
-  }, [channelApi, channelId, onBack, richApi])
+  }, [channelApi, channelId, onBack, onSessionInvalid, readSignal, richApi])
 
   useEffect(() => {
     if (invalidated) { generation.current += 1; previewGeneration.current += 1; operationGeneration.current += 1; dispatch({ type: 'sessionInvalidated' }); return }
@@ -90,21 +99,7 @@ export default function RichMenuAdminConsole({ channelId, channelApi: suppliedCh
   }, [invalidated, load])
 
   const editor = state.state === 'ready' ? state.editor : { state: 'empty' as const }
-  const dirty = editor.state !== 'empty'
   const previewImageUrl = editor.state === 'preview_valid' ? editor.imageUrl : null
-
-  const goBack = () => {
-    if (dirty && !window.confirm('未適用の入力とプレビューは破棄されます。チャネル一覧へ戻りますか？')) return
-    dispatch({ type: 'editorCleared' })
-    onBack?.()
-  }
-
-  useEffect(() => {
-    if (!dirty || invalidated) return
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [dirty, invalidated])
 
   useEffect(() => {
     if (previewImageUrl === null) return
@@ -257,7 +252,7 @@ export default function RichMenuAdminConsole({ channelId, channelApi: suppliedCh
   })()
   return (
     <section className="rich-menu-admin" aria-labelledby="rich-menu-admin-heading">
-      <header className="rich-menu-header"><div>{onBack !== undefined && <button type="button" className="back-button" onClick={goBack}>チャネル一覧へ戻る</button>}<p className="eyebrow">リッチメニュー管理</p><h2 id="rich-menu-admin-heading">{state.channel.label}</h2><p>メニューの内容を作成し、見た目を確認してからLINEに反映できます。</p></div>
+      <header className="rich-menu-header"><div><p className="eyebrow">リッチメニュー管理</p><h2 id="rich-menu-admin-heading">{state.channel.label}</h2><p>メニューの内容を作成し、見た目を確認してからLINEに反映できます。</p></div>
         <span className={state.channel.active ? 'status active' : 'status inactive'}>{state.channel.active ? '利用中' : '停止中'}</span>
       </header>
       <dl className="rich-menu-overview">
@@ -347,7 +342,8 @@ export default function RichMenuAdminConsole({ channelId, channelApi: suppliedCh
       </section>}
       <details className="history-details" open={state.rich.historySummary.latestStatus === 'unknown' || state.rich.historySummary.latestStatus === 'cleanup_required'}>
         <summary>操作履歴 <span>{state.rich.historySummary.totalCount}件</span></summary>
-        <RichMenuHistory key={`${state.channel.updatedAt}-${state.rich.historySummary.latestOperationId ?? 'empty'}`} initialPage={state.history} readOnly={readOnly} loadNext={cursor => richApi.getHistory(channelId, cursor)} />
+        <RichMenuHistory key={`${state.channel.updatedAt}-${state.rich.historySummary.latestOperationId ?? 'empty'}`} initialPage={state.history} readOnly={readOnly}
+          loadNext={cursor => readSignal === undefined ? richApi.getHistory(channelId, cursor) : richApi.getHistory(channelId, cursor, { signal: readSignal })} />
       </details>
       <div className="refresh-row"><span>最終更新: {new Date(state.channel.updatedAt).toLocaleString('ja-JP')}</span><button type="button" className="secondary" disabled={operationBusy || lifecycleBusy} onClick={() => { void load() }}>{operationBusy || lifecycleBusy ? '操作完了を待っています…' : '最新状態を再取得'}</button></div>
     </section>

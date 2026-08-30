@@ -1,4 +1,4 @@
-import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useOutletContext, useParams } from 'react-router'
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import AuthGate from './AuthGate'
 import type { AuthGateProps } from './AuthGate'
@@ -11,10 +11,13 @@ import AccountConsole from './AccountConsole'
 import AccountPage from './AccountPage'
 import ChannelAdminPage from './ChannelAdminPage'
 import DeliveryPage from './DeliveryPage'
+import RichMenuAdminPage from './RichMenuAdminPage'
+import RichMenuChannelSelectionPage from './RichMenuChannelSelectionPage'
 import type { AccountApiClient } from './accountApi'
 import type { AuthGateContext } from './AuthGate'
 import type { ChannelAdminApiClient } from './channelAdminApi'
 import type { LinkedDeliveryApiClient } from './deliveryApi'
+import type { RichMenuAdminApiClient } from './richMenuAdminApi'
 
 type AppRouterProps = {
   authGateProps?: Omit<AuthGateProps, 'children' | 'currentPathname' | 'replacePath'>
@@ -22,6 +25,7 @@ type AppRouterProps = {
     channelApi?: ChannelAdminApiClient
     accountApi?: AccountApiClient
     deliveryApi?: LinkedDeliveryApiClient
+    richMenuApi?: RichMenuAdminApiClient
   }>
 }
 
@@ -35,10 +39,14 @@ function RouteScreen() {
   )
 }
 
-function RichMenuDetailRoute() {
-  const { channelId = '' } = useParams()
-  if (parseProtectedPath(`/liff/rich-menus/${channelId}`) === null) return <NotFoundPage />
-  return <RouteScreen />
+function RichMenuSelectionRoute({ api }: { api?: ChannelAdminApiClient }) {
+  const context = useOutletContext<AuthGateContext>()
+  return <RichMenuChannelSelectionPage api={api} onSessionInvalid={() => { void context.refreshSession() }} />
+}
+
+function RichMenuDetailRoute({ channelApi, richApi }: { channelApi?: ChannelAdminApiClient; richApi?: RichMenuAdminApiClient }) {
+  const context = useOutletContext<AuthGateContext>()
+  return <RichMenuAdminPage channelApi={channelApi} richApi={richApi} onSessionInvalid={() => { void context.refreshSession() }} />
 }
 
 function ChannelRoute({ api }: { api?: ChannelAdminApiClient }) {
@@ -59,7 +67,8 @@ function DeliveryRoute({ api }: { api?: LinkedDeliveryApiClient }) {
 function AuthenticatedApplication({ authGateProps }: AppRouterProps) {
   const location = useLocation()
   const navigate = useNavigate()
-  if (parseProtectedPath(location.pathname) === null) return <NotFoundPage />
+  const isRichMenuCandidate = /^\/liff\/rich-menus\/[^/]+$/.test(location.pathname)
+  if (parseProtectedPath(location.pathname) === null && !isRichMenuCandidate) return <NotFoundPage />
   return (
     <AuthGate
       {...authGateProps}
@@ -85,8 +94,8 @@ export function AppRouter({ authGateProps, featureClients }: AppRouterProps) {
         <Route index element={<HomePage />} />
         <Route path="channels" element={<ChannelRoute api={featureClients?.channelApi} />} />
         <Route path="account" element={<AccountRoute api={featureClients?.accountApi} />} />
-        <Route path="rich-menus" element={<RouteScreen />} />
-        <Route path="rich-menus/:channelId" element={<RichMenuDetailRoute />} />
+        <Route path="rich-menus" element={<RichMenuSelectionRoute api={featureClients?.channelApi} />} />
+        <Route path="rich-menus/:channelId" element={<RichMenuDetailRoute channelApi={featureClients?.channelApi} richApi={featureClients?.richMenuApi} />} />
         <Route path="deliveries" element={<DeliveryRoute api={featureClients?.deliveryApi} />} />
       </Route>
       <Route path="*" element={<NotFoundPage />} />

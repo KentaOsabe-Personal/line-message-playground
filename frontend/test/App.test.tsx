@@ -75,13 +75,13 @@ describe('AppRouter', () => {
     expect(authApi.bootstrap).not.toHaveBeenCalled()
   })
 
-  // テストケース: canonical UUIDでないリッチメニューURLへアクセスする。
-  // 期待値: AuthGateをmountせず404へ分類する。
-  test('rejects a non-canonical rich-menu path before authentication', async () => {
+  // テストケース: canonical UUIDでないリッチメニューdetail URLへアクセスする。
+  // 期待値: 存在や権限を開示しない対象not-foundとselector導線へ縮約する。
+  test('collapses a non-canonical rich-menu target into the safe detail not-found state', async () => {
     await renderAt('/liff/rich-menus/not-a-uuid')
-    expect(container.textContent).toContain('ページが見つかりません')
-    expect(container.textContent).not.toContain('LINEでログイン')
-    expect(authApi.bootstrap).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('対象が見つかりません')
+    expect(container.querySelector('a[href="/liff/rich-menus"]')).not.toBeNull()
+    expect(authApi.bootstrap).toHaveBeenCalledTimes(1)
   })
 
   // テストケース: 全連携解除中に配信URLへアクセスする。
