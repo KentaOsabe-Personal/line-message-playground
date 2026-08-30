@@ -230,8 +230,8 @@
   - _Boundary: AuthGate, OwnerSessionStorage, DeliveryPage_
   - _Depends: 2.2, 6.4, 6.5_
 
-- [ ] 7. 全画面を統一design systemへ移行する
-- [ ] 7.1 Tailwind themeと共通interaction tokenを確立する
+- [x] 7. 全画面を統一design systemへ移行する
+- [x] 7.1 Tailwind themeと共通interaction tokenを確立する
   - 白、淡いgreen、濃い文字、gray-green背景、card、border、控えめなshadow、LINE green、危険操作のredをtheme token化する。
   - typography、spacing、radius、form control、button、link、focus ring、statusの共通基準を定義する。
   - 派手なgradient、強いshadow、不要animationを導入せず、既存固有CSSを必要最小限へ縮小する。
@@ -239,7 +239,7 @@
   - _Requirements: 11.1, 11.2, 11.6, 11.7, 11.8, 12.1_
   - _Boundary: TailwindTheme_
   - _Depends: 1.1_
-- [ ] 7.2 (P) 共通header、navigation、top、404をresponsive表示へ移行する
+- [x] 7.2 (P) 共通header、navigation、top、404をresponsive表示へ移行する
   - wide画面ではnavigationを横並び、top cardを2列にする。
   - narrow画面ではowner、logout、4機能navigationをdisclosureへ収め、top cardを1列にする。
   - current state、hover、focus、dangerをtokenで区別し、card全体Linkとpointer targetを維持する。
@@ -247,7 +247,7 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.6, 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.8_
   - _Boundary: AppLayout, HomePage, NotFoundPage_
   - _Depends: 3.3, 7.1_
-- [ ] 7.3 (P) page frameと状態表示を統一styleへ移行する
+- [x] 7.3 (P) page frameと状態表示を統一styleへ移行する
   - heading、content width、card、loading、status、alert、retryを共通tokenとsemantic roleで表示する。
   - route focus ringを可視かつ隠れない形で示し、状態更新時の入力focusを保持する。
   - 通常文字、大きな文字、UI境界のcontrast下限をtheme色で満たす。
@@ -255,7 +255,7 @@
   - _Requirements: 9.5, 9.7, 10.3, 10.4, 10.5, 11.1, 11.2, 11.6, 11.7, 11.8_
   - _Boundary: PageFrame_
   - _Depends: 3.1, 7.1_
-- [ ] 7.4 (P) チャネル管理UIを統一styleへ移行する
+- [x] 7.4 (P) チャネル管理UIを統一styleへ移行する
   - list、form、write-only credential、state、recovery、danger actionを共通tokenへ揃える。
   - 狭い画面で識別情報や操作群が横overflowせず、labelとbutton targetを維持する。
   - 状態、disabled理由、競合、unknownを色だけに依存せず表示する。
@@ -263,7 +263,7 @@
   - _Requirements: 4.1, 4.4, 11.1, 11.2, 11.5, 11.6, 11.7, 11.8_
   - _Boundary: ChannelAdminPage_
   - _Depends: 4.1, 7.1_
-- [ ] 7.5 (P) アカウント管理UIを統一styleへ移行する
+- [x] 7.5 (P) アカウント管理UIを統一styleへ移行する
   - owner連携、recipient list、unlink確認、recoveryを共通form／card／status表現へ揃える。
   - narrow表示でprovider／channel状態と操作が読め、不要な横scrollを発生させない。
   - 再認証、危険操作、disabled理由をsemantic textとfocus-visibleで示す。
@@ -271,7 +271,7 @@
   - _Requirements: 5.1, 5.3, 11.1, 11.2, 11.5, 11.6, 11.7, 11.8_
   - _Boundary: AccountPage_
   - _Depends: 4.2, 7.1_
-- [ ] 7.6 (P) リッチメニュー選択・管理UIを統一styleへ移行する
+- [x] 7.6 (P) リッチメニュー選択・管理UIを統一styleへ移行する
   - selector、editor、preview、state、history、operation、recoveryを共通tokenへ揃える。
   - editable、readOnly、unavailable、recoveryOnlyをtextとsemantic stateで区別する。
   - 画像grid、form、履歴、長い識別値を対応幅内へ収め、常時戻るLinkとtarget sizeを維持する。
@@ -279,7 +279,7 @@
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 11.1, 11.2, 11.5, 11.6, 11.7, 11.8_
   - _Boundary: RichMenuChannelSelectionPage, RichMenuAdminPage_
   - _Depends: 5.4, 7.1_
-- [ ] 7.7 (P) LINEテスト配信UIを統一styleへ移行する
+- [x] 7.7 (P) LINEテスト配信UIを統一styleへ移行する
   - target選択、subject、body、receipt、preview、confirmation、operation resultを共通form／card／statusへ揃える。
   - processing、success、failure、unknownをtextとroleで区別し、新しい配信開始を明示する。
   - narrow表示で入力、preview、結果が横overflowせず、label、focus、pointer targetを維持する。
@@ -287,7 +287,7 @@
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 11.1, 11.2, 11.5, 11.6, 11.7, 11.8_
   - _Boundary: DeliveryPage_
   - _Depends: 6.6, 7.1_
-- [ ] 7.8 全画面のaccessibilityとoverflow契約を統合する
+- [x] 7.8 全画面のaccessibilityとoverflow契約を統合する
   - landmark、label、heading、current state、status通知、24×24 CSS px以上のtargetを全routeで点検し不足を修正する。
   - keyboard trapを作らず、focus-visibleがsticky header等で隠れないことを各画面で揃える。
   - contrastと色非依存、2列／1列、responsive disclosure、長文／長IDのoverflowを共通基準で確認する。

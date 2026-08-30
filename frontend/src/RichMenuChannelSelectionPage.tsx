@@ -123,7 +123,7 @@ export default function RichMenuChannelSelectionPage({ api: suppliedApi, onSessi
               <article className="channel-card" key={choice.channelId}>
                 <div className="channel-card-heading">
                   <h2>{choice.label}</h2>
-                  <span className={`status ${choice.mode === 'editable' ? 'active' : 'inactive'}`}>{choice.stateLabel}</span>
+                  <span className={`status ${choice.mode.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`}>{choice.stateLabel}</span>
                 </div>
                 {choice.unavailableReason !== null && <p>{choice.unavailableReason}</p>}
                 {choice.mode === 'editable' && <Link className="button-link" to={richMenuPath(choice.channelId)}>リッチメニューを管理</Link>}

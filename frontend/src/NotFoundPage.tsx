@@ -9,7 +9,7 @@ export default function NotFoundPage() {
 
   return (
     <PageFrame title={pageMeta.title} heading={pageMeta.heading} routeFocusKey={location.pathname}>
-      <Link to="/liff">トップへ戻る</Link>
+      <Link className="not-found-link" to="/liff">トップへ戻る</Link>
     </PageFrame>
   )
 }
