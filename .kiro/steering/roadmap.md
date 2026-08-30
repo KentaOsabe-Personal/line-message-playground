@@ -136,7 +136,7 @@ LINE Message Playground を、固定設定の自分宛て配信から、LIFF／L
 
 ### Specs (dependency order)
 
-- [ ] app-screen-separation -- 既存4機能を独立URLへ分割し、共通navigation、認証route制御、route単位読込み、Tailwind CSSの統一UIを提供する。Dependencies: line-account-linking, line-channel-admin-ui, line-rich-menu-admin-lifecycle, linked-recipient-delivery
+- [x] app-screen-separation -- 既存4機能を独立URLへ分割し、共通navigation、認証route制御、route単位読込み、Tailwind CSSの統一UIを提供する。Dependencies: line-account-linking, line-channel-admin-ui, line-rich-menu-admin-lifecycle, linked-recipient-delivery
 
 ---
 _更新日: 2026-08-29。Phase 3としてFrontendのアプリ画面分割を追加。_
