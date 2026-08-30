@@ -334,8 +334,8 @@
   - _Boundary: AppRouter, ScopedReadContract, TailwindTheme_
   - _Depends: 6.4, 7.8, 8.1, 8.2, 8.3_
 
-- [ ] 9. buildと対応環境を最終検証する
-- [ ] 9.1 production buildとSPA配信経路を検証する
+- [x] 9. buildと対応環境を最終検証する
+- [x] 9.1 production buildとSPA配信経路を検証する
   - strict TypeScriptを含むproduction buildを成功させ、exact dependencyのengine／peer contractと明らかな重複CSSがないことを確認する。
   - ngrokから全`/liff/...`が同じSPA entryを返し、relative `/api` proxyとclient-side 404を維持することを確認する。
   - Backend、API schema、DB、外部業務contractに変更がないことを差分で確認し、不足があれば暗黙に拡張せず明示する。
@@ -343,7 +343,7 @@
   - _Requirements: 1.3, 1.4, 11.1, 11.2, 12.3, 12.4, 12.5_
   - _Boundary: AppRouter, TailwindTheme, Validation Suite_
   - _Depends: 8.1, 8.2, 8.3, 8.4_
-- [ ] 9.2 正式browser matrixとbest-effort環境を検証する
+- [x] 9.2 正式browser matrixとbest-effort環境を検証する
   - Chrome 111+、Edge 111相当+、Safari 16.4+、Firefox 128+でdirect access、reload、history、responsive menu、2列／1列、overflow、keyboard、focus、contrast、statusを確認する。
   - smartphone／LIFF browserはbest effort smokeだけを確認し、正式acceptanceへ含めない。
   - 完了時、正式browser matrixがpassし、best-effort結果が正式保証と明確に区別される。
