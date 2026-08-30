@@ -10,41 +10,29 @@ import { createLinePlatformLiffAdapter } from './liffClient'
 import type { LinePlatformLiffAdapter } from './liffClient'
 import { createLiffRuntimeConfig } from './liffConfig'
 import type { LiffRuntimeConfig } from './liffConfig'
+import { parseProtectedPath } from './appRoutes'
+import { createOwnerSessionStorage } from './ownerSessionStorage'
+import type { OwnerSessionStorage } from './ownerSessionStorage'
 
-type Props = {
+export type AuthGateProps = {
   children: ReactNode | ((context: AuthGateContext) => ReactNode)
   config?: LiffRuntimeConfig
   liffAdapter?: LinePlatformLiffAdapter
   authApi?: AuthApiClient
+  currentPathname?: string
+  replacePath?: (path: string) => void
+  ownerStorage?: OwnerSessionStorage
 }
 
 export type AuthGateContext = {
   session: Extract<SessionStatus, { state: 'authenticated' | 'unlinking' }>
+  logout: () => Promise<void>
   getAccessToken: () => string | null
   reauthenticate: () => void
   reauthenticateForUnlink: () => void
   unlinkReauthenticationReady: boolean
   onSessionReceived: (session: SessionStatus) => void
   refreshSession: () => Promise<void>
-}
-
-const unlinkReauthenticationMarker = 'line-account-unlink-reauthentication'
-
-const readUnlinkReauthenticationMarker = () => {
-  try {
-    return window.sessionStorage.getItem(unlinkReauthenticationMarker) === 'pending'
-  } catch {
-    return false
-  }
-}
-
-const writeUnlinkReauthenticationMarker = (value: boolean) => {
-  try {
-    if (value) window.sessionStorage.setItem(unlinkReauthenticationMarker, 'pending')
-    else window.sessionStorage.removeItem(unlinkReauthenticationMarker)
-  } catch {
-    // Storage unavailable: remain fail closed and require another explicit reauthentication.
-  }
 }
 
 const errorMessage: Record<SafeAuthErrorCode, string> = {
@@ -55,11 +43,20 @@ const errorMessage: Record<SafeAuthErrorCode, string> = {
   logout_failed: 'この端末からログアウトできませんでした。',
 }
 
-export default function AuthGate({ children, config, liffAdapter, authApi }: Props) {
+export default function AuthGate({
+  children,
+  config,
+  liffAdapter,
+  authApi,
+  currentPathname = window.location.pathname,
+  replacePath = (path) => window.history.replaceState(null, '', path),
+  ownerStorage,
+}: AuthGateProps) {
   const [state, dispatch] = useReducer(transitionAuth, initialAuthState)
   const [unlinkReauthenticationReady, setUnlinkReauthenticationReady] = useState(false)
   const generation = useRef(0)
   const adapter = useMemo(() => liffAdapter ?? createLinePlatformLiffAdapter(), [liffAdapter])
+  const storage = useMemo(() => ownerStorage ?? createOwnerSessionStorage(), [ownerStorage])
   const api = useMemo(() => authApi ?? createAuthApiClient(createProtectedHttpClient({
     onSessionInvalid: () => {
       generation.current += 1
@@ -95,13 +92,13 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
         if (
           session.state === 'unlinking' &&
           session.stage === 'deauthorization_pending' &&
-          readUnlinkReauthenticationMarker() &&
+          storage.readUnlinkReauthenticationPending() &&
           adapter.getAccessToken() !== null
         ) {
-          writeUnlinkReauthenticationMarker(false)
+          storage.setUnlinkReauthenticationPending(false)
           setUnlinkReauthenticationReady(true)
         } else {
-          writeUnlinkReauthenticationMarker(false)
+          storage.setUnlinkReauthenticationPending(false)
         }
         dispatch({ type: 'session_received', session })
         return
@@ -139,7 +136,7 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
         dispatch({ type: 'failed', code: 'initialization_failed', retryable: true })
       }
     }
-  }, [adapter, api, runtimeConfig])
+  }, [adapter, api, runtimeConfig, storage])
 
   useEffect(() => {
     void authenticate()
@@ -148,6 +145,8 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
 
   const startLogin = () => {
     try {
+      const returnPath = parseProtectedPath(currentPathname)
+      if (returnPath !== null) storage.saveReturnPath(returnPath)
       generation.current += 1
       dispatch({ type: 'verification_started' })
       adapter.login(runtimeConfig().redirectUri)
@@ -156,16 +155,31 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
     }
   }
 
+  const finishOwnerSession = useCallback((error: SafeAuthErrorCode | null = null) => {
+    storage.clearAll()
+    setUnlinkReauthenticationReady(false)
+    replacePath('/liff')
+    if (error === null) dispatch({ type: 'session_received', session: { state: 'anonymous' } })
+    else dispatch({ type: 'failed', code: error, retryable: false })
+  }, [replacePath, storage])
+
   const logout = async () => {
     const currentGeneration = ++generation.current
     dispatch({ type: 'verification_started' })
     try {
-      const session = await api.logout()
-      if (generation.current === currentGeneration) dispatch({ type: 'session_received', session })
+      await api.logout()
+      if (generation.current !== currentGeneration) return
+      try {
+        adapter.logout()
+        finishOwnerSession()
+      } catch {
+        finishOwnerSession('logout_failed')
+      }
     } catch (error) {
       if (generation.current !== currentGeneration) return
       if (error instanceof AuthApiError && error.httpStatus === 401) {
-        dispatch({ type: 'session_invalidated' })
+        try { adapter.logout() } catch { /* Local owner state is still cleared below. */ }
+        finishOwnerSession()
       } else {
         dispatch({ type: 'failed', code: 'logout_failed', retryable: true })
       }
@@ -175,8 +189,14 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
   const onSessionReceived = useCallback((session: SessionStatus) => {
     generation.current += 1
     setUnlinkReauthenticationReady(false)
+    if (session.state === 'anonymous') {
+      storage.clearAll()
+      replacePath('/liff')
+    } else if (session.state === 'unlinking' && currentPathname !== '/liff/account') {
+      replacePath('/liff/account')
+    }
     dispatch({ type: 'session_received', session })
-  }, [])
+  }, [currentPathname, replacePath, storage])
 
   const refreshSession = useCallback(async () => {
     const currentGeneration = ++generation.current
@@ -208,21 +228,32 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
   const reauthenticateForUnlink = useCallback(() => {
     generation.current += 1
     setUnlinkReauthenticationReady(false)
-    writeUnlinkReauthenticationMarker(true)
+    storage.setUnlinkReauthenticationPending(true)
     dispatch({ type: 'verification_started' })
     try {
       adapter.reauthenticate(runtimeConfig().redirectUri)
     } catch {
-      writeUnlinkReauthenticationMarker(false)
+      storage.setUnlinkReauthenticationPending(false)
       dispatch({ type: 'failed', code: 'initialization_failed', retryable: true })
     }
-  }, [adapter, runtimeConfig])
+  }, [adapter, runtimeConfig, storage])
+
+  useEffect(() => {
+    if (state.kind === 'unlinking') {
+      if (currentPathname !== '/liff/account') replacePath('/liff/account')
+      return
+    }
+    if (state.kind !== 'authenticated' || currentPathname !== '/liff') return
+    const returnPath = storage.consumeReturnPath()
+    if (returnPath !== null && returnPath !== '/liff') replacePath(returnPath)
+  }, [currentPathname, replacePath, state.kind, storage])
 
   const renderProtectedContent = (
     session: Extract<SessionStatus, { state: 'authenticated' | 'unlinking' }>,
   ) => typeof children === 'function'
     ? children({
         session,
+        logout,
         getAccessToken,
         reauthenticate,
         reauthenticateForUnlink,
@@ -237,23 +268,47 @@ export default function AuthGate({ children, config, liffAdapter, authApi }: Pro
       state: 'authenticated',
       profile: state.profile,
     }
-    return (
-      <section className="auth-console" aria-label="認証済みコンソール">
-        <header className="auth-profile">
-          <p><span className="eyebrow">認証済みowner</span><strong>{state.profile.displayName}</strong></p>
-          <button type="button" className="secondary" onClick={() => void logout()}>この端末からログアウト</button>
-        </header>
-        {renderProtectedContent(session)}
-      </section>
-    )
+    return <>{renderProtectedContent(session)}</>
   }
   if (state.kind === 'login_required' || state.kind === 'anonymous') {
     return (
-      <section className="auth-gate" aria-live="polite">
-        <h2>LINEログインが必要です</h2>
-        <p>本人確認が完了すると管理画面を利用できます。</p>
-        <button type="button" onClick={startLogin}>LINEでログイン</button>
-      </section>
+      <main className="auth-page">
+        <section className="auth-gate auth-card" aria-live="polite">
+          <div className="auth-brand" aria-hidden="true">
+            <span className="auth-brand-mark">
+              <svg viewBox="0 0 32 32">
+                <path d="M27.8 14.1c0-6.1-5.3-11-11.8-11S4.2 8 4.2 14.1c0 5.5 4.3 10.1 10.1 10.9.4.1.9.3 1 .7.1.3.1.9 0 1.3l-.2 1.2c-.1.4-.3 1.5 1.3.8 1.6-.7 8.7-5.1 11.9-8.8 2.2-2.4 3.5-4.8 3.5-7.8Z" />
+              </svg>
+            </span>
+            <span>LINE Message Playground</span>
+          </div>
+          <div className="auth-copy">
+            <p className="auth-eyebrow">OWNER CONSOLE</p>
+            <h1>LINEの検証環境へ<br />ようこそ。</h1>
+            <p>チャネル管理からテスト配信まで、あなた専用のワークスペースで安全に試せます。</p>
+          </div>
+          <div className="auth-action-panel">
+            <span className="auth-lock-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 2.75a6 6 0 0 0-6 6v2.5H4.75A1.75 1.75 0 0 0 3 13v7.25C3 21.22 3.78 22 4.75 22h14.5c.97 0 1.75-.78 1.75-1.75V13c0-.97-.78-1.75-1.75-1.75H18v-2.5a6 6 0 0 0-6-6Zm-4 6a4 4 0 0 1 8 0v2.5H8v-2.5Zm4 6.1a1.65 1.65 0 0 1 .75 3.12v1.28h-1.5v-1.28A1.65 1.65 0 0 1 12 14.85Z" />
+              </svg>
+            </span>
+            <p className="auth-action-eyebrow">OWNER ACCESS</p>
+            <h2>管理画面へログイン</h2>
+            <p className="auth-action-copy">登録済みのLINEアカウントで本人確認を行ってください。</p>
+            <button className="line-login-button" type="button" onClick={startLogin}>
+              <span className="line-login-icon" aria-hidden="true">
+                <svg viewBox="0 0 32 32">
+                  <path d="M27.8 14.1c0-6.1-5.3-11-11.8-11S4.2 8 4.2 14.1c0 5.5 4.3 10.1 10.1 10.9.4.1.9.3 1 .7.1.3.1.9 0 1.3l-.2 1.2c-.1.4-.3 1.5 1.3.8 1.6-.7 8.7-5.1 11.9-8.8 2.2-2.4 3.5-4.8 3.5-7.8Z" />
+                </svg>
+              </span>
+              <span>LINEでログイン</span>
+              <span className="line-login-arrow" aria-hidden="true">→</span>
+            </button>
+            <p className="auth-assurance">本人確認にはLINE Loginを使用します</p>
+          </div>
+        </section>
+      </main>
     )
   }
   if (state.kind === 'unlinking') {

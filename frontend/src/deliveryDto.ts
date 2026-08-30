@@ -40,6 +40,7 @@ export type SafeErrorCode =
   | 'target_not_deliverable'
   | 'protocol_error'
   | 'network_error'
+  | 'aborted'
   | 'csrf_missing'
 export type SafeError = { code: SafeErrorCode; summary: string; fields?: Record<string, string[]> }
 

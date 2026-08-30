@@ -19,6 +19,8 @@ import {
   transitionLinkedDelivery,
 } from './deliveryState'
 import { createProtectedHttpClient } from './httpApi'
+import { createOwnerSessionStorage } from './ownerSessionStorage'
+import type { OwnerSessionStorage } from './ownerSessionStorage'
 
 type LoadState<T> =
   | { status: 'loading' }
@@ -29,6 +31,7 @@ type Props = {
   linkedClient?: LinkedDeliveryApiClient
   createOperationId?: () => string
   onSessionInvalid?: () => void
+  ownerSessionStorage?: OwnerSessionStorage
 }
 
 const channelReason = (choice: DeliveryChannelChoice): string | null =>
@@ -105,7 +108,8 @@ function LinkedDeliveryForm({
   linkedClient,
   createOperationId = () => crypto.randomUUID(),
   onSessionInvalid,
-}: Pick<Props, 'linkedClient' | 'createOperationId' | 'onSessionInvalid'>) {
+  ownerSessionStorage: suppliedOwnerSessionStorage,
+}: Props) {
   const deliveryClient = useMemo(
     () => linkedClient ?? createLinkedDeliveryApiClient(createProtectedHttpClient({
       onSessionInvalid,
@@ -116,6 +120,9 @@ function LinkedDeliveryForm({
     transitionLinkedDelivery,
     initialLinkedDeliveryState,
   )
+  const [ownerSessionStorage] = useState(() => suppliedOwnerSessionStorage ?? createOwnerSessionStorage())
+  const [storedOperationId, setStoredOperationId] = useState(() => ownerSessionStorage.readDeliveryOperationId())
+  const [resumeMessage, setResumeMessage] = useState<string | null>(null)
   const [channels, setChannels] = useState<LoadState<DeliveryChannelChoice>>({
     status: 'loading',
   })
@@ -128,17 +135,27 @@ function LinkedDeliveryForm({
   const previewRequestSequence = useRef(0)
   const submitInFlight = useRef(false)
   const [statusError, setStatusError] = useState<SafeError | null>(null)
+  const lifetime = useRef(0)
+  const statusControllers = useRef(new Set<AbortController>())
   const selectedChannelId = state.input.channelId
 
+  useEffect(() => () => {
+    lifetime.current += 1
+    statusControllers.current.forEach((controller) => controller.abort())
+    statusControllers.current.clear()
+  }, [])
+
   useEffect(() => {
+    if (storedOperationId !== null) return
+    const controller = new AbortController()
     let active = true
     setChannels({ status: 'loading' })
-    void deliveryClient.listChannels().then(
+    void deliveryClient.listChannels({ signal: controller.signal }).then(
       (items) => {
         if (active) setChannels({ status: 'loaded', items })
       },
       (error: unknown) => {
-        if (active) {
+        if (active && !controller.signal.aborted) {
           setChannels({
             status: 'error',
             error: normalizeError(error, 'チャネル一覧を取得できませんでした。'),
@@ -148,24 +165,25 @@ function LinkedDeliveryForm({
     )
     return () => {
       active = false
+      controller.abort()
     }
-  }, [deliveryClient, channelLoadVersion])
+  }, [deliveryClient, channelLoadVersion, storedOperationId])
 
   useEffect(() => {
+    if (storedOperationId !== null) return
+    const controller = new AbortController()
     let active = true
     if (selectedChannelId === null) {
       setRecipients({ status: 'loaded', items: [] })
-      return () => {
-        active = false
-      }
+      return () => { active = false; controller.abort() }
     }
     setRecipients({ status: 'loading' })
-    void deliveryClient.listRecipients(selectedChannelId).then(
+    void deliveryClient.listRecipients(selectedChannelId, { signal: controller.signal }).then(
       (items) => {
         if (active) setRecipients({ status: 'loaded', items })
       },
       (error: unknown) => {
-        if (active) {
+        if (active && !controller.signal.aborted) {
           setRecipients({
             status: 'error',
             error: normalizeError(error, 'recipient一覧を取得できませんでした。'),
@@ -175,8 +193,44 @@ function LinkedDeliveryForm({
     )
     return () => {
       active = false
+      controller.abort()
     }
-  }, [deliveryClient, recipientLoadVersion, selectedChannelId])
+  }, [deliveryClient, recipientLoadVersion, selectedChannelId, storedOperationId])
+
+  useEffect(() => {
+    if (storedOperationId === null) return
+    const operationId = storedOperationId
+    const controller = new AbortController()
+    statusControllers.current.add(controller)
+    const operationLifetime = lifetime.current
+    dispatch({ type: 'hydrateStarted', operationId })
+    setStatusError(null)
+    void deliveryClient.checkStatus(operationId, { signal: controller.signal }).then((result) => {
+      if (controller.signal.aborted || lifetime.current !== operationLifetime) return
+      dispatch({ type: 'deliveryUpdated', result })
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted || lifetime.current !== operationLifetime) return
+      if (error instanceof DeliveryApiError && error.httpStatus === 401) {
+        if (linkedClient !== undefined) onSessionInvalid?.()
+        return
+      }
+      if (error instanceof DeliveryApiError && error.httpStatus === 404) {
+        ownerSessionStorage.clearDeliveryOperationId()
+        setStoredOperationId(null)
+        setResumeMessage('以前の配信状態を確認できませんでした。新しい配信を開始できます。')
+        dispatch({ type: 'hydrateMissing' })
+        return
+      }
+      setStatusError(normalizeError(error, '配信状態を確認できませんでした。'))
+      dispatch({ type: 'networkFailed' })
+    }).finally(() => {
+      statusControllers.current.delete(controller)
+    })
+    return () => {
+      controller.abort()
+      statusControllers.current.delete(controller)
+    }
+  }, [deliveryClient, linkedClient, onSessionInvalid, ownerSessionStorage, storedOperationId])
 
   const selectedRecipient = recipients.status === 'loaded'
     ? recipients.items.find((choice) =>
@@ -197,6 +251,7 @@ function LinkedDeliveryForm({
       channelId: state.input.channelId,
       recipientId: state.input.recipientId,
     }
+    const operationLifetime = lifetime.current
     dispatch({ type: 'previewStarted', requestId })
     try {
       const result = await deliveryClient.preview({
@@ -206,8 +261,10 @@ function LinkedDeliveryForm({
         body: input.body,
         receiptRequested: input.receiptRequested,
       })
+      if (lifetime.current !== operationLifetime) return
       dispatch({ type: 'previewSucceeded', requestId, preview: result })
     } catch (error) {
+      if (lifetime.current !== operationLifetime) return
       dispatch({
         type: 'previewRejected',
         requestId,
@@ -224,6 +281,7 @@ function LinkedDeliveryForm({
     submitInFlight.current = true
     setStatusError(null)
     const operationId = createOperationId()
+    ownerSessionStorage.saveDeliveryOperationId(operationId)
     const request = {
       ...state.input,
       channelId: state.input.channelId!,
@@ -231,10 +289,14 @@ function LinkedDeliveryForm({
       operationId,
       confirmationToken: state.preview.confirmationToken,
     }
+    const operationLifetime = lifetime.current
     dispatch({ type: 'submitted', operationId })
     try {
-      dispatch({ type: 'deliveryUpdated', result: await deliveryClient.send(request) })
+      const result = await deliveryClient.send(request)
+      if (lifetime.current !== operationLifetime) return
+      dispatch({ type: 'deliveryUpdated', result })
     } catch (error) {
+      if (lifetime.current !== operationLifetime) return
       const safeError = normalizeError(error, '配信処理を完了できませんでした。')
       if (safeError.code === 'network_error') dispatch({ type: 'networkFailed' })
       else dispatch({ type: 'sendRejected', error: safeError })
@@ -251,32 +313,56 @@ function LinkedDeliveryForm({
       state.phase !== 'uncertain'
     ) return
     const operationId = state.operationId
+    const controller = new AbortController()
+    statusControllers.current.add(controller)
+    const operationLifetime = lifetime.current
     setStatusError(null)
     dispatch({ type: 'checkStarted' })
     try {
-      dispatch({
-        type: 'deliveryUpdated',
-        result: await deliveryClient.checkStatus(operationId),
-      })
+      const result = await deliveryClient.checkStatus(operationId, { signal: controller.signal })
+      if (lifetime.current !== operationLifetime) return
+      dispatch({ type: 'deliveryUpdated', result })
     } catch (error) {
+      if (lifetime.current !== operationLifetime || controller.signal.aborted) return
       const safeError = normalizeError(error, '配信状態を確認できませんでした。')
+      if (error instanceof DeliveryApiError && error.httpStatus === 401) {
+        if (linkedClient !== undefined) onSessionInvalid?.()
+        return
+      }
       setStatusError(safeError)
       if (error instanceof DeliveryApiError && error.httpStatus === 404) {
         dispatch({ type: 'statusMissing' })
       } else {
         dispatch({ type: 'networkFailed' })
       }
+    } finally {
+      statusControllers.current.delete(controller)
     }
+  }
+
+  const startNewDelivery = () => {
+    ownerSessionStorage.clearDeliveryOperationId()
+    setStoredOperationId(null)
+    setResumeMessage(null)
+    dispatch({ type: 'newDelivery' })
   }
 
   const editing = state.phase === 'editing' || state.phase === 'previewing'
 
   return (
     <section className="delivery" aria-labelledby="delivery-title">
-      <h2 id="delivery-title">LINEテスト配信</h2>
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">NEW DELIVERY</p>
+          <h2 id="delivery-title">新しいメッセージ</h2>
+          <p>送信前に対象と内容を確認できます。確認画面を経ずに送信されることはありません。</p>
+        </div>
+      </div>
+      {resumeMessage !== null && <p className="notice" role="status">{resumeMessage}</p>}
 
       {editing && (
-        <form onSubmit={(event) => { event.preventDefault(); void preview() }}>
+        <form className="delivery-form" onSubmit={(event) => { event.preventDefault(); void preview() }}>
+          <div className="delivery-target-grid">
           <fieldset className="target-group">
             <legend>配信元チャネル</legend>
             {channels.status === 'loading' && (
@@ -399,56 +485,66 @@ function LinkedDeliveryForm({
                 </>
               )}
           </fieldset>
+          </div>
 
-          <label>
-            件名
-            <input
-              name="subject"
-              value={state.input.subject}
-              onChange={(event) => dispatch({
-                type: 'subjectChanged',
-                subject: event.target.value,
-              })}
-              aria-invalid={Boolean(state.phase === 'editing' && state.errors.subject)}
-            />
-          </label>
-          {state.phase === 'editing' && state.errors.subject && (
-            <p className="field-error">{state.errors.subject}</p>
-          )}
-          <label>
-            本文
-            <textarea
-              name="body"
-              rows={7}
-              value={state.input.body}
-              onChange={(event) => dispatch({
-                type: 'bodyChanged',
-                body: event.target.value,
-              })}
-              aria-invalid={Boolean(state.phase === 'editing' && state.errors.body)}
-            />
-          </label>
-          {state.phase === 'editing' && state.errors.body && (
-            <p className="field-error">{state.errors.body}</p>
-          )}
-          <label className="receipt-option">
-            <input
-              type="checkbox"
-              name="receiptRequested"
-              checked={state.input.receiptRequested}
-              onChange={(event) => dispatch({
-                type: 'receiptChanged',
-                receiptRequested: event.target.checked,
-              })}
-            />
-            受け取り確認を付ける
-          </label>
-          {state.phase === 'editing' && state.errors.message && (
-            <p className="notice error" role="alert">{state.errors.message}</p>
-          )}
-          <button type="submit" disabled={!canPreview}>
-            {state.phase === 'previewing' ? '確認内容を読み込んでいます…' : '送信内容を確認'}
-          </button>
+          <section className="delivery-compose-card" aria-labelledby="delivery-compose-title">
+            <div className="compose-heading">
+              <span className="step-number" aria-hidden="true">2</span>
+              <div><p className="eyebrow">MESSAGE</p><h3 id="delivery-compose-title">メッセージを作成</h3></div>
+            </div>
+            <label className="field-label">
+              件名
+              <input
+                name="subject"
+                value={state.input.subject}
+                onChange={(event) => dispatch({
+                  type: 'subjectChanged',
+                  subject: event.target.value,
+                })}
+                aria-invalid={Boolean(state.phase === 'editing' && state.errors.subject)}
+              />
+            </label>
+            {state.phase === 'editing' && state.errors.subject && (
+              <p className="field-error">{state.errors.subject}</p>
+            )}
+            <label className="field-label">
+              本文
+              <textarea
+                name="body"
+                rows={7}
+                value={state.input.body}
+                onChange={(event) => dispatch({
+                  type: 'bodyChanged',
+                  body: event.target.value,
+                })}
+                aria-invalid={Boolean(state.phase === 'editing' && state.errors.body)}
+              />
+            </label>
+            {state.phase === 'editing' && state.errors.body && (
+              <p className="field-error">{state.errors.body}</p>
+            )}
+            <label className="receipt-option">
+              <input
+                type="checkbox"
+                name="receiptRequested"
+                checked={state.input.receiptRequested}
+                onChange={(event) => dispatch({
+                  type: 'receiptChanged',
+                  receiptRequested: event.target.checked,
+                })}
+              />
+              <span><strong>受け取り確認を付ける</strong><small>リンクを開いたか確認できる仕組みを本文に追加します。</small></span>
+            </label>
+            {state.phase === 'editing' && state.errors.message && (
+              <p className="notice error" role="alert">{state.errors.message}</p>
+            )}
+            <div className="compose-submit">
+              <p>次の画面で送信対象と本文を最終確認します。</p>
+              <button type="submit" disabled={!canPreview}>
+                {state.phase === 'previewing' ? '確認内容を読み込んでいます…' : '送信内容を確認'}
+              </button>
+            </div>
+          </section>
         </form>
       )}
 
@@ -524,7 +620,7 @@ function LinkedDeliveryForm({
           {statusError !== null && <p className="notice error" role="alert">{statusError.summary}</p>}
           <div className="actions">
             <button type="button" onClick={() => void checkStatus()}>状態を再確認</button>
-            <button type="button" className="secondary" onClick={() => dispatch({ type: 'newDelivery' })}>新しい配信</button>
+            <button type="button" className="secondary" onClick={startNewDelivery}>新しい配信</button>
           </div>
         </div>
       )}
@@ -559,7 +655,7 @@ function LinkedDeliveryForm({
           <div className="delivery-status-line"><strong>配信状態</strong><span>失敗</span></div>
           <DeliverySnapshotSummary result={state.result} />
           <ReceiptSummary receipt={state.result.receipt} />
-          <button type="button" onClick={() => dispatch({ type: 'newDelivery' })}>新しい配信</button>
+          <button type="button" onClick={startNewDelivery}>新しい配信</button>
         </div>
       )}
 
@@ -569,7 +665,7 @@ function LinkedDeliveryForm({
           <p>{state.error.summary}</p>
           <div className="actions">
             <button type="button" className="secondary" onClick={() => dispatch({ type: 'backToEditing' })}>入力へ戻る</button>
-            <button type="button" onClick={() => dispatch({ type: 'newDelivery' })}>新しい配信</button>
+            <button type="button" onClick={startNewDelivery}>新しい配信</button>
           </div>
         </div>
       )}

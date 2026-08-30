@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 import type { EditorDraft } from './richMenuAdminState'
 import type { TemplateDescriptor } from './richMenuAdminDto'
@@ -41,6 +41,7 @@ function validate(template: TemplateDescriptor, draft: EditorDraft): FieldErrors
 }
 
 export default function RichMenuEditor({ templates, draft, onDraftChange, onPreview, onTemplateChange }: Props) {
+  const [validationVisible, setValidationVisible] = useState(false)
   const selected = templates.find(template => template.templateId === draft?.templateId && template.version === draft.templateVersion) ?? templates[0]
   const current = useMemo<EditorDraft | null>(() => selected === undefined ? null : ({
     templateId: selected.templateId,
@@ -63,6 +64,7 @@ export default function RichMenuEditor({ templates, draft, onDraftChange, onPrev
           const next = templates.find(template => template.templateId === event.target.value)
           if (next === undefined || next.templateId === selected.templateId) return
           if (draft !== null && !window.confirm('現在の未適用入力とプレビューをすべて消去します。よろしいですか？')) return
+          setValidationVisible(false)
           ;(onTemplateChange ?? (template => onDraftChange({ templateId: template.templateId, templateVersion: template.version, fields: emptyFields(template) })))(next)
         }}>
           {templates.map(template => <option key={`${template.templateId}:${template.version}`} value={template.templateId}>{template.displayName}</option>)}
@@ -72,6 +74,7 @@ export default function RichMenuEditor({ templates, draft, onDraftChange, onPrev
       <form onSubmit={event => {
         event.preventDefault()
         if (Object.keys(errors).length === 0) onPreview(current)
+        else setValidationVisible(true)
       }} noValidate>
         <div className="rich-menu-field-list">{selected.areas.map((area, index) => {
           const value = current.fields[area.field] ?? { displayName: '', uri: '' }
@@ -81,11 +84,11 @@ export default function RichMenuEditor({ templates, draft, onDraftChange, onPrev
               <label className="field-label">メニューに表示する文字
                 <input placeholder="例：予約する" value={value.displayName} maxLength={selected.limits.displayName + 1} onInput={event => update(area.field, 'displayName', event.currentTarget.value)} />
               </label>
-              {errors[area.field]?.displayName && <p role="alert">{errors[area.field].displayName}</p>}
+              {validationVisible && errors[area.field]?.displayName && <p role="alert">{errors[area.field].displayName}</p>}
               <label className="field-label">タップ時に開くURL
                 <input type="url" placeholder="https://example.com/" value={value.uri} maxLength={selected.limits.uri + 1} onInput={event => update(area.field, 'uri', event.currentTarget.value)} />
               </label>
-              {errors[area.field]?.uri && <p role="alert">{errors[area.field].uri}</p>}
+              {validationVisible && errors[area.field]?.uri && <p role="alert">{errors[area.field].uri}</p>}
             </fieldset>
           )
         })}</div>

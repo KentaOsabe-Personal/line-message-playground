@@ -9,7 +9,7 @@ import {
 } from './channelAdminDto'
 import type { ChannelAdminItem, ConnectionCheck, DeletedChannel } from './channelAdminDto'
 import { createProtectedHttpClient, ProtectedHttpClientError } from './httpApi'
-import type { HttpMethod, ProtectedHttpClient } from './httpApi'
+import type { HttpMethod, ProtectedHttpClient, ReadRequestOptions } from './httpApi'
 
 export type CreateChannelInput = {
   label: string
@@ -37,8 +37,8 @@ export type SetChannelStateInput = {
 }
 
 export interface ChannelAdminApiClient {
-  listChannels(): Promise<ChannelAdminItem[]>
-  getChannel(channelId: string): Promise<ChannelAdminItem>
+  listChannels(options?: ReadRequestOptions): Promise<ChannelAdminItem[]>
+  getChannel(channelId: string, options?: ReadRequestOptions): Promise<ChannelAdminItem>
   register(input: CreateChannelInput): Promise<ChannelAdminItem>
   update(channelId: string, input: UpdateChannelInput): Promise<ChannelAdminItem>
   setState(channelId: string, input: SetChannelStateInput): Promise<ChannelAdminItem>
@@ -62,7 +62,7 @@ const assertChannelId = (channelId: string) => {
 
 async function requestOnce<T>(
   client: ProtectedHttpClient,
-  input: { path: string; method: HttpMethod; body?: unknown },
+  input: { path: string; method: HttpMethod; body?: unknown; signal?: AbortSignal },
   parse: (value: unknown) => Parsed<T>,
 ): Promise<T> {
   let response: Response
@@ -97,8 +97,8 @@ export function createChannelAdminApiClient(
     return `/api/line/channels/${channelId}/`
   }
   return Object.freeze({
-    listChannels: () => requestOnce(client, { path: '/api/line/channels/', method: 'GET' }, parseChannelAdminList),
-    getChannel: (channelId: string) => requestOnce(client, { path: channelPath(channelId), method: 'GET' }, parseChannelAdminItem),
+    listChannels: (options: ReadRequestOptions = {}) => requestOnce(client, { path: '/api/line/channels/', method: 'GET', ...options }, parseChannelAdminList),
+    getChannel: (channelId: string, options: ReadRequestOptions = {}) => requestOnce(client, { path: channelPath(channelId), method: 'GET', ...options }, parseChannelAdminItem),
     register: (input: CreateChannelInput) => requestOnce(client, {
       path: '/api/line/channels/', method: 'POST', body: input,
     }, parseChannelAdminItem),

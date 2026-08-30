@@ -51,6 +51,8 @@ export type LinkedDeliveryEvent =
   | { type: 'previewRejected'; requestId: string; error: SafeError }
   | { type: 'backToEditing' }
   | { type: 'submitted'; operationId: string }
+  | { type: 'hydrateStarted'; operationId: string }
+  | { type: 'hydrateMissing' }
   | { type: 'deliveryUpdated'; result: LinkedDeliveryStatus }
   | { type: 'sendRejected'; error: SafeError }
   | { type: 'networkFailed' }
@@ -69,6 +71,16 @@ export const initialLinkedDeliveryState: LinkedDeliveryUIState = {
   },
   errors: {},
 }
+
+const hydratedOperationContext = (operationId: string): LinkedOperationContext => ({
+  operationId,
+  input: { ...initialLinkedDeliveryState.input },
+  preview: {
+    channelId: '', channelLabel: '', recipientId: '', recipientDisplayName: '',
+    friendshipState: 'unknown', formattedText: '', receiptRequested: false,
+    receiptExpiresAt: null, confirmationToken: '',
+  },
+})
 
 const copyLinkedInput = (input: LinkedEditingInput): LinkedEditingInput => ({ ...input })
 const copyLinkedPreview = (preview: LinkedPreviewResponse): LinkedPreviewResponse => ({ ...preview })
@@ -160,6 +172,10 @@ export function transitionLinkedDelivery(
   state: LinkedDeliveryUIState,
   event: LinkedDeliveryEvent,
 ): LinkedDeliveryUIState {
+  if (event.type === 'hydrateStarted') {
+    return { ...hydratedOperationContext(event.operationId), phase: 'checking', previous: null }
+  }
+  if (event.type === 'hydrateMissing') return initialLinkedDeliveryState
   if (event.type === 'channelChanged') {
     return editLinkedInput(state, (input) => ({
       ...input,

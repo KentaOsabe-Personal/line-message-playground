@@ -59,6 +59,58 @@ describe('AccountConsole', () => {
     vi.restoreAllMocks()
   })
 
+  // テストケース: 配信先readの途中でアカウント画面をunmountする。
+  // 期待値: readへ渡したsignalを中止し、後着errorを旧画面へ表示しない。
+  test('6.1 aborts the account read at page lifetime end and ignores its late error', async () => {
+    let rejectRead!: (error: unknown) => void
+    const listChannels = vi.fn().mockReturnValue(new Promise((_resolve, reject) => { rejectRead = reject }))
+    const client = api({ listChannels })
+    await act(async () => root.render(<AccountConsole
+      session={{ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }}
+      api={client}
+      getAccessToken={() => null}
+      reauthenticate={vi.fn()}
+      reauthenticateForUnlink={vi.fn()}
+      unlinkReauthenticationReady={false}
+      onSessionReceived={vi.fn()}
+      refreshSession={vi.fn()}
+    />))
+
+    const signal = listChannels.mock.calls[0]?.[0]?.signal as AbortSignal
+    expect(signal).toBeInstanceOf(AbortSignal)
+    expect(signal.aborted).toBe(false)
+
+    await act(async () => root.render(<p>移動先</p>))
+    expect(signal.aborted).toBe(true)
+    await act(async () => rejectRead(new DOMException('aborted', 'AbortError')))
+    expect(container.textContent).toBe('移動先')
+  })
+
+  // テストケース: アカウントの配信先readだけが失敗し、ownerが明示再取得する。
+  // 期待値: 新しいsignalで同じreadだけを再実行し、unlink等のmutationを実行しない。
+  test('6.1 retries only the failed account read with a fresh signal', async () => {
+    const listChannels = vi.fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce([linked])
+    const client = api({ listChannels })
+    await act(async () => root.render(<AccountConsole
+      session={{ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }} api={client}
+      getAccessToken={() => null} reauthenticate={vi.fn()} reauthenticateForUnlink={vi.fn()}
+      unlinkReauthenticationReady={false} onSessionReceived={vi.fn()} refreshSession={vi.fn()}
+    />))
+    expect(container.textContent).toContain('配信先を取得できませんでした。')
+
+    await click('配信先を再取得')
+
+    expect(listChannels).toHaveBeenCalledTimes(2)
+    const first = listChannels.mock.calls[0]?.[0]?.signal as AbortSignal
+    const second = listChannels.mock.calls[1]?.[0]?.signal as AbortSignal
+    expect(first).not.toBe(second)
+    expect(container.textContent).toContain('通知チャネル')
+    expect(client.previewUnlink).not.toHaveBeenCalled()
+    expect(client.executeUnlink).not.toHaveBeenCalled()
+  })
+
   // テストケース: active ownerがrecipient一覧を表示して無効化する。
   // 期待値: 名称・状態・配信不可を表示し、LINE user IDやopaque IDを画面へ出さない。
   test('renders safe recipient state and applies a target-scoped mutation', async () => {

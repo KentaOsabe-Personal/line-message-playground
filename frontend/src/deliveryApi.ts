@@ -14,7 +14,7 @@ import type {
   SafeError,
 } from './deliveryDto'
 import { createProtectedHttpClient, ProtectedHttpClientError } from './httpApi'
-import type { ProtectedHttpClient } from './httpApi'
+import type { ProtectedHttpClient, ReadRequestOptions } from './httpApi'
 
 export class DeliveryApiError extends Error {
   constructor(public readonly error: SafeError, public readonly httpStatus?: number) {
@@ -36,11 +36,11 @@ export type LinkedSendDeliveryRequest = LinkedPreviewRequest & {
 }
 
 export interface LinkedDeliveryApiClient {
-  listChannels(): Promise<DeliveryChannelChoice[]>
-  listRecipients(channelId: string): Promise<DeliveryRecipientChoice[]>
+  listChannels(options?: ReadRequestOptions): Promise<DeliveryChannelChoice[]>
+  listRecipients(channelId: string, options?: ReadRequestOptions): Promise<DeliveryRecipientChoice[]>
   preview(input: LinkedPreviewRequest): Promise<LinkedPreviewResponse>
   send(input: LinkedSendDeliveryRequest): Promise<LinkedDeliveryStatus>
-  checkStatus(operationId: string): Promise<LinkedDeliveryStatus>
+  checkStatus(operationId: string, options?: ReadRequestOptions): Promise<LinkedDeliveryStatus>
 }
 
 const canonicalUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -112,27 +112,34 @@ export function createLinkedDeliveryApiClient(
     method: 'GET' | 'POST',
     parse: (value: unknown) => Parsed<T>,
     body?: unknown,
-  ) => requestProtected(protectedClient, path, method, parse, body)
-  const checkStatus = async (operationId: string) => {
+    options: ReadRequestOptions = {},
+  ) => requestProtected(protectedClient, path, method, parse, body, options)
+  const checkStatus = async (operationId: string, options: ReadRequestOptions = {}) => {
     assertCanonicalUuid(operationId)
     return await request(
       `/api/deliveries/${operationId}/status/`,
       'POST',
       parseLinkedDeliveryStatus,
+      undefined,
+      options,
     )
   }
   return Object.freeze({
-    listChannels: () => request(
+    listChannels: (options: ReadRequestOptions = {}) => request(
       '/api/deliveries/targets/channels/',
       'GET',
       parseDeliveryChannelChoices,
+      undefined,
+      options,
     ),
-    listRecipients: async (channelId: string) => {
+    listRecipients: async (channelId: string, options: ReadRequestOptions = {}) => {
       assertCanonicalUuid(channelId)
       return await request(
         `/api/deliveries/targets/channels/${channelId}/recipients/`,
         'GET',
         parseDeliveryRecipientChoices,
+        undefined,
+        options,
       )
     },
     preview: async (input: LinkedPreviewRequest) => {
@@ -166,13 +173,14 @@ async function requestProtected<T>(
   method: 'GET' | 'POST',
   parse: (value: unknown) => Parsed<T>,
   body?: unknown,
+  options: ReadRequestOptions = {},
 ): Promise<T> {
   let response: Response
   try {
     response = await client.request(
       body === undefined
-        ? { path: url, method }
-        : { path: url, method, body },
+        ? { path: url, method, ...options }
+        : { path: url, method, body, ...options },
     )
   } catch (error) {
     if (error instanceof ProtectedHttpClientError) {

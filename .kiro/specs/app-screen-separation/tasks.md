@@ -1,0 +1,357 @@
+# Implementation Plan
+
+## 全実装タスク共通のtest記述契約
+
+- 各実装タスクで新規追加または変更する全ての`test`／`test.each`直前に、日本語の`テストケース:`コメントと`期待値:`コメントを必ず記載する。
+- task-local verificationと親タスクreviewでは、対象testに両コメントがあることを完了条件として機械的または目視で確認する。欠落時は`READY_FOR_REVIEW`または`APPROVED`にしない。
+
+- [x] 1. Frontend実行基盤と安全な境界を整える
+- [x] 1.1 Routerと統一UIの再現可能な実行前提を追加する
+  - React RouterのDeclarative modeとTailwind CSS／Vite pluginを設計指定のexact versionで導入し、lockfileへ固定する。
+  - React／React DOM 19.2.7、Vite 8.1.4、TypeScript 6.0.3、Node 24 containerの既存toolchainを維持する。
+  - 既存のAPI proxy、host allowlist、Vitest設定、strict TypeScript buildを維持したままSPA配信設定を有効にする。
+  - responsive viewportと既存entryを確認し、route固有情報やowner情報をHTMLへ埋め込まない。
+  - 完了時、全定義pathを処理できるFrontend依存が`npm ci`で再現され、production buildが新しいplugin構成を解決できる。
+  - _Requirements: 1.3, 12.1, 12.4_
+  - _Boundary: TailwindTheme, AppRouter_
+- [x] 1.2 (P) 定義済みrouteと安全な復帰先のregistryを構築する
+  - static path、root redirect、rich-menu動的path、wildcard not-foundを一つのroute契約で分類する。
+  - canonical UUIDだけからrich-menu detail pathを生成し、外部URL、query、hash、encoded traversal、未知pathを復帰先から除外する。
+  - 各routeのnavigation key、page title、h1を一意に返す。
+  - static／dynamic path、root、unknown、query／hash／external値、UUID、title metadataをunit testで固定する。
+  - 完了時、任意のpathnameは許可済み内部pathかnot-foundのどちらかへ決定的に分類される。
+  - _Requirements: 1.1, 1.2, 1.4, 1.5, 2.2, 10.1, 10.2, 12.6_
+  - _Boundary: RouteRegistry_
+  - _Depends: 1.1_
+- [x] 1.3 owner単位の最小tab-local状態を安全に保持する
+  - 許可済み復帰path、全連携解除の再認証marker、canonicalな配信operation IDだけをsession scopeで扱う。
+  - 復帰pathを一回消費とし、不正値や利用不能なstorageを例外や秘密露出なしで安全な初期状態へ縮約する。
+  - 明示logoutと全連携解除完了でowner一時情報を一括消去し、session失効では安全な復帰に必要な値だけを保持する。
+  - consume-once、UUID-only operation ID、storage failure、owner clear、秘密値非保存をunit testで固定する。
+  - 完了時、本文、資格情報、preview、LINE user ID、tokenを保存できないadapter境界が成立する。
+  - _Requirements: 2.2, 2.8, 2.9, 8.5, 8.6, 12.6_
+  - _Boundary: OwnerSessionStorage_
+- [x] 1.4 (P) 安全なreadだけを中止できるHTTP境界を追加する
+  - GETと明示された状態確認readへoptionalなAbortSignalを渡し、mutation contractへは渡さない。
+  - abortを通常のnetwork failureから区別し、利用者向けerror stateを発生させない分類にする。
+  - 既存のCSRF、cookie、401通知、DTO validation、safe error変換を維持する。
+  - signal伝播、abort分類、read-only cancel、mutation非伝播、既存CSRF／401をunit testで固定する。
+  - 完了時、呼出側はwire formatを変えずにread中止を選択でき、mutationは従来どおり継続する。
+  - _Requirements: 8.3, 9.3, 9.6, 12.3, 12.4_
+  - _Boundary: ScopedReadContract_
+  - _Depends: 1.1_
+
+- [x] 2. 認証とrouteを安全に収束させる
+- [x] 2.1 LIFFの固定redirectと定義済みsubroute accessを両立する
+  - 定義済み保護pathのdirect accessをconfiguration errorにせず、LIFF endpoint／login redirectは`/liff`へ固定する。
+  - LIFF SDKの明示logoutをadapter契約に追加し、画面ComponentからSDKを直接操作させない。
+  - 不正pathや外部値をLIFF復帰先として渡さず、認証前の許可pathはowner session adapterへ委譲する。
+  - 完了時、定義済みsubrouteからloginしても固定`/liff`経由で安全な復帰処理を開始できる。
+  - _Requirements: 1.3, 2.1, 2.2, 12.3, 12.4, 12.6_
+  - _Boundary: AuthGate_
+  - _Depends: 1.2, 1.3_
+- [x] 2.2 AuthGateへ安全な復帰とsession失効制御を統合する
+  - 未認証時は現在の定義済みURLを維持してlogin UIだけを表示し、認証直前に許可済み復帰pathを保存する。
+  - 認証成功後は復帰pathを一回だけ消費し、不正値なら`/liff`へ収束する。
+  - 401／session失効では保護contentを即時unmountし、同じ許可URLで再認証後に最新GETを開始する。
+  - 進行中mutationを認証復帰理由で再実行せず、古いsession generationの応答を破棄する。
+  - 完了時、失効前の保護表示やmutationが再認証を越えて再表示・再送されない。
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 9.4, 12.3, 12.6_
+  - _Boundary: AuthGate_
+- [x] 2.3 全連携解除と明示logoutの終端遷移をAuthGateへ統合する
+  - unlinking中は`/liff/account`へreplaceし、回復contentだけを表示して通常navigationを除外する。
+  - 全連携解除完了時はowner一時情報を消去して未認証へ移り、再利用時にloginを要求する。
+  - 明示logout成功時はBackend session、LIFF login state、owner一時情報を消去し、`/liff`へreplaceする。
+  - LIFF logout失敗でも以前のowner情報を再表示せず、safe errorを持つfail-closed状態へ収束する。
+  - 完了時、unlink完了またはlogout後の再認証は以前の機能画面へ自動復帰しない。
+  - _Requirements: 2.6, 2.7, 2.8, 2.9, 5.3, 12.3, 12.6_
+  - _Boundary: AuthGate, OwnerSessionStorage_
+- [x] 2.4 route treeと認証済みapplication shellを合成する
+  - `/`だけを`/liff`へreplaceし、通常Linkはpush、未知pathは自動redirectしない404として構成する。
+  - 保護routeをAuthGate内へ置き、認証済み通常画面、unlink回復、anonymous、404の表示境界を分ける。
+  - URLに対応するroute elementだけをmountし、root／top／unknown routeで不要な機能contentを作らない。
+  - 完了時、direct access、reload、戻る・進むの各URLが同じroute判定から対象画面へ収束する。
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.6, 2.7, 3.7, 9.1, 9.2_
+  - _Boundary: AppRouter_
+  - _Depends: 2.1, 2.2, 2.3_
+
+- [x] 3. 共通application UIを構築する
+- [x] 3.1 (P) page title、単一h1、route focus、状態通知を共通化する
+  - routeごとに可視h1を一つだけ描画し、定義済みmetadataからdocument titleを更新する。
+  - URLに対応する画面が変わった時だけoutlineを表示しないmainへfocusし、同一画面の再取得や状態更新では入力focusを維持する。
+  - loading／successはstatus、failureはalertとして色以外でも通知し、headerとheadingを残す。
+  - 完了時、route changeとdata refreshでtitle／focus挙動を明確に区別できる。
+  - _Requirements: 3.5, 9.5, 9.7, 10.1, 10.2, 10.3, 10.4, 10.5, 11.8_
+  - _Boundary: PageFrame_
+  - _Depends: 2.4_
+- [x] 3.2 (P) owner向け共通headerとnavigationを提供する
+  - app名を`/liff`へのLinkとして表示し、指定順の4機能navigation、owner表示、logoutを通常認証済み画面へ配置する。
+  - 現在機能を視覚表示と`aria-current`で示し、topを経由せず各機能へ移動させる。
+  - narrow viewport用disclosureはroute変更で閉じ、Escape、Tab、focus-visibleを阻害しない。
+  - 完了時、desktopとnarrow viewportの両方で全共通操作へkeyboardだけで到達できる。
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 11.3, 11.4, 11.6, 11.8_
+  - _Boundary: AppLayout_
+  - _Depends: 2.4_
+- [x] 3.3 認証後の開始画面と404を共通shellへ統合する
+  - 認証済みの`/liff`は中間トップを表示せず、履歴置換でチャネル管理へ直行する。
+  - 404では保護情報を取得せず、`/liff/channels`へ戻る明示Linkと専用title／h1を表示する。
+  - normal、loading、error、anonymous、unlinking、404で共通layoutの表示可否を一意に合成する。
+  - 完了時、`/liff`ではチャネル管理だけが機能APIを呼び、unknown routeは自動遷移せず404に留まる。
+  - _Requirements: 1.4, 2.3, 2.6, 3.2, 3.6, 3.7, 9.2, 9.5, 10.1_
+  - _Boundary: NotFoundPage, AppRouter, AppLayout_
+  - _Depends: 3.1, 3.2_
+
+- [x] 4. 既存機能を独立pageへ分離する
+- [x] 4.1 (P) チャネル管理を専用route pageへ移す
+  - 登録、編集、write-only資格情報、接続確認、有効化、無効化、回復、物理削除の既存操作を専用page内で維持する。
+  - page h1と既存Consoleのsection headingを整理する。
+  - rich-menu、配信先、配信のinline表示を除外する。
+  - 既存確認、revision競合、二重操作防止、unknown再確認、入力消去を保持する。
+  - 完了時、チャネル管理URLではChannel Consoleだけがmountし、他機能操作を表示しない。
+  - _Requirements: 4.1, 4.3, 4.4, 8.1, 8.2, 9.1, 9.4, 12.3_
+  - _Boundary: ChannelAdminPage_
+  - _Depends: 3.3_
+- [x] 4.2 (P) アカウント管理を専用route pageへ移す
+  - owner連携状態、channel別recipient管理、channel単位解除、全連携解除を一つの専用pageへ接続する。
+  - 資格情報、rich-menu、配信、画面固有logoutを除外し、共通headerのlogoutと責務を分離する。
+  - 既存の再認証、確認、競合、許可済み回復、秘密非露出をroute wrapper下で維持する。
+  - 完了時、アカウント管理URLではAccount Consoleまたはunlink回復だけが表示される。
+  - _Requirements: 5.1, 5.2, 5.3, 8.1, 8.2, 9.1, 9.4, 12.3_
+  - _Boundary: AccountPage_
+  - _Depends: 3.3_
+- [x] 4.3 (P) LINEテスト配信を専用route pageへ移す
+  - channel、recipient、件名、本文、受取確認、preview、確認済みsend、現在operationの状態を専用pageへ接続する。
+  - 共通navigationでは「メッセージ配信」、page h1では「LINEテスト配信」を使用する。
+  - broadcast、予約、履歴一覧、template、分析を追加せず、既存確認、二重送信防止、unknown状態を維持する。
+  - 完了時、配信URLでは配信Consoleだけがmountし、既存の単一対象配信を開始できる。
+  - _Requirements: 7.1, 7.2, 7.4, 7.5, 8.1, 8.2, 9.1, 9.4, 12.3_
+  - _Boundary: DeliveryPage_
+  - _Depends: 3.3_
+- [x] 4.4 機能pageのmountと離脱契約を統合する
+  - 各URLで対応Console一つだけをmountし、他機能のAPIとstateを起動しない。
+  - Link、back、forward、reload、tab closeで破棄確認を追加せず、draftとpreviewをunmount時に破棄して再訪時に復元しない。
+  - 同一画面の削除、send、外部状態変更、入力消去の既存確認は維持する。
+  - 受付済みmutationは離脱でabort／自動再送せず、unmount後の結果表示だけをgeneration fenceで捨てる。
+  - 完了時、画面再訪は保存済み最新状態のGETから開始し、未保存入力や古いmutation結果を表示しない。
+  - _Requirements: 3.7, 4.3, 5.2, 7.5, 8.1, 8.2, 8.3, 8.4, 9.1, 9.2, 9.3, 9.4, 12.3_
+  - _Boundary: FeaturePageAdapters, AppRouter_
+  - _Depends: 4.1, 4.2, 4.3_
+
+- [x] 5. リッチメニュー選択とchannel別管理を分離する
+- [x] 5.1 (P) 全channelのリッチメニュー利用可否を選択pageへ投影する
+  - 既存channel一覧からeditable、readOnly、unavailable、recoveryOnlyをpureに導出し、新API／DTOを追加しない。
+  - 全登録channelへ状態と利用不可理由を示し、provider IDなしはchannel設定Linkだけ、provider IDありはdetail Linkを示す。
+  - 0件ではempty stateとchannel管理Linkだけを表示し、登録formを重複させない。
+  - lifecycle進行中は保存状態が許す回復導線だけを表示する。
+  - active／inactive／provider未設定／lifecycle中／emptyのprojectionをunit testで固定する。
+  - 完了時、active、inactive、provider未設定、lifecycle中、0件の全状態が安全な選択肢へ分類される。
+  - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 9.1, 9.5, 9.6, 9.7_
+  - _Boundary: RichMenuChannelSelectionPage_
+  - _Depends: 3.3_
+- [x] 5.2 (P) channel別rich-menu routeを非開示error付きで提供する
+  - URL parameterをcanonical UUIDとして検証し、形式不正、not-found、owner scope外を同じ「対象が見つからない」表示へ縮約する。
+  - channel名取得後だけdynamic titleを更新し、h1は「リッチメニュー管理」のまま維持する。
+  - inactiveは既存read-only／recovery projectionに従い、provider IDなしのdirect accessでは管理操作を表示しない。
+  - selectorへ戻るLinkを常時表示し、存在や権限差をerror detailへ出さない。
+  - 完了時、不正・不存在・scope外の各入力から同じ安全な表示だけが観測される。
+  - _Requirements: 1.5, 6.3, 6.4, 6.5, 6.7, 10.2, 12.6_
+  - _Boundary: RichMenuAdminPage_
+  - _Depends: 3.3_
+- [x] 5.3 channel管理と既存rich-menu Consoleをrouteへ接続する
+  - チャネル管理のinline selection stateを削除し、対象channelのdetail Linkへ置換する。
+  - 既存rich-menu Consoleへchannel ID、read signal、session失効通知を渡し、管理、履歴、回復、unknown契約を維持する。
+  - dirty back confirmationとbeforeunloadだけを削除し、editor resetや外部状態変更の確認は残す。
+  - inactive／lifecycle進行中は既存allowed actionだけを表示する。
+  - 完了時、channel pageとrich-menu detail pageに重複管理UIがなく、route離脱時だけ確認が発生しない。
+  - _Requirements: 4.2, 4.3, 6.3, 6.5, 6.7, 6.9, 8.1, 8.2, 12.3_
+  - _Boundary: ChannelAdminPage, RichMenuAdminPage_
+  - _Depends: 4.1, 5.2_
+- [x] 5.4 selectorとdetailのbrowser履歴を統合する
+  - selectorからdetailへの通常遷移をpushし、browser backでselectorへ戻せるようにする。
+  - direct detail access、selectorへの明示Link、再読み込みで同じchannel routeを再構成する。
+  - 再訪時は最新channel／rich-menu状態を取得し、以前のeditor draftやpreviewを復元しない。
+  - 完了時、selector、detail、back、direct accessの各経路が同じroute stateへ収束する。
+  - _Requirements: 1.3, 6.7, 6.8, 6.9, 8.1, 9.4_
+  - _Boundary: AppRouter, RichMenuChannelSelectionPage, RichMenuAdminPage_
+  - _Depends: 5.1, 5.2, 5.3_
+
+- [x] 6. route単位readと配信operation追跡を接続する
+- [x] 6.1 (P) アカウント、チャネル、rich-menu selectorのsafe readをpage lifetimeへ接続する
+  - account／channel管理のlist、detail、状態GETとselectorのchannel list readへsignalを伝播し、route unmount時に中止する。
+  - abort済みresponseをerror表示にせず、abort不可能な後着responseをgenerationで無視する。
+  - 明示retryは同じreadだけを再実行し、update、unlink、credential確認等を対象にしない。
+  - 完了時、account／channel／selectorから離脱後に旧pageのread結果やerrorが新pageへ表示されない。
+  - _Requirements: 4.4, 5.3, 6.1, 8.3, 8.4, 9.1, 9.3, 9.4, 9.5, 9.6, 9.7_
+  - _Boundary: AccountPage, ChannelAdminPage, RichMenuChannelSelectionPage_
+  - _Depends: 1.4, 4.1, 4.2, 5.4_
+- [x] 6.2 (P) rich-menuのreadと状態確認をpage lifetimeへ接続する
+  - list、detail、履歴、実状態確認のうち安全なreadだけへsignalを渡す。
+  - preview、apply、detach、cleanup等のmutationにroute signalや汎用retryを渡さない。
+  - abort／late responseは既存operation stateを上書きせず、再訪時にBackend projectionを取得する。
+  - loading、read error、retry、unknown operationを別状態として表示する。
+  - 完了時、離脱しても受付済みrich-menu operationは継続し、旧readだけが画面から消える。
+  - _Requirements: 6.9, 8.3, 8.4, 9.1, 9.3, 9.4, 9.5, 9.6, 9.7_
+  - _Boundary: RichMenuAdminPage_
+  - _Depends: 1.4, 5.4_
+- [x] 6.3 (P) 配信対象とoperation状態のreadをpage lifetimeへ接続する
+  - channel／recipient取得と既存operation status確認へsignalを渡し、send／previewには渡さない。
+  - abortと後着responseをerror表示や新規sendへ変換せず、現在generationだけを反映する。
+  - retry操作はtarget／status取得だけに限定し、結果不明時は同じoperation IDの確認だけを許す。
+  - 完了時、離脱時のread中止と受付済みsendの継続が同時に成立する。
+  - _Requirements: 7.2, 7.3, 8.3, 8.4, 9.3, 9.4, 9.5, 9.6, 9.7_
+  - _Boundary: DeliveryPage_
+  - _Depends: 1.4, 4.3_
+- [x] 6.4 route横断のlate result fenceとread retryを統合する
+  - route location／request generationを使い、中止不能または完了済みreadの後着結果を移動先へ反映しない。
+  - 共通loading／error chromeを残し、安全なreadだけに明示retryを表示する。
+  - status変化を色以外のtextとroleで通知し、refreshではh1や入力focusを移さない。
+  - mutation completionはunmounted pageへ描画せず、route layerから自動再送しない。
+  - 完了時、遅延応答、abort、retry、mutation完了の各競合が決定的なUI状態へ収束する。
+  - _Requirements: 2.5, 8.3, 8.4, 9.1, 9.3, 9.4, 9.5, 9.6, 9.7, 10.4, 10.5_
+  - _Boundary: ScopedReadContract, FeaturePageAdapters, PageFrame_
+  - _Depends: 6.1, 6.2, 6.3_
+- [x] 6.5 配信operation IDを安全にhydrateできる状態へ接続する
+  - send受付時にcanonical operation IDだけをtab-localへ保存し、processing／unknownでは保持する。
+  - 保存IDのstatusを既存配信stateへhydrateし、本文、subject、recipient、previewを復元しない。
+  - completed後の「新しい配信」でIDを削除し、invalid／not-found IDも安全なmessage後に消去する。
+  - processing／unknown／completed hydrateと新しい配信開始時のclearをunit testで固定する。
+  - 完了時、保存IDだけから進行状態を再構成でき、配信内容はbrowser stateへ残らない。
+  - _Requirements: 7.2, 7.3, 8.4, 8.5, 8.6, 12.6_
+  - _Boundary: OwnerSessionStorage, DeliveryPage_
+  - _Depends: 1.3, 6.3_
+- [x] 6.6 配信page再訪と再認証後の同一operation確認を統合する
+  - 再訪時に保存IDがあれば新規入力を復元せず、同じIDのstatus確認だけを開始する。
+  - status確認の401では保護contentを外し、再認証後に同じIDを確認して新しいsendを作らない。
+  - processing、succeeded、failed、unknownを既存契約どおり表示し、unknownでは新規自動再送を禁止する。
+  - operation完了後だけ新しい配信開始へ戻し、logout／unlink完了では追跡IDを消去する。
+  - 完了時、離脱、再訪、session失効、再認証を通ってもoperation IDが増えず同じ処理へ収束する。
+  - _Requirements: 2.4, 2.5, 7.2, 7.3, 8.3, 8.4, 8.5, 9.4, 9.6, 12.3_
+  - _Boundary: AuthGate, OwnerSessionStorage, DeliveryPage_
+  - _Depends: 2.2, 6.4, 6.5_
+
+- [x] 7. 全画面を統一design systemへ移行する
+- [x] 7.1 Tailwind themeと共通interaction tokenを確立する
+  - 白、淡いgreen、濃い文字、gray-green背景、card、border、控えめなshadow、LINE green、危険操作のredをtheme token化する。
+  - typography、spacing、radius、form control、button、link、focus ring、statusの共通基準を定義する。
+  - 派手なgradient、強いshadow、不要animationを導入せず、既存固有CSSを必要最小限へ縮小する。
+  - 完了時、全pageが同じtokenから色、余白、focus、状態表現を選べる。
+  - _Requirements: 11.1, 11.2, 11.6, 11.7, 11.8, 12.1_
+  - _Boundary: TailwindTheme_
+  - _Depends: 1.1_
+- [x] 7.2 (P) 共通header、navigation、機能workspace、404をresponsive表示へ移行する
+  - wide画面ではnavigationを横並び、機能画面の状態カードと操作群を十分な余白で表示する。
+  - narrow画面ではowner、logout、4機能navigationをdisclosureへ収め、機能画面のカードと操作群を一列へ収める。
+  - current state、hover、focus、dangerをtokenで区別し、pointer targetを維持する。
+  - 完了時、wide／narrow両表示で不要な横scrollなく共通操作を利用できる。
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.6, 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.8_
+  - _Boundary: AppLayout, AppRouter, NotFoundPage_
+  - _Depends: 3.3, 7.1_
+- [x] 7.3 (P) page frameと状態表示を統一styleへ移行する
+  - heading、content width、card、loading、status、alert、retryを共通tokenとsemantic roleで表示する。
+  - route変更はoutlineを表示しないmain focusで支援技術へ伝え、対話要素のfocus-visibleと状態更新時の入力focusを保持する。
+  - 通常文字、大きな文字、UI境界のcontrast下限をtheme色で満たす。
+  - 完了時、loading／success／failure／unknownが色以外のtextと一貫したchromeで判別できる。
+  - _Requirements: 9.5, 9.7, 10.3, 10.4, 10.5, 11.1, 11.2, 11.6, 11.7, 11.8_
+  - _Boundary: PageFrame_
+  - _Depends: 3.1, 7.1_
+- [x] 7.4 (P) チャネル管理UIを統一styleへ移行する
+  - list、form、write-only credential、state、recovery、danger actionを共通tokenへ揃える。
+  - 狭い画面で識別情報や操作群が横overflowせず、labelとbutton targetを維持する。
+  - 状態、disabled理由、競合、unknownを色だけに依存せず表示する。
+  - 完了時、全チャネル操作がkeyboardで実行でき、既存確認文言と操作可否を維持する。
+  - _Requirements: 4.1, 4.4, 11.1, 11.2, 11.5, 11.6, 11.7, 11.8_
+  - _Boundary: ChannelAdminPage_
+  - _Depends: 4.1, 7.1_
+- [x] 7.5 (P) アカウント管理UIを統一styleへ移行する
+  - owner連携、recipient list、unlink確認、recoveryを共通form／card／status表現へ揃える。
+  - narrow表示でprovider／channel状態と操作が読め、不要な横scrollを発生させない。
+  - 再認証、危険操作、disabled理由をsemantic textとfocus-visibleで示す。
+  - 完了時、通常管理とunlink recoveryの双方をkeyboardだけで完了できる。
+  - _Requirements: 5.1, 5.3, 11.1, 11.2, 11.5, 11.6, 11.7, 11.8_
+  - _Boundary: AccountPage_
+  - _Depends: 4.2, 7.1_
+- [x] 7.6 (P) リッチメニュー選択・管理UIを統一styleへ移行する
+  - selector、editor、preview、state、history、operation、recoveryを共通tokenへ揃える。
+  - editable、readOnly、unavailable、recoveryOnlyをtextとsemantic stateで区別する。
+  - 画像grid、form、履歴、長い識別値を対応幅内へ収め、常時戻るLinkとtarget sizeを維持する。
+  - 完了時、全channel modeで許可された操作だけが統一表示され、横scrollやfocus欠落がない。
+  - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 11.1, 11.2, 11.5, 11.6, 11.7, 11.8_
+  - _Boundary: RichMenuChannelSelectionPage, RichMenuAdminPage_
+  - _Depends: 5.4, 7.1_
+- [x] 7.7 (P) LINEテスト配信UIを統一styleへ移行する
+  - target選択、subject、body、receipt、preview、confirmation、operation resultを共通form／card／statusへ揃える。
+  - processing、success、failure、unknownをtextとroleで区別し、新しい配信開始を明示する。
+  - narrow表示で入力、preview、結果が横overflowせず、label、focus、pointer targetを維持する。
+  - 完了時、入力から結果確認までkeyboardだけで実行でき、unknown状態をsuccess／failureと混同しない。
+  - _Requirements: 7.1, 7.2, 7.3, 7.4, 11.1, 11.2, 11.5, 11.6, 11.7, 11.8_
+  - _Boundary: DeliveryPage_
+  - _Depends: 6.6, 7.1_
+- [x] 7.8 全画面のaccessibilityとoverflow契約を統合する
+  - landmark、label、heading、current state、status通知、24×24 CSS px以上のtargetを全routeで点検し不足を修正する。
+  - keyboard trapを作らず、focus-visibleがsticky header等で隠れないことを各画面で揃える。
+  - contrastと色非依存、2列／1列、responsive disclosure、長文／長IDのoverflowを共通基準で確認する。
+  - smartphone／LIFF browserはbest effort表示とし、正式desktop browser基準と混同しない。
+  - 完了時、全定義画面が同じaccessibility／responsive契約を満たす。
+  - _Requirements: 9.7, 10.5, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 12.1, 12.2_
+  - _Boundary: TailwindTheme, AppLayout, PageFrame, FeaturePageAdapters_
+  - _Depends: 7.2, 7.3, 7.4, 7.5, 7.6, 7.7_
+
+- [x] 8. 自動testでtask graphと既存契約を検証する
+- [x] 8.1 route、認証、共通shellのintegration contractを固定する
+  - direct access、root replace、Link push、back／forward、reload相当、wildcard 404、safe channel not-foundを検証する。
+  - protected path login、fixed redirect、safe return、401 unmount、reauth remount、mutation非再送を検証する。
+  - unlinking account replace／nav非表示、completion anonymous、logout clear、再loginがチャネル管理から開始することを検証する。
+  - header、navigation順、card、`aria-current`、単一h1、title、route focus、refresh non-focusを検証する。
+  - 各test直前に日本語の`テストケース:`と`期待値:`を記載する。
+  - 完了時、routeとauthの主要遷移が一つのintegration suiteで観測できる。
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 10.1, 10.2, 10.3, 10.4, 10.5_
+  - _Boundary: AppRouter, AuthGate, AppLayout, PageFrame_
+  - _Depends: 3.3, 6.6_
+- [x] 8.2 チャネルとアカウントのroute分離回帰を固定する
+  - 各URLで対応ConsoleだけがAPIを呼び、top／他routeから不要なaccount／channel requestが出ないことを検証する。
+  - チャネルのcredential、競合、unknown、回復、rich-menu Linkと、アカウントのrecipient、unlink、再認証を維持する。
+  - route離脱でdraftを復元せず、同一画面の危険操作確認だけが残ることを検証する。
+  - 完了時、既存channel／account contractがroute wrapper下でも全てpassする。
+  - _Requirements: 4.1, 4.2, 4.3, 4.4, 5.1, 5.2, 5.3, 8.1, 8.2, 9.1, 9.2, 12.3, 12.5_
+  - _Boundary: ChannelAdminPage, AccountPage_
+  - _Depends: 6.1, 7.4, 7.5_
+- [x] 8.3 rich-menuと配信のroute分離回帰を固定する
+  - selectorの全mode／empty、detail Link、back、dynamic title、read-only、safe not-found、既存operation回復を検証する。
+  - 配信のtarget、preview、send、unknown、保存ID hydrate、status-only再訪、新しい配信clearを検証する。
+  - rich-menu／delivery mutationがnavigationや再認証で自動再送されないことを検証する。
+  - 完了時、既存rich-menu／delivery contractと新route contractが同時にpassする。
+  - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 7.1, 7.2, 7.3, 7.4, 7.5, 8.3, 8.4, 8.5, 12.3, 12.5_
+  - _Boundary: RichMenuChannelSelectionPage, RichMenuAdminPage, DeliveryPage_
+  - _Depends: 6.2, 6.6, 7.6, 7.7_
+- [x] 8.4 async lifecycleとaccessibilityのintegration contractを固定する
+  - route離脱時のabort、abort不能なlate response、read retry、mutation継続、draft／preview破棄を検証する。
+  - loading、success、failure、unknownのtext／role、入力focus維持、keyboard操作、label、landmark、target用classを検証する。
+  - responsive disclosure、2列／1列、current state、focus-visible、横overflow防止のobservable DOM contractを検証する。
+  - 既存179 testを含む全Vitestを実行し、route context適応後も回帰がないことを確認する。
+  - 完了時、全自動testが成功し、不要API、stale表示、秘密永続化、既存業務回帰を検出できる。
+  - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 10.5, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 12.3, 12.6_
+  - _Boundary: AppRouter, ScopedReadContract, TailwindTheme_
+  - _Depends: 6.4, 7.8, 8.1, 8.2, 8.3_
+
+- [x] 9. buildと対応環境を最終検証する
+- [x] 9.1 production buildとSPA配信経路を検証する
+  - strict TypeScriptを含むproduction buildを成功させ、exact dependencyのengine／peer contractと明らかな重複CSSがないことを確認する。
+  - ngrokから全`/liff/...`が同じSPA entryを返し、relative `/api` proxyとclient-side 404を維持することを確認する。
+  - Backend、API schema、DB、外部業務contractに変更がないことを差分で確認し、不足があれば暗黙に拡張せず明示する。
+  - 完了時、全test、production build、ngrok経路、contract差分確認がpassする。
+  - _Requirements: 1.3, 1.4, 11.1, 11.2, 12.3, 12.4, 12.5_
+  - _Boundary: AppRouter, TailwindTheme, Validation Suite_
+  - _Depends: 8.1, 8.2, 8.3, 8.4_
+- [x] 9.2 正式browser matrixとbest-effort環境を検証する
+  - Chrome 111+、Edge 111相当+、Safari 16.4+、Firefox 128+でdirect access、reload、history、responsive menu、2列／1列、overflow、keyboard、focus、contrast、statusを確認する。
+  - smartphone／LIFF browserはbest effort smokeだけを確認し、正式acceptanceへ含めない。
+  - 完了時、正式browser matrixがpassし、best-effort結果が正式保証と明確に区別される。
+  - _Requirements: 1.3, 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 12.1, 12.2_
+  - _Boundary: AppRouter, TailwindTheme, Validation Suite_
+  - _Depends: 9.1_
+
+## Implementation Notes
+
+- LIFF logout失敗後は認証再試行を出さずfail-closedを維持し、route registryによるpath検証はAuthGateのmount前に行う。
+- testを追加・変更する全タスクで、各test直前の日本語`テストケース:`／`期待値:`コメントをreview必須項目として扱う。
+- Frontend依存更新後はbind mountに隠れる`frontend_node_modules` volumeへ`docker compose run --rm frontend npm ci`を実行してからコンテナを再起動する。

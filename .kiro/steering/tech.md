@@ -20,6 +20,8 @@ ngrokは通常のDocker Composeサービスとして他のサービスと一緒�
 ## コア技術
 
 - **Frontend**: TypeScript 6、React 19、Vite 8
+- **Routing**: React Router 8 の Declarative mode
+- **Styling**: Tailwind CSS 4 と `@tailwindcss/vite`
 - **Backend**: Python 3.14、Django 6、Django REST Framework 3
 - **Database**: MySQL 8.4、文字セット `utf8mb4`
 - **Runtime**: Docker、Docker Compose
@@ -54,6 +56,19 @@ Frontend は ES Modules、React JSX transform、ES2022 を前提とします。B
 - 公開 Webhook は owner session の対象外とし、署名検証前の body や識別情報を信頼しない
 - owner 向けチャネル管理 API は、read を含めて active owner session と同一 provider を transaction 内で再検証する
 - 更新・有効化・無効化・削除は timezone-aware な `updatedAt` を revision として受け取り、stale な操作を明示的に拒否する
+
+### Frontend の画面境界
+
+- `BrowserRouter` と静的 route registry を画面選択の基準とし、認証済み機能は route-driven shell の配下へ置く
+- 認証後の復帰先は `/liff` 配下の定義済み path だけを許可し、外部 URL、query、hash、非 canonical な動的 ID を復帰先として信頼しない
+- 現在の route に対応する機能だけを mount し、route page は既存 Component の合成と寿命だけを担当する。API schema、DTO 検証、業務状態機械を router loader／action や page adapter へ複製しない
+- 表示用 read は画面離脱時に `AbortSignal` で中止するか後着結果を破棄する。Backend が受け付けた mutation は画面離脱で中断・自動再送せず、operation ID と authoritative なサーバー状態から追跡する
+
+### UI とアクセシビリティ
+
+- Tailwind CSS の共通 theme token を色、余白、角丸、影、focus 表現の source of truth とし、機能固有 CSS に値を重複させない
+- 共通 shell は wide／narrow の navigation、単一のページ見出し、`document.title`、route 変更時の main focus を一貫して提供する
+- loading、success、failure、unknown は色だけに依存せず、テキストと semantic role で区別する。keyboard focus、contrast、長い識別子の折返し、reduced motion を共通品質として検証する
 
 ### 秘密情報と環境設定
 
@@ -153,4 +168,4 @@ LINE の rich-menu mutation には retry key がないため、タイムアウ�
 無効化前の評価と解除はリッチメニュー app の headless typed port を介し、所有権を証明できるチャネル既定資源だけを対象にします。外部既定、結果不明、後片付け待ち、revision 競合ではチャネルを無効化せず、確認待ちとして実状態の再取得を要求します。再有効化も owner、provider、revision を再検証し、必要な場合は資格情報ペアの修復と同じ操作で行います。mutation の有効化には reference probe、履歴 purge、無効化ライフサイクル、統合 marker の全条件を要求します。
 
 ---
-_更新日: 2026-08-10。チャネル無効化・再有効化とリッチメニュー回復を結ぶライフサイクルを反映。技術判断と標準を記録し、依存パッケージ一覧にはしない。_
+_更新日: 2026-08-30。React Router、Tailwind CSS、route 単位の画面寿命と共通 UI 品質を反映。技術判断と標準を記録し、依存パッケージ一覧にはしない。_

@@ -1,7 +1,7 @@
 import type { Parsed, SafeApiError } from './authDto'
 import { isChannelAdminDateTime, isChannelAdminUuid, parseChannelAdminError } from './channelAdminDto'
 import { createProtectedHttpClient, ProtectedHttpClientError } from './httpApi'
-import type { HttpMethod, ProtectedHttpClient } from './httpApi'
+import type { HttpMethod, ProtectedHttpClient, ReadRequestOptions } from './httpApi'
 import {
   parseDeactivation, parseHistoryPage, parseOperation, parsePreview, parseRichMenuError,
   parseRichMenuState, parseTemplates,
@@ -22,13 +22,13 @@ export type StartDeactivationInput = { operationId: string; expectedUpdatedAt: s
 export type RecheckDeactivationInput = StartDeactivationInput & { recoveryOperationId: string }
 
 export interface RichMenuAdminApiClient {
-  listTemplates(): Promise<TemplateDescriptor[]>
+  listTemplates(options?: ReadRequestOptions): Promise<TemplateDescriptor[]>
   createPreview(channelId: string, input: PreviewInput): Promise<PreviewView>
-  getState(channelId: string): Promise<RichMenuStateView>
+  getState(channelId: string, options?: ReadRequestOptions): Promise<RichMenuStateView>
   startOperation(channelId: string, input: RichMenuOperationInput): Promise<OperationView>
-  getOperation(operationId: string): Promise<OperationView>
-  getHistory(channelId: string, cursor?: string): Promise<HistoryPageView>
-  getDeactivation(channelId: string): Promise<DeactivationView | null>
+  getOperation(operationId: string, options?: ReadRequestOptions): Promise<OperationView>
+  getHistory(channelId: string, cursor?: string, options?: ReadRequestOptions): Promise<HistoryPageView>
+  getDeactivation(channelId: string, options?: ReadRequestOptions): Promise<DeactivationView | null>
   startDeactivation(channelId: string, input: StartDeactivationInput): Promise<DeactivationView>
   recheckDeactivation(channelId: string, input: RecheckDeactivationInput): Promise<DeactivationView>
 }
@@ -49,7 +49,7 @@ const safeError = (code: string, summary: string, outcome: 'load_failed' | 'refr
 const assertUuid = (value: string) => { if (!isChannelAdminUuid(value)) throw safeError('protocol_error', '識別子を確認できません。', 'load_failed') }
 const assertDate = (value: string, outcome: 'load_failed' | 'refresh_required') => { if (!isChannelAdminDateTime(value)) throw safeError('protocol_error', '更新時点を確認できません。', outcome) }
 
-async function requestOnce<T>(client: ProtectedHttpClient, input: { path: string; method: HttpMethod; body?: unknown }, parse: (value: unknown) => Parsed<T>): Promise<T> {
+async function requestOnce<T>(client: ProtectedHttpClient, input: { path: string; method: HttpMethod; body?: unknown; signal?: AbortSignal }, parse: (value: unknown) => Parsed<T>): Promise<T> {
   const outcome = input.method === 'GET' ? 'load_failed' : 'refresh_required'
   let response: Response
   try { response = await client.request(input) } catch (error) {
@@ -73,22 +73,22 @@ export function createRichMenuAdminApiClient(client: ProtectedHttpClient = creat
   const richChannel = (channelId: string) => { assertUuid(channelId); return `/api/line/rich-menus/channels/${channelId}/` }
   const adminChannel = (channelId: string) => { assertUuid(channelId); return `/api/line/channels/${channelId}/` }
   return Object.freeze({
-    listTemplates: () => requestOnce(client, { path: '/api/line/rich-menus/templates/', method: 'GET' }, parseTemplates),
+    listTemplates: (options: ReadRequestOptions = {}) => requestOnce(client, { path: '/api/line/rich-menus/templates/', method: 'GET', ...options }, parseTemplates),
     createPreview: (channelId: string, input: PreviewInput) => {
       assertDate(input.channelRevision, 'refresh_required')
       return requestOnce(client, { path: `${richChannel(channelId)}preview/`, method: 'POST', body: input }, parsePreview)
     },
-    getState: (channelId: string) => requestOnce(client, { path: `${richChannel(channelId)}state/`, method: 'GET' }, parseRichMenuState),
+    getState: (channelId: string, options: ReadRequestOptions = {}) => requestOnce(client, { path: `${richChannel(channelId)}state/`, method: 'GET', ...options }, parseRichMenuState),
     startOperation: (channelId: string, input: RichMenuOperationInput) => {
       assertUuid(input.operationId); assertDate(input.channelRevision, 'refresh_required')
       return requestOnce(client, { path: `${richChannel(channelId)}operations/`, method: 'POST', body: input }, parseOperation)
     },
-    getOperation: (operationId: string) => { assertUuid(operationId); return requestOnce(client, { path: `/api/line/rich-menus/operations/${operationId}/`, method: 'GET' }, parseOperation) },
-    getHistory: (channelId: string, cursor?: string) => {
+    getOperation: (operationId: string, options: ReadRequestOptions = {}) => { assertUuid(operationId); return requestOnce(client, { path: `/api/line/rich-menus/operations/${operationId}/`, method: 'GET', ...options }, parseOperation) },
+    getHistory: (channelId: string, cursor?: string, options: ReadRequestOptions = {}) => {
       const query = new URLSearchParams({ limit: '20' }); if (cursor !== undefined) query.set('cursor', cursor)
-      return requestOnce(client, { path: `${richChannel(channelId)}history/?${query.toString()}`, method: 'GET' }, parseHistoryPage)
+      return requestOnce(client, { path: `${richChannel(channelId)}history/?${query.toString()}`, method: 'GET', ...options }, parseHistoryPage)
     },
-    getDeactivation: (channelId: string) => requestOnce(client, { path: `${adminChannel(channelId)}deactivation/`, method: 'GET' }, parseDeactivation),
+    getDeactivation: (channelId: string, options: ReadRequestOptions = {}) => requestOnce(client, { path: `${adminChannel(channelId)}deactivation/`, method: 'GET', ...options }, parseDeactivation),
     startDeactivation: (channelId: string, input: StartDeactivationInput) => {
       assertUuid(input.operationId); assertDate(input.expectedUpdatedAt, 'refresh_required')
       return requestOnce(client, { path: `${adminChannel(channelId)}deactivation/`, method: 'POST', body: input }, value => {

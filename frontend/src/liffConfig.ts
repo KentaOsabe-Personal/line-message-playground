@@ -1,3 +1,5 @@
+import { parseProtectedPath } from './appRoutes'
+
 const LIFF_ENTRY_PATH = '/liff'
 const liffIdPattern = /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/
 
@@ -31,7 +33,7 @@ export function createLiffRuntimeConfig(input: LiffConfigInput): LiffRuntimeConf
 
   if (
     !liffIdPattern.test(input.liffId) ||
-    input.currentPathname !== LIFF_ENTRY_PATH ||
+    parseProtectedPath(input.currentPathname) === null ||
     origin.protocol !== 'https:' ||
     origin.origin !== input.currentOrigin ||
     origin.username !== '' ||

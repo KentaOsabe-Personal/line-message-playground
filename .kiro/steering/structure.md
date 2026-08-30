@@ -13,11 +13,15 @@
 **実装場所**: `/frontend/src/`
 **テスト場所**: `/frontend/test/`
 
-`main.tsx` はアプリケーション起動とグローバル CSS 読み込み、`App.tsx` は画面ルートを担当します。現在は flat 構造を維持しているため、feature directory、共通 components、hooks 等の分割規則はまだ固定しません。
+`main.tsx` は `BrowserRouter` を含むアプリケーション起動とグローバル CSS 読み込み、`App.tsx` は route tree と認証済み shell の合成を担当します。現在は flat 構造を維持しているため、feature directory、共通 components、hooks 等の分割規則はまだ固定しません。
 
 flat 構造でも、UI とイベント接続、状態遷移、HTTP 通信、境界 DTO の検証はモジュールの責務として分離します。複雑な画面状態は純粋な遷移関数へ切り出し、Component へ通信状態や再試行判断を埋め込みません。
 
 確立済みの責務接尾辞を使い、Component は表示と操作の接続、`*Api.ts` は HTTP 手順と安全なエラー変換、`*Dto.ts` は `unknown` な境界データの実行時検証、`*State.ts` は純粋な状態遷移を担当します。cookie、CSRF、共通 fetch 設定や LIFF SDK は専用 adapter に閉じ込め、各 Component から直接扱いません。
+
+URL 駆動の画面では、`appRoutes.ts` が定義済み path、metadata、安全な復帰先検証を所有し、`AuthGate.tsx` が session transition、`AppLayout.tsx` と `PageFrame.tsx` が共通 navigation、title、focus、status 表現を所有します。`*Page.tsx` は route parameter の検証と既存機能 Component の mount 期間を扱う薄い adapter とし、API／DTO／State の責務を移しません。
+
+React Router への依存は composition root、共通 shell、route page、および明示的な画面遷移リンクを提供する UI Component に限定します。機能の `*Api.ts`、`*Dto.ts`、`*State.ts` から router を import せず、画面遷移と業務状態機械を分離します。新しい owner 機能画面は定義済み route、共通 shell、単一機能の page adapter を追加し、他画面の Component を同時 mount しません。
 
 ### Backend プロジェクト設定
 
@@ -72,6 +76,7 @@ ADR は連番付きファイル名を使い、実装の網羅説明ではなく�
 - Backend app 間は相手 app の Model ではなく、公開型と明示的な adapter／builder を依存境界にする
 - 複数 app の参照整合性を伴う削除は、各 app の公開 reference contract を composition root で束ね、削除側から相手 Model を直接探索しない
 - Frontend と Backend など実行サービス間の契約は HTTP API で表現し、同一 Backend 内の app 間は公開 typed contract を composition root で合成する
+- Frontend の route page は機能 Component の寿命を所有し、画面外の機能データを先読みまたは同時 mount しない
 
 ## 命名規則
 
@@ -128,4 +133,4 @@ from .views import HealthView
 - 新しいコードが既存パターンに従う限り、この文書へファイル単位の追記を必要としない
 
 ---
-_更新日: 2026-08-02。責務名 module、app-owned assets、ADR、headless typed port のパターンを反映。配置判断に使えるパターンを記録し、ディレクトリツリーの網羅表にはしない。_
+_更新日: 2026-08-30。route-driven shell、共通 UI、薄い page adapter の配置・依存パターンを反映。配置判断に使えるパターンを記録し、ディレクトリツリーの網羅表にはしない。_

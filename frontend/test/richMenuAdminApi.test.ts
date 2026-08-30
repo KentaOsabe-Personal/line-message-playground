@@ -23,6 +23,7 @@ describe('rich menu admin API', () => {
   // テストケース: template、preview、state、operation、history、無効化の全HTTP手順を呼ぶ。
   // 期待値: same-origin protected clientへ正しいpath・method・bodyを一回ずつ渡す。
   test('maps every owner procedure without retries', async () => {
+    const signal = new AbortController().signal
     const preview = { channelId, channelLabel: '通知', templateId: 'jp-link-one', templateVersion: 1, fields: [{ displayName: '案内', uri: 'https://example.com' }], image: { contentType: 'image/png', width: 2500, height: 843, digest: 'b'.repeat(64), base64: 'aGVsbG8=' }, observation, warnings: [], confirmationToken: 'opaque', expiresAt: now }
     const request = vi.fn()
       .mockResolvedValueOnce(response(templates)).mockResolvedValueOnce(response(preview))
@@ -31,24 +32,24 @@ describe('rich menu admin API', () => {
       .mockResolvedValueOnce(response(deactivation)).mockResolvedValueOnce(response(deactivation))
       .mockResolvedValueOnce(response(deactivation))
     const client = createRichMenuAdminApiClient({ request } as ProtectedHttpClient)
-    await client.listTemplates()
+    await client.listTemplates({ signal })
     await client.createPreview(channelId, { templateId: 'jp-link-one', templateVersion: 1, channelRevision: now, fields: { area1: { displayName: '案内', uri: 'https://example.com' } } })
-    await client.getState(channelId)
+    await client.getState(channelId, { signal })
     await client.startOperation(channelId, { kind: 'apply', operationId, channelRevision: now, confirmationToken: 'opaque', templateId: 'jp-link-one', templateVersion: 1, fields: { area1: { displayName: '案内', uri: 'https://example.com' } } })
-    await client.getOperation(operationId)
-    await client.getHistory(channelId, 'opaque cursor')
-    await client.getDeactivation(channelId)
+    await client.getOperation(operationId, { signal })
+    await client.getHistory(channelId, 'opaque cursor', { signal })
+    await client.getDeactivation(channelId, { signal })
     await client.startDeactivation(channelId, { operationId, expectedUpdatedAt: now })
     await client.recheckDeactivation(channelId, { operationId, recoveryOperationId: recoveryId, expectedUpdatedAt: now })
     expect(request).toHaveBeenCalledTimes(9)
     expect(request.mock.calls.map(([input]) => input)).toEqual([
-      { path: '/api/line/rich-menus/templates/', method: 'GET' },
+      { path: '/api/line/rich-menus/templates/', method: 'GET', signal },
       { path: `/api/line/rich-menus/channels/${channelId}/preview/`, method: 'POST', body: expect.objectContaining({ templateId: 'jp-link-one' }) },
-      { path: `/api/line/rich-menus/channels/${channelId}/state/`, method: 'GET' },
+      { path: `/api/line/rich-menus/channels/${channelId}/state/`, method: 'GET', signal },
       { path: `/api/line/rich-menus/channels/${channelId}/operations/`, method: 'POST', body: expect.objectContaining({ operationId }) },
-      { path: `/api/line/rich-menus/operations/${operationId}/`, method: 'GET' },
-      { path: `/api/line/rich-menus/channels/${channelId}/history/?limit=20&cursor=opaque+cursor`, method: 'GET' },
-      { path: `/api/line/channels/${channelId}/deactivation/`, method: 'GET' },
+      { path: `/api/line/rich-menus/operations/${operationId}/`, method: 'GET', signal },
+      { path: `/api/line/rich-menus/channels/${channelId}/history/?limit=20&cursor=opaque+cursor`, method: 'GET', signal },
+      { path: `/api/line/channels/${channelId}/deactivation/`, method: 'GET', signal },
       { path: `/api/line/channels/${channelId}/deactivation/`, method: 'POST', body: { operationId, expectedUpdatedAt: now } },
       { path: `/api/line/channels/${channelId}/deactivation/recheck/`, method: 'POST', body: { operationId, recoveryOperationId: recoveryId, expectedUpdatedAt: now } },
     ])

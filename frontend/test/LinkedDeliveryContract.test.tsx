@@ -174,6 +174,7 @@ const enterPreview = async () => {
 
 describe('linked delivery frontend contract', () => {
   beforeEach(() => {
+    window.sessionStorage.clear()
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
@@ -185,6 +186,7 @@ describe('linked delivery frontend contract', () => {
     container.remove()
     document.cookie = 'csrftoken=; Max-Age=0; path=/'
     vi.restoreAllMocks()
+    window.sessionStorage.clear()
   })
 
   // テストケース: 依存注入なしの配信画面でtarget選択から曖昧なsend結果のstatus確認まで進める。
@@ -350,6 +352,7 @@ describe('linked delivery frontend contract', () => {
     for (const deliveryStatus of deliveryStates) {
       for (const receiptStatus of receiptStates) {
         await act(async () => root.unmount())
+        window.sessionStorage.clear()
         root = createRoot(container)
         const result = statusFor(deliveryStatus, receiptStatus)
         await act(async () => root.render(

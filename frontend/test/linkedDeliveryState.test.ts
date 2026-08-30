@@ -281,6 +281,23 @@ describe('linked delivery state', () => {
     }
   })
 
+  // テストケース: 保存operation IDからprocessing、unknown、完了結果を順にhydrateする。
+  // 期待値: 同じIDのstatusだけを受理し、新規配信操作で空入力へ安全に戻る。
+  test('6.5 hydrates saved operation statuses without restoring delivery content', () => {
+    for (const expected of ['processing', 'unknown', 'succeeded', 'failed'] as const) {
+      const checking = transitionLinkedDelivery(initialLinkedDeliveryState, {
+        type: 'hydrateStarted', operationId: operationOne,
+      })
+      const hydrated = transitionLinkedDelivery(checking, {
+        type: 'deliveryUpdated', result: status(expected),
+      })
+      expect(hydrated.phase).toBe(expected)
+      if (expected === 'succeeded' || expected === 'failed') {
+        expect(transitionLinkedDelivery(hydrated, { type: 'newDelivery' })).toEqual(initialLinkedDeliveryState)
+      }
+    }
+  })
+
   // テストケース: sendの通信結果が曖昧になった後、同一operationのstatus結果を受け取る。
   // 期待値: 自動再送を許可せずstatus確認へ進み、deliveryとreceiptの直交状態を保存する。
   test('reconciles network ambiguity only through matching status', () => {

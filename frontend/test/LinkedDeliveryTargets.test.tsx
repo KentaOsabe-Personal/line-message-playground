@@ -163,7 +163,7 @@ describe('linked delivery target selection', () => {
     await renderForm(client)
     await clickRadio('channelId', channelOne)
 
-    expect(client.listRecipients).toHaveBeenCalledWith(channelOne)
+    expect(client.listRecipients).toHaveBeenCalledWith(channelOne, { signal: expect.any(AbortSignal) })
     expect(container.textContent).toContain('recipientが無効です')
     expect(container.textContent).toContain('友だち状態ではありません')
     expect(container.textContent).toContain('友だち状態を確認できません')
@@ -282,7 +282,7 @@ describe('linked delivery target selection', () => {
     await clickButton('recipientを再読み込み')
 
     expect(listRecipients).toHaveBeenCalledTimes(2)
-    expect(listRecipients).toHaveBeenLastCalledWith(channelOne)
+    expect(listRecipients).toHaveBeenLastCalledWith(channelOne, { signal: expect.any(AbortSignal) })
     expect(container.textContent).toContain('復旧した受信者')
   })
 

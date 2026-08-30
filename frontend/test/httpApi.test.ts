@@ -49,4 +49,33 @@ describe('ProtectedHttpClient', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(onSessionInvalid).toHaveBeenCalledTimes(1)
   })
+
+  // テストケース: safe GETへAbortSignalを指定する。
+  // 期待値: wire formatを変えず、同じsignalをfetchへ伝播する。
+  test('passes an AbortSignal to a safe read', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
+    const signal = new AbortController().signal
+    const client = createProtectedHttpClient()
+
+    await client.request({ path: '/api/account/session/', method: 'GET', signal })
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/account/session/', {
+      method: 'GET',
+      credentials: 'same-origin',
+      signal,
+    })
+  })
+
+  // テストケース: AbortSignalで中止したsafe readがAbortErrorを返す。
+  // 期待値: 通常のnetwork failureではなくabortedへ分類する。
+  test('classifies an aborted read separately from a network failure', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const client = createProtectedHttpClient({
+      fetch: vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError')),
+    })
+
+    await expect(client.request({ path: '/api/account/session/', method: 'GET', signal: controller.signal }))
+      .rejects.toEqual(new ProtectedHttpClientError('aborted'))
+  })
 })

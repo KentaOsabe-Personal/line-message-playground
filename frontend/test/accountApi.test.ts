@@ -19,6 +19,7 @@ describe('account API client', () => {
   // テストケース: recipient操作を共通HTTP clientへ渡す。
   // 期待値: opaque IDとwrite-only tokenだけを正しいpath/bodyで送信する。
   test('uses protected HTTP paths and minimal request bodies', async () => {
+    const signal = new AbortController().signal
     const request = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ items: [channel] }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ...channel, linkState: 'linked_enabled', recipientId }), { status: 201 }))
@@ -26,13 +27,13 @@ describe('account API client', () => {
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
     const client = createAccountApiClient({ request } as ProtectedHttpClient)
 
-    await client.listChannels()
+    await client.listChannels({ signal })
     await client.registerRecipient(channelId, 'fresh-token')
     await client.setRecipientEnabled(recipientId, false)
     await client.unlinkRecipient(recipientId)
 
     expect(request.mock.calls).toEqual([
-      [{ path: '/api/account/channels/', method: 'GET' }],
+      [{ path: '/api/account/channels/', method: 'GET', signal }],
       [{ path: '/api/account/recipients/', method: 'POST', body: { channelId, accessToken: 'fresh-token' } }],
       [{ path: `/api/account/recipients/${recipientId}/`, method: 'PATCH', body: { enabled: false } }],
       [{ path: `/api/account/recipients/${recipientId}/`, method: 'DELETE' }],

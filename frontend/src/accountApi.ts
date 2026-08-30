@@ -8,7 +8,7 @@ import {
 import type { ChannelLink, UnlinkExecution, UnlinkPreview } from './accountDto'
 import { parseSafeApiError } from './authDto'
 import type { Parsed, SafeApiError } from './authDto'
-import type { ProtectedHttpClient } from './httpApi'
+import type { ProtectedHttpClient, ReadRequestOptions } from './httpApi'
 
 export type UnlinkExecutionInput = {
   confirmationToken?: string
@@ -16,7 +16,7 @@ export type UnlinkExecutionInput = {
 }
 
 export interface AccountApiClient {
-  listChannels(): Promise<ChannelLink[]>
+  listChannels(options?: ReadRequestOptions): Promise<ChannelLink[]>
   registerRecipient(channelId: string, accessToken?: string): Promise<ChannelLink>
   setRecipientEnabled(recipientId: string, enabled: boolean): Promise<ChannelLink>
   unlinkRecipient(recipientId: string): Promise<void>
@@ -68,8 +68,8 @@ async function parseEmptyResponse(response: Response): Promise<void> {
 
 export function createAccountApiClient(http: ProtectedHttpClient): AccountApiClient {
   return Object.freeze({
-    listChannels: async () => parseJsonResponse(
-      await http.request({ path: '/api/account/channels/', method: 'GET' }),
+    listChannels: async (options: ReadRequestOptions = {}) => parseJsonResponse(
+      await http.request({ path: '/api/account/channels/', method: 'GET', ...options }),
       parseChannelList,
     ),
     registerRecipient: async (channelId: string, accessToken?: string) => {
