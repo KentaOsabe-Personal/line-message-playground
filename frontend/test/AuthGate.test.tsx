@@ -60,6 +60,9 @@ describe('AuthGate', () => {
     ))
 
     expect(container.textContent).toContain('LINEでログイン')
+    const loginButton = [...container.querySelectorAll('button')]
+      .find((button) => button.textContent?.includes('LINEでログイン'))
+    expect(loginButton?.classList.contains('line-login-button')).toBe(true)
     expect(container.textContent).not.toContain('保護画面')
     expect(childMounted).not.toHaveBeenCalled()
   })
@@ -374,6 +377,6 @@ describe('AuthGate', () => {
 })
 
 async function clickButton(target: HTMLElement, label: string) {
-  const button = [...target.querySelectorAll('button')].find((item) => item.textContent === label)
+  const button = [...target.querySelectorAll('button')].find((item) => item.textContent?.includes(label))
   await act(async () => button?.click())
 }

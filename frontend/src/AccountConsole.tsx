@@ -184,9 +184,14 @@ export default function AccountConsole({
 
   return (
     <section className="account-console" aria-labelledby="account-console-title">
-      <h2 id="account-console-title">LINE連携と配信先</h2>
-      <section aria-labelledby="recipient-title">
-        <h3 id="recipient-title">配信先管理</h3>
+      <section aria-labelledby="account-console-title">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">RECIPIENTS</p>
+            <h2 id="account-console-title">配信先管理</h2>
+            <p>チャネルごとに、現在の連携状態と配信可否を確認できます。</p>
+          </div>
+        </div>
         {loading && <p aria-live="polite">配信先を読み込んでいます…</p>}
         {readError !== null && <div role="alert"><p>{readError}</p><button type="button" onClick={() => setReadVersion((version) => version + 1)}>配信先を再取得</button></div>}
         {!loading && channels.length === 0 && readError === null && <p>登録可能なチャネルはありません。</p>}
@@ -195,9 +200,12 @@ export default function AccountConsole({
             const busy = operation === channel.channelId
             const linked = channel.linkState !== 'unlinked'
             return (
-              <li key={channel.channelId} className="channel-card">
-                <h4>{channel.channelLabel}</h4>
-                <dl>
+              <li key={channel.channelId} className="channel-card account-channel-card">
+                <div className="channel-card-heading">
+                  <div><p className="card-kicker">Delivery target</p><h3>{channel.channelLabel}</h3></div>
+                  <span className={channel.deliveryAvailable ? 'status active' : 'status inactive'}>{channel.deliveryAvailable ? '配信可能' : '配信不可'}</span>
+                </div>
+                <dl className="account-status-grid">
                   <div><dt>チャネル: </dt><dd>{channel.channelState === 'active' ? '利用可能' : '停止中'}</dd></div>
                   <div><dt>連携状態: </dt><dd>{linkStateLabel[channel.linkState]}</dd></div>
                   <div><dt>友だち状態: </dt><dd>{friendshipLabel[channel.friendshipState]}</dd></div>
@@ -238,7 +246,8 @@ export default function AccountConsole({
       </section>
 
       <section className="unlink-panel" aria-labelledby="unlink-title">
-        <h3 id="unlink-title">全連携解除</h3>
+        <p className="eyebrow">DANGER ZONE</p>
+        <h2 id="unlink-title">全連携解除</h2>
         {preview === null ? (
           <>
             <p>保存されたLINE identityとすべての配信先関係を削除します。</p>

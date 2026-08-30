@@ -12,7 +12,7 @@ LINE Message Playground の owner は、認証後の一画面にアカウント�
 
 ## Desired Outcome
 
-`/liff`をトップ画面とし、チャネル管理、アカウント管理、リッチメニュー管理、メッセージ配信を独立URLへ分割する。共通headerと統一されたデザインから各機能へ直接移動でき、再読み込み、直接アクセス、戻る・進む、404、認証後の安全な復帰、ページタイトル、route変更時のfocusに対応する。
+`/liff`を認証入口とし、認証後は中間トップを挟まずチャネル管理へ移動する。チャネル管理、アカウント管理、リッチメニュー管理、メッセージ配信を独立URLへ分割し、共通headerと統一されたデザインから各機能へ直接移動できるようにする。
 
 現在URLに対応する機能だけをmountして必要なAPIだけを呼び、既存業務機能とBackend契約を変えずに全画面をTailwind CSSの同一デザイン体系へ移行する。
 
@@ -24,13 +24,13 @@ LINE Message Playground の owner は、認証後の一画面にアカウント�
 
 ## Scope
 
-- **In**: `/`から`/liff`へのredirect、定義済み静的／動的route、404、`BrowserRouter`、内部routeだけを許可する認証後復帰、共通headerとresponsive navigation、トップ画面、4機能画面の責務分離、リッチメニューのチャネル選択／詳細画面、全連携解除・session失効・logoutのroute制御、未保存入力と受付済み処理の画面離脱契約、route単位のmount/API読込み、表示用requestの中断または後着応答抑止、loading／error表示、`document.title`、route変更時の`h1` focus、Tailwind CSSによる全画面のUI統一、WCAG 2.2 Level AAを目標とするkeyboard・contrast・status表現、Vitest／jsdomによる自動確認
+- **In**: `/`から`/liff`へのredirectと認証後のチャネル管理直行、定義済み静的／動的route、404、`BrowserRouter`、内部routeだけを許可する認証後復帰、共通headerとresponsive navigation、4機能画面の責務分離、リッチメニューのチャネル選択／詳細画面、全連携解除・session失効・logoutのroute制御、未保存入力と受付済み処理の画面離脱契約、route単位のmount/API読込み、表示用requestの中断または後着応答抑止、loading／error表示、`document.title`、route変更時の`main` focus、Tailwind CSSによる全画面のUI統一、WCAG 2.2 Level AAを目標とするkeyboard・contrast・status表現、Vitest／jsdomによる自動確認
 - **Out**: 新しい業務機能、Backend業務ロジック変更、API schema変更、新規API endpoint、Database変更・migration、Mobile-first設計、LINEアプリ内browserの正式保証、WCAG認証・第三者監査、新規E2E／visual regression framework、Bootstrap等のUI component library
 
 ## Boundary Candidates
 
 - Router／認証layout: route定義、内部復帰先、session失効、logout、全連携解除の画面制御
-- 共通UI shell: header、navigation、トップ画面、page title、route focus、responsive menu
+- 共通UI shell: header、navigation、チャネル管理への開始導線、page title、route focus、responsive menu
 - 機能page分離: 既存Account、Channel、Delivery Componentのroute単位mountと責務維持
 - リッチメニューroute: 全チャネル選択、利用不可理由、動的`channelId`検証、read-only詳細、戻る導線
 - Design system／検証: Tailwind theme、既存CSS撤去、accessibility、route／API isolation／回帰test
@@ -70,4 +70,3 @@ LINE Message Playground の owner は、認証後の一画面にアカウント�
 - 表示用GETは可能なら`AbortSignal`対応し、対応できない場合もunmount後の応答を状態へ反映しない。Backend受付済みmutationは画面離脱で中断・再送しない
 - 資格情報、本文、プレビュー、LINE user IDをURL、永続storage、log、errorへ追加しない
 - 自動確認は既存Vitest／jsdom、`npm test`、`npm run build`、`git diff --check`を使用する
-

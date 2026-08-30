@@ -2,7 +2,7 @@
 
 ## Overview
 
-本機能は、owner向けFrontendをURL駆動の独立画面へ分割し、直接アクセス、browser履歴、安全な認証復帰、現在画面だけのデータ読込みを提供する。認証済みownerは共通headerとトップ画面からチャネル管理、アカウント管理、リッチメニュー管理、メッセージ配信へ移動する。
+本機能は、owner向けFrontendをURL駆動の独立画面へ分割し、直接アクセス、browser履歴、安全な認証復帰、現在画面だけのデータ読込みを提供する。認証済みownerは中間トップを挟まずチャネル管理から開始し、共通headerからアカウント管理、リッチメニュー管理、メッセージ配信へ移動する。
 
 現行のAPI client、DTO validation、状態reducer、確認・競合・冪等性・結果不明・回復contractを再利用し、React Router Declarative modeを画面実行境界として導入する。Backend、HTTP schema、DB、LINE外部契約は変更しない。Tailwind CSS v4のtheme tokenで全画面の見た目とinteraction stateを統一する。
 
@@ -26,7 +26,7 @@
 
 - `/`から`/liff`へのreplace redirect、6つの定義済み画面path、rich-menu動的path、wildcard 404のroute tree。
 - routeと認証sessionを合成するFrontend制御、allowlist済みtab-local復帰先、logout／全連携解除完了時のowner一時情報消去。
-- 共通header、4機能navigation、トップカード、page title、route遷移時の`h1` focus、loading／error chrome、responsive disclosure。
+- 共通header、4機能navigation、認証後のチャネル管理直行、page title、route遷移時の`main` focus、loading／error chrome、responsive disclosure。
 - 既存Consoleをrouteごとに1つだけmountするpage adapter、rich-menu channel selector、read request cancellation、delivery operation IDのsession追跡。
 - Tailwind theme tokenとFrontend markup／CSSの統一、既存Frontend testのroute対応、browser QA matrix。
 
@@ -126,8 +126,7 @@ frontend/
 │   ├── appRoutes.ts                     # RouteRegistry: path、metadata、安全な復帰path検証
 │   ├── AppLayout.tsx                    # 共通header、NavLink、owner、logout、responsive menu
 │   ├── PageFrame.tsx                    # 単一h1、title、route-change focus、page status領域
-│   ├── HomePage.tsx                     # 4機能カードだけを持つトップ画面
-│   ├── NotFoundPage.tsx                 # 一般404とトップへのLink
+│   ├── NotFoundPage.tsx                 # 一般404とチャネル管理へのLink
 │   ├── ChannelAdminPage.tsx             # FeaturePageAdapters: ChannelAdminConsole境界
 │   ├── AccountPage.tsx                  # FeaturePageAdapters: AccountConsole／unlink境界
 │   ├── RichMenuChannelSelectionPage.tsx # 全channelのrich-menu利用可否と導線
@@ -247,7 +246,7 @@ session失効は現在の許可URLを維持する。全連携解除中だけ`/li
 |---|---|---|---|---|
 | 1.1, 1.2, 1.3, 1.4, 1.5 | 定義route、history、404、非開示channel not-found | App、appRoutes、NotFoundPage、RichMenuAdminPage | route metadata、UUID validator | Direct access |
 | 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9 | auth復帰、失効、unlink、logout | AuthGate、App、AccountPage、ownerSessionStorage | AuthGateContext、SafeReturnPath、OwnerSessionStorage | Direct access、Session state |
-| 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7 | 共通headerとトップ | AppLayout、PageFrame、HomePage | NavigationItem、PageMeta | route mount |
+| 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7 | 共通headerと開始画面 | AppLayout、PageFrame、AppRouter | NavigationItem、PageMeta | route mount |
 | 4.1, 4.2, 4.3, 4.4 | channel pageの責務分離 | ChannelAdminPage、ChannelAdminConsole、ChannelActions | Link、既存ChannelAdminApiClient | Navigationとasync |
 | 5.1, 5.2, 5.3 | account pageとunlink契約 | AccountPage、AccountConsole、UnlinkRecoveryPanel | AuthGateContext、既存AccountApiClient | Session state |
 | 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9 | rich-menu選択、detail、read-only、回復 | RichMenuChannelSelectionPage、RichMenuAdminPage、RichMenuAdminConsole | selector projection、Link、既存RichMenuAdminApiClient | Navigationとasync |
@@ -268,7 +267,7 @@ session失効は現在の許可URLを維持する。全連携解除中だけ`/li
 | OwnerSessionStorage | Browser adapter | 許可済み最小tab-local stateだけを保持 | 2.2, 2.8–2.9, 8.5–8.6, 12.6 | sessionStorage P1、RouteRegistry P0 | Service、State |
 | AppLayout | Shared UI | 共通header、nav、owner、logout | 3.1–3.4, 11.3–11.8 | NavLink P0、AuthGateContext P0 | State |
 | PageFrame | Shared UI | h1、title、focus、page chrome | 3.5, 9.5–9.7, 10.1–10.5 | Router location P0 | State |
-| HomePage／NotFoundPage | Route UI | data-free topと404を表示 | 1.4, 3.6–3.7, 9.2 | Link P0、PageFrame P0 | UI |
+| NotFoundPage | Route UI | 保護情報を取得しない404とチャネル管理への導線を表示 | 1.4 | Link P0、PageFrame P0 | UI |
 | FeaturePageAdapters | Route UI | 既存Consoleを1 routeだけmount | 4.1–5.3, 7.1–7.5, 8.1–8.4 | Existing consoles P0 | State |
 | RichMenuChannelSelectionPage | Route UI | 全channelの利用可否と導線を表示 | 6.1–6.8 | ChannelAdminApiClient P0、Link P0 | State |
 | RichMenuAdminPage | Route UI | channelId検証、非開示error、dynamic meta | 1.5, 6.3–6.9, 10.2 | RichMenuAdminConsole P0 | State |
@@ -413,8 +412,8 @@ type PageFrameProps = Readonly<{
 }>
 ```
 
-- `routeFocusKey`変更時だけ、`tabIndex={-1}`のh1へprogrammatic focusし、document titleを更新する。
-- data refresh、loading→success、error通知ではh1へfocusを移さない。statusは`role="status"`、failureは`role="alert"`で通知し、入力focusを奪わない。
+- `routeFocusKey`変更時だけ、`tabIndex={-1}`と`aria-labelledby`を持つmainへprogrammatic focusし、document titleを更新する。main自体のfocus outlineは表示せず、見出し周辺の視覚的なノイズを避ける。
+- data refresh、loading→success、error通知ではmainへfocusを移さない。statusは`role="status"`、failureは`role="alert"`で通知し、入力focusを奪わない。
 - rich-menu detailはinitial generic titleからchannel取得後に`{channelName} | リッチメニュー管理`へ更新するが、h1は「リッチメニュー管理」のままにする。
 
 ### Route Pages and Existing Features
@@ -562,7 +561,7 @@ graph LR
 
 | Category | Detection | Presentation | Recovery |
 |---|---|---|---|
-| 未定義path | wildcard route | 404、トップLink | 自動redirectなし |
+| 未定義path | wildcard route | 404、チャネル管理Link | 自動redirectなし |
 | channel不正／不存在／scope外 | UUID validation、safe 404／403 | 同一「対象が見つからない」 | selector Link |
 | anonymous／401 | AuthGate、ProtectedHttp callback | 保護contentを即unmount、login UI | allowlisted pathへ再認証後復帰 |
 | unlinking | session DTO | account recoveryのみ、navなし | 既存UnlinkRecoveryPanel |
@@ -574,7 +573,7 @@ graph LR
 ### Monitoring
 
 - 新しいtelemetry／Backend logは追加しない。browser consoleへroute、owner、channel、本文、credential、operation payloadを出力しない。
-- validation hookとしてAPI call count／pathをtest spyで検証し、トップや別routeから不要APIが呼ばれないことを観測する。
+- validation hookとしてAPI call count／pathをtest spyで検証し、認証入口からチャネル管理だけが開始され、別routeから不要APIが呼ばれないことを観測する。
 
 ## Testing Strategy
 
@@ -590,13 +589,13 @@ graph LR
 
 - `AppRouting.test.tsx`: direct access、root replace、Link push、popstate、reload相当初期location、wildcard 404、channel not-foundを検証する（1.1–1.5）。
 - AuthGate integration: protected path login、fixed `/liff` redirect、safe return、401 content unmount、reauth remount、mutation非再送を検証する（2.1–2.5）。
-- unlink／logout integration: unlinking時account replaceとnav非表示、completion anonymous、logout `/liff` replace、全owner一時情報clear、再loginがtop開始を検証する（2.6–2.9）。
-- route mount isolation: 各URLで対応Console一つだけがAPIを呼び、topはsession bootstrap以外を呼ばず、navigation後のaborted／late responseが表示されないことを検証する（3.7, 8.1, 9.1–9.4）。
+- unlink／logout integration: unlinking時account replaceとnav非表示、completion anonymous、logout `/liff` replace、全owner一時情報clear、再loginがチャネル管理から開始することを検証する（2.6–2.9）。
+- route mount isolation: 各URLで対応Console一つだけがAPIを呼び、`/liff`はチャネル管理だけを開始し、navigation後のaborted／late responseが表示されないことを検証する（3.7, 8.1, 9.1–9.4）。
 - 既存feature integration: channel、account、rich-menu、deliveryの確認、競合、unknown、recovery、二重実行防止testをroute wrapper下で維持する（4.4, 5.3, 6.9, 7.2–7.3, 12.3）。
 
 ### UI Tests
 
-- AppLayout／HomePage: app link、4 NavLink／cardの順序、card全体Link、`aria-current`、owner、logout、responsive disclosure semanticsを検証する（3.1–3.7, 11.3–11.4）。
+- AppLayout／AppRouter: app link、4 NavLinkの順序、認証後redirect、`aria-current`、owner、logout、responsive disclosure semanticsを検証する（3.1–3.7, 11.3–11.4）。
 - PageFrame: 各固定title、detail動的title、単一可視h1、route key変更時だけfocusし、refresh／status updateではfocusを維持する（10.1–10.5）。
 - Rich-menu flows: selectorの全channel、利用不可理由、empty、detail Link、browser back、常時selector Link、inactive read-only、統一not-foundを検証する（6.1–6.9）。
 - Navigation leave: draft／previewを作った後のLink、back、reload cleanupでconfirmationがなく、再訪時に入力が復元されないことを検証する。同一画面の危険操作確認は残る（8.1–8.2）。

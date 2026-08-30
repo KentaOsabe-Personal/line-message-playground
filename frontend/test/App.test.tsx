@@ -46,11 +46,11 @@ describe('AppRouter', () => {
   }
 
   // テストケース: `/`へ直接アクセスする。
-  // 期待値: 履歴置換でdata-freeな`/liff`トップだけを表示する。
-  test('replaces root with the data-free top route', async () => {
+  // 期待値: 認証後は中間トップを表示せずチャネル管理を表示する。
+  test('replaces root with the channel administration route', async () => {
     await renderAt('/')
-    expect(container.textContent).toContain('トップ')
-    expect(container.querySelector('h1')?.textContent).toBe('トップ')
+    expect(container.querySelector('h1')?.textContent).toBe('チャネル管理')
+    expect(container.querySelector('nav [aria-current="page"]')?.textContent).toBe('チャネル管理')
   })
 
   // テストケース: 各定義済み保護URLへ直接アクセスする。
@@ -67,11 +67,11 @@ describe('AppRouter', () => {
   })
 
   // テストケース: 未定義URLへ直接アクセスする。
-  // 期待値: 認証を開始せず404とトップへの導線を表示する。
+  // 期待値: 認証を開始せず404とチャネル管理への導線を表示する。
   test('shows 404 without redirecting an unknown path', async () => {
     await renderAt('/unknown')
     expect(container.textContent).toContain('ページが見つかりません')
-    expect(container.querySelector('a')?.getAttribute('href')).toBe('/liff')
+    expect(container.querySelector('a')?.getAttribute('href')).toBe('/liff/channels')
     expect(authApi.bootstrap).not.toHaveBeenCalled()
   })
 

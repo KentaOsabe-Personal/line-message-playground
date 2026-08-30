@@ -351,11 +351,18 @@ function LinkedDeliveryForm({
 
   return (
     <section className="delivery" aria-labelledby="delivery-title">
-      <h2 id="delivery-title">配信内容</h2>
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">NEW DELIVERY</p>
+          <h2 id="delivery-title">新しいメッセージ</h2>
+          <p>送信前に対象と内容を確認できます。確認画面を経ずに送信されることはありません。</p>
+        </div>
+      </div>
       {resumeMessage !== null && <p className="notice" role="status">{resumeMessage}</p>}
 
       {editing && (
-        <form onSubmit={(event) => { event.preventDefault(); void preview() }}>
+        <form className="delivery-form" onSubmit={(event) => { event.preventDefault(); void preview() }}>
+          <div className="delivery-target-grid">
           <fieldset className="target-group">
             <legend>配信元チャネル</legend>
             {channels.status === 'loading' && (
@@ -478,56 +485,66 @@ function LinkedDeliveryForm({
                 </>
               )}
           </fieldset>
+          </div>
 
-          <label>
-            件名
-            <input
-              name="subject"
-              value={state.input.subject}
-              onChange={(event) => dispatch({
-                type: 'subjectChanged',
-                subject: event.target.value,
-              })}
-              aria-invalid={Boolean(state.phase === 'editing' && state.errors.subject)}
-            />
-          </label>
-          {state.phase === 'editing' && state.errors.subject && (
-            <p className="field-error">{state.errors.subject}</p>
-          )}
-          <label>
-            本文
-            <textarea
-              name="body"
-              rows={7}
-              value={state.input.body}
-              onChange={(event) => dispatch({
-                type: 'bodyChanged',
-                body: event.target.value,
-              })}
-              aria-invalid={Boolean(state.phase === 'editing' && state.errors.body)}
-            />
-          </label>
-          {state.phase === 'editing' && state.errors.body && (
-            <p className="field-error">{state.errors.body}</p>
-          )}
-          <label className="receipt-option">
-            <input
-              type="checkbox"
-              name="receiptRequested"
-              checked={state.input.receiptRequested}
-              onChange={(event) => dispatch({
-                type: 'receiptChanged',
-                receiptRequested: event.target.checked,
-              })}
-            />
-            受け取り確認を付ける
-          </label>
-          {state.phase === 'editing' && state.errors.message && (
-            <p className="notice error" role="alert">{state.errors.message}</p>
-          )}
-          <button type="submit" disabled={!canPreview}>
-            {state.phase === 'previewing' ? '確認内容を読み込んでいます…' : '送信内容を確認'}
-          </button>
+          <section className="delivery-compose-card" aria-labelledby="delivery-compose-title">
+            <div className="compose-heading">
+              <span className="step-number" aria-hidden="true">2</span>
+              <div><p className="eyebrow">MESSAGE</p><h3 id="delivery-compose-title">メッセージを作成</h3></div>
+            </div>
+            <label className="field-label">
+              件名
+              <input
+                name="subject"
+                value={state.input.subject}
+                onChange={(event) => dispatch({
+                  type: 'subjectChanged',
+                  subject: event.target.value,
+                })}
+                aria-invalid={Boolean(state.phase === 'editing' && state.errors.subject)}
+              />
+            </label>
+            {state.phase === 'editing' && state.errors.subject && (
+              <p className="field-error">{state.errors.subject}</p>
+            )}
+            <label className="field-label">
+              本文
+              <textarea
+                name="body"
+                rows={7}
+                value={state.input.body}
+                onChange={(event) => dispatch({
+                  type: 'bodyChanged',
+                  body: event.target.value,
+                })}
+                aria-invalid={Boolean(state.phase === 'editing' && state.errors.body)}
+              />
+            </label>
+            {state.phase === 'editing' && state.errors.body && (
+              <p className="field-error">{state.errors.body}</p>
+            )}
+            <label className="receipt-option">
+              <input
+                type="checkbox"
+                name="receiptRequested"
+                checked={state.input.receiptRequested}
+                onChange={(event) => dispatch({
+                  type: 'receiptChanged',
+                  receiptRequested: event.target.checked,
+                })}
+              />
+              <span><strong>受け取り確認を付ける</strong><small>リンクを開いたか確認できる仕組みを本文に追加します。</small></span>
+            </label>
+            {state.phase === 'editing' && state.errors.message && (
+              <p className="notice error" role="alert">{state.errors.message}</p>
+            )}
+            <div className="compose-submit">
+              <p>次の画面で送信対象と本文を最終確認します。</p>
+              <button type="submit" disabled={!canPreview}>
+                {state.phase === 'previewing' ? '確認内容を読み込んでいます…' : '送信内容を確認'}
+              </button>
+            </div>
+          </section>
         </form>
       )}
 

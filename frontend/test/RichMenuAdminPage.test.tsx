@@ -1,4 +1,4 @@
-import { act } from 'react'
+import { StrictMode, act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -92,4 +92,26 @@ test('5.2 renders dynamic metadata and the bounded console for a valid channel',
   await act(async () => root.unmount())
   expect(signal.aborted).toBe(true)
   root = createRoot(container)
+})
+
+// テストケース: React Strict Modeのeffect再実行下で利用可能channelのdetail URLを開く。
+// 期待値: 検証用cleanupで中止したsignalを再利用せず、新しい読込みで管理Consoleへ収束する。
+test('loads rich-menu detail with a fresh signal after the Strict Mode effect replay', async () => {
+  const getChannel = vi.fn().mockResolvedValue(channel)
+  await act(async () => root.render(
+    <StrictMode>
+      <MemoryRouter initialEntries={[`/liff/rich-menus/${channel.channelId}`]}>
+        <Routes>
+          <Route path="/liff/rich-menus/:channelId" element={<RichMenuAdminPage channelApi={channelApi(getChannel)} richApi={richApi} />} />
+        </Routes>
+      </MemoryRouter>
+    </StrictMode>,
+  ))
+
+  expect(container.textContent).toContain(`console:${channel.channelId}`)
+  expect(getChannel).toHaveBeenCalledTimes(2)
+  const firstSignal = getChannel.mock.calls[0]?.[1]?.signal as AbortSignal
+  const latestSignal = getChannel.mock.calls[1]?.[1]?.signal as AbortSignal
+  expect(firstSignal.aborted).toBe(true)
+  expect(latestSignal.aborted).toBe(false)
 })

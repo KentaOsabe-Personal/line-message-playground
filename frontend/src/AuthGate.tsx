@@ -272,11 +272,43 @@ export default function AuthGate({
   }
   if (state.kind === 'login_required' || state.kind === 'anonymous') {
     return (
-      <section className="auth-gate" aria-live="polite">
-        <h2>LINEログインが必要です</h2>
-        <p>本人確認が完了すると管理画面を利用できます。</p>
-        <button type="button" onClick={startLogin}>LINEでログイン</button>
-      </section>
+      <main className="auth-page">
+        <section className="auth-gate auth-card" aria-live="polite">
+          <div className="auth-brand" aria-hidden="true">
+            <span className="auth-brand-mark">
+              <svg viewBox="0 0 32 32">
+                <path d="M27.8 14.1c0-6.1-5.3-11-11.8-11S4.2 8 4.2 14.1c0 5.5 4.3 10.1 10.1 10.9.4.1.9.3 1 .7.1.3.1.9 0 1.3l-.2 1.2c-.1.4-.3 1.5 1.3.8 1.6-.7 8.7-5.1 11.9-8.8 2.2-2.4 3.5-4.8 3.5-7.8Z" />
+              </svg>
+            </span>
+            <span>LINE Message Playground</span>
+          </div>
+          <div className="auth-copy">
+            <p className="auth-eyebrow">OWNER CONSOLE</p>
+            <h1>LINEの検証環境へ<br />ようこそ。</h1>
+            <p>チャネル管理からテスト配信まで、あなた専用のワークスペースで安全に試せます。</p>
+          </div>
+          <div className="auth-action-panel">
+            <span className="auth-lock-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 2.75a6 6 0 0 0-6 6v2.5H4.75A1.75 1.75 0 0 0 3 13v7.25C3 21.22 3.78 22 4.75 22h14.5c.97 0 1.75-.78 1.75-1.75V13c0-.97-.78-1.75-1.75-1.75H18v-2.5a6 6 0 0 0-6-6Zm-4 6a4 4 0 0 1 8 0v2.5H8v-2.5Zm4 6.1a1.65 1.65 0 0 1 .75 3.12v1.28h-1.5v-1.28A1.65 1.65 0 0 1 12 14.85Z" />
+              </svg>
+            </span>
+            <p className="auth-action-eyebrow">OWNER ACCESS</p>
+            <h2>管理画面へログイン</h2>
+            <p className="auth-action-copy">登録済みのLINEアカウントで本人確認を行ってください。</p>
+            <button className="line-login-button" type="button" onClick={startLogin}>
+              <span className="line-login-icon" aria-hidden="true">
+                <svg viewBox="0 0 32 32">
+                  <path d="M27.8 14.1c0-6.1-5.3-11-11.8-11S4.2 8 4.2 14.1c0 5.5 4.3 10.1 10.1 10.9.4.1.9.3 1 .7.1.3.1.9 0 1.3l-.2 1.2c-.1.4-.3 1.5 1.3.8 1.6-.7 8.7-5.1 11.9-8.8 2.2-2.4 3.5-4.8 3.5-7.8Z" />
+                </svg>
+              </span>
+              <span>LINEでログイン</span>
+              <span className="line-login-arrow" aria-hidden="true">→</span>
+            </button>
+            <p className="auth-assurance">本人確認にはLINE Loginを使用します</p>
+          </div>
+        </section>
+      </main>
     )
   }
   if (state.kind === 'unlinking') {

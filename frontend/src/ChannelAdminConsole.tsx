@@ -138,7 +138,11 @@ export default function ChannelAdminConsole({ api: providedApi, onSessionInvalid
   return (
     <section className="channel-admin" aria-labelledby="channel-admin-heading">
       <div className="section-heading">
-        <div><p className="eyebrow">Owner console</p><h2 id="channel-admin-heading">LINEチャネル管理</h2></div>
+        <div>
+          <p className="eyebrow">CHANNELS</p>
+          <h2 id="channel-admin-heading">登録チャネル</h2>
+          <p>配信やリッチメニューに使用するチャネルを管理します。</p>
+        </div>
         {(state.state === 'empty' || state.state === 'ready') && <button type="button" onClick={() => setShowCreate(true)}>新しいチャネルを登録</button>}
       </div>
       {notice !== null && <p className="panel success" role="status">{notice}</p>}
@@ -164,24 +168,38 @@ export default function ChannelAdminConsole({ api: providedApi, onSessionInvalid
             const lifecyclePending = item.deactivationSummary !== null && item.deactivationSummary.status !== 'completed'
             return (
               <article className="channel-card" key={item.channelId}>
-                <div className="channel-card-heading"><h3>{item.label}</h3><span className={item.active ? 'status active' : 'status inactive'}>{item.active ? '有効' : '無効'}</span></div>
+                <div className="channel-card-heading">
+                  <div>
+                    <p className="card-kicker">Messaging API channel</p>
+                    <h3>{item.label}</h3>
+                  </div>
+                  <span className={item.active ? 'status active' : 'status inactive'}>{item.active ? '有効' : '無効'}</span>
+                </div>
                 {!item.active && <p className="notice error">無効中です。新しい配信、配信先登録、Webhook受付には利用できません。</p>}
                 {lifecyclePending && <p className="notice" role="status">無効化 {item.deactivationSummary?.status}。競合するチャネル変更はできません。専用画面で保存状態を確認してください。</p>}
-                <dl className="channel-details">
-                  <div><dt>公開ID</dt><dd>{item.channelId}</dd></div>
-                  <div><dt>Messaging API channel ID</dt><dd>{item.messagingApiChannelId}</dd></div>
-                  <div><dt>bot user ID</dt><dd>{item.botUserId}</dd></div>
-                  <div><dt>provider ID</dt><dd>{item.providerId ?? 'legacy（未設定）'}</dd></div>
+                <dl className="channel-summary">
                   <div><dt>資格情報</dt><dd>{item.credentialsState === 'configured' ? '設定済み' : '資格情報の修復が必要'}</dd></div>
-                  <div><dt>資格情報更新日時</dt><dd>{formatDate(item.credentialsUpdatedAt)}</dd></div>
-                  <div><dt>作成日時</dt><dd>{formatDate(item.createdAt)}</dd></div>
-                  <div><dt>更新日時</dt><dd>{formatDate(item.updatedAt)}</dd></div>
-                  <div><dt>Webhook URL</dt><dd><code>{item.webhookUrl}</code></dd></div>
+                  <div><dt>リッチメニュー</dt><dd>{richMenuEligible ? '管理可能' : '利用不可'}</dd></div>
+                  <div><dt>最終更新</dt><dd>{formatDate(item.updatedAt)}</dd></div>
                 </dl>
-                <button type="button" className="secondary" disabled={operationPending || lifecyclePending} onClick={() => setEditingId(item.channelId)}>編集</button>
-                {richMenuEligible && onNavigateRichMenu !== undefined && (
-                  <Link className="secondary button-link" to={richMenuPath(item.channelId)}>リッチメニューを管理</Link>
-                )}
+                <details className="resource-details">
+                  <summary>技術情報とWebhookを表示</summary>
+                  <dl className="channel-details">
+                    <div><dt>公開ID</dt><dd>{item.channelId}</dd></div>
+                    <div><dt>Messaging API channel ID</dt><dd>{item.messagingApiChannelId}</dd></div>
+                    <div><dt>bot user ID</dt><dd>{item.botUserId}</dd></div>
+                    <div><dt>provider ID</dt><dd>{item.providerId ?? 'legacy（未設定）'}</dd></div>
+                    <div><dt>資格情報更新日時</dt><dd>{formatDate(item.credentialsUpdatedAt)}</dd></div>
+                    <div><dt>作成日時</dt><dd>{formatDate(item.createdAt)}</dd></div>
+                    <div><dt>Webhook URL</dt><dd><code>{item.webhookUrl}</code></dd></div>
+                  </dl>
+                </details>
+                <div className="channel-primary-actions">
+                  <button type="button" className="secondary" disabled={operationPending || lifecyclePending} onClick={() => setEditingId(item.channelId)}>設定を編集</button>
+                  {richMenuEligible && onNavigateRichMenu !== undefined && (
+                    <Link className="button-link" to={richMenuPath(item.channelId)}>リッチメニューを管理</Link>
+                  )}
+                </div>
                 {editingId === item.channelId && !lifecyclePending && <ChannelEditor mode="edit" item={item} pending={operations[`${item.channelId}:update`] !== undefined} onSubmit={(input) => update(item, input)} onCancel={() => setEditingId(null)} />}
                 <ChannelActions
                   item={item}

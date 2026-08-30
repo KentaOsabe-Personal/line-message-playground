@@ -8,6 +8,7 @@ export type PageStatus = Readonly<{
 export type PageFrameProps = Readonly<{
   title: string
   heading: string
+  description?: string
   routeFocusKey: string
   status?: PageStatus
   children: ReactNode
@@ -16,23 +17,28 @@ export type PageFrameProps = Readonly<{
 export default function PageFrame({
   title,
   heading,
+  description,
   routeFocusKey,
   status,
   children,
 }: PageFrameProps) {
-  const headingRef = useRef<HTMLHeadingElement>(null)
+  const mainRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     document.title = title
   }, [title])
 
   useEffect(() => {
-    headingRef.current?.focus()
+    mainRef.current?.focus()
   }, [routeFocusKey])
 
   return (
-    <main className="page-frame">
-      <h1 ref={headingRef} tabIndex={-1}>{heading}</h1>
+    <main ref={mainRef} className="page-frame" tabIndex={-1} aria-labelledby="page-heading">
+      <header className="page-heading">
+        <p className="eyebrow">LINE MESSAGE PLAYGROUND</p>
+        <h1 id="page-heading">{heading}</h1>
+        {description && <p className="page-description">{description}</p>}
+      </header>
       {status && (
         <p className={`page-status page-status-${status.kind}`} role={status.kind === 'error' ? 'alert' : 'status'}>
           {status.message}

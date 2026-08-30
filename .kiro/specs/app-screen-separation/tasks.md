@@ -78,7 +78,7 @@
 - [x] 3. 共通application UIを構築する
 - [x] 3.1 (P) page title、単一h1、route focus、状態通知を共通化する
   - routeごとに可視h1を一つだけ描画し、定義済みmetadataからdocument titleを更新する。
-  - URLに対応する画面が変わった時だけh1へfocusし、同一画面の再取得や状態更新では入力focusを維持する。
+  - URLに対応する画面が変わった時だけoutlineを表示しないmainへfocusし、同一画面の再取得や状態更新では入力focusを維持する。
   - loading／successはstatus、failureはalertとして色以外でも通知し、headerとheadingを残す。
   - 完了時、route changeとdata refreshでtitle／focus挙動を明確に区別できる。
   - _Requirements: 3.5, 9.5, 9.7, 10.1, 10.2, 10.3, 10.4, 10.5, 11.8_
@@ -92,14 +92,13 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 11.3, 11.4, 11.6, 11.8_
   - _Boundary: AppLayout_
   - _Depends: 2.4_
-- [x] 3.3 topと404を共通shellへ統合する
-  - topには指定順の4機能カードだけを置き、カード全体を対応routeへのLinkにする。
-  - topでは機能説明、機能state、管理操作、認証確認以外の機能dataを表示・取得しない。
-  - 404では保護情報を取得せず、`/liff`へ戻る明示Linkと専用title／h1を表示する。
+- [x] 3.3 認証後の開始画面と404を共通shellへ統合する
+  - 認証済みの`/liff`は中間トップを表示せず、履歴置換でチャネル管理へ直行する。
+  - 404では保護情報を取得せず、`/liff/channels`へ戻る明示Linkと専用title／h1を表示する。
   - normal、loading、error、anonymous、unlinking、404で共通layoutの表示可否を一意に合成する。
-  - 完了時、topの機能API呼出しは0件で、unknown routeは自動遷移せず404に留まる。
+  - 完了時、`/liff`ではチャネル管理だけが機能APIを呼び、unknown routeは自動遷移せず404に留まる。
   - _Requirements: 1.4, 2.3, 2.6, 3.2, 3.6, 3.7, 9.2, 9.5, 10.1_
-  - _Boundary: HomePage, NotFoundPage, AppRouter, AppLayout_
+  - _Boundary: NotFoundPage, AppRouter, AppLayout_
   - _Depends: 3.1, 3.2_
 
 - [x] 4. 既存機能を独立pageへ分離する
@@ -239,17 +238,17 @@
   - _Requirements: 11.1, 11.2, 11.6, 11.7, 11.8, 12.1_
   - _Boundary: TailwindTheme_
   - _Depends: 1.1_
-- [x] 7.2 (P) 共通header、navigation、top、404をresponsive表示へ移行する
-  - wide画面ではnavigationを横並び、top cardを2列にする。
-  - narrow画面ではowner、logout、4機能navigationをdisclosureへ収め、top cardを1列にする。
-  - current state、hover、focus、dangerをtokenで区別し、card全体Linkとpointer targetを維持する。
+- [x] 7.2 (P) 共通header、navigation、機能workspace、404をresponsive表示へ移行する
+  - wide画面ではnavigationを横並び、機能画面の状態カードと操作群を十分な余白で表示する。
+  - narrow画面ではowner、logout、4機能navigationをdisclosureへ収め、機能画面のカードと操作群を一列へ収める。
+  - current state、hover、focus、dangerをtokenで区別し、pointer targetを維持する。
   - 完了時、wide／narrow両表示で不要な横scrollなく共通操作を利用できる。
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.6, 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.8_
-  - _Boundary: AppLayout, HomePage, NotFoundPage_
+  - _Boundary: AppLayout, AppRouter, NotFoundPage_
   - _Depends: 3.3, 7.1_
 - [x] 7.3 (P) page frameと状態表示を統一styleへ移行する
   - heading、content width、card、loading、status、alert、retryを共通tokenとsemantic roleで表示する。
-  - route focus ringを可視かつ隠れない形で示し、状態更新時の入力focusを保持する。
+  - route変更はoutlineを表示しないmain focusで支援技術へ伝え、対話要素のfocus-visibleと状態更新時の入力focusを保持する。
   - 通常文字、大きな文字、UI境界のcontrast下限をtheme色で満たす。
   - 完了時、loading／success／failure／unknownが色以外のtextと一貫したchromeで判別できる。
   - _Requirements: 9.5, 9.7, 10.3, 10.4, 10.5, 11.1, 11.2, 11.6, 11.7, 11.8_
@@ -301,7 +300,7 @@
 - [x] 8.1 route、認証、共通shellのintegration contractを固定する
   - direct access、root replace、Link push、back／forward、reload相当、wildcard 404、safe channel not-foundを検証する。
   - protected path login、fixed redirect、safe return、401 unmount、reauth remount、mutation非再送を検証する。
-  - unlinking account replace／nav非表示、completion anonymous、logout clear、再login top開始を検証する。
+  - unlinking account replace／nav非表示、completion anonymous、logout clear、再loginがチャネル管理から開始することを検証する。
   - header、navigation順、card、`aria-current`、単一h1、title、route focus、refresh non-focusを検証する。
   - 各test直前に日本語の`テストケース:`と`期待値:`を記載する。
   - 完了時、routeとauthの主要遷移が一つのintegration suiteで観測できる。

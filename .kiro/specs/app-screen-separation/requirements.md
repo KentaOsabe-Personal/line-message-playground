@@ -2,11 +2,11 @@
 
 ## はじめに
 
-本Specは、LINE Message Playgroundのowner向けFrontendを、トップ画面と独立URLを持つ機能画面へ分割する。ownerは共通ナビゲーション、直接アクセス、再読み込み、ブラウザ履歴を利用して目的の機能へ移動でき、現在表示している機能だけのデータを読み込める。既存のowner認証、アカウント連携、チャネル管理、リッチメニュー管理、メッセージ配信の業務・安全性契約は、画面離脱時の破棄確認について本Specが明示する変更を除き維持する。
+本Specは、LINE Message Playgroundのowner向けFrontendを、独立URLを持つ機能画面へ分割する。認証後は中間トップを挟まずチャネル管理から開始し、ownerは共通ナビゲーション、直接アクセス、再読み込み、ブラウザ履歴を利用して目的の機能へ移動できる。既存のowner認証、アカウント連携、チャネル管理、リッチメニュー管理、メッセージ配信の業務・安全性契約は、画面離脱時の破棄確認について本Specが明示する変更を除き維持する。
 
 ## 境界コンテキスト
 
-- **対象内**: `/liff`トップ、チャネル管理、アカウント管理、リッチメニューのチャネル選択とチャネル別管理、メッセージ配信、404、共通ナビゲーション、認証状態に応じた画面制御、画面単位のデータ読込み、ページタイトル、フォーカス、responsive表示、accessibility、全画面の視覚的統一
+- **対象内**: `/liff`認証入口とチャネル管理への認証後redirect、チャネル管理、アカウント管理、リッチメニューのチャネル選択とチャネル別管理、メッセージ配信、404、共通ナビゲーション、認証状態に応じた画面制御、画面単位のデータ読込み、ページタイトル、フォーカス、responsive表示、accessibility、全画面の視覚的統一
 - **対象外**: 新しい業務機能、Backendの業務ロジック、API schema、新規API endpoint、Databaseまたはmigration、Mobile-first設計、LINEアプリ内browserの正式保証、WCAG認証・第三者監査、新しいE2Eまたはvisual regressionの仕組み
 - **隣接する期待**: 完了済みの`line-account-linking`、`line-channel-admin-ui`、`line-rich-menu-admin-lifecycle`、`linked-recipient-delivery`が提供する確認、競合制御、二重実行防止、結果不明、回復、秘密情報非露出の契約を利用し、変更しない
 
@@ -19,9 +19,9 @@
 #### 受入条件
 
 1. When ownerが`/`へアクセスする, the LINE Message Playground shall 履歴を置換して`/liff`へ移動する
-2. The LINE Message Playground shall トップを`/liff`、チャネル管理を`/liff/channels`、アカウント管理を`/liff/account`、リッチメニューのチャネル選択を`/liff/rich-menus`、チャネル別管理を`/liff/rich-menus/{channelId}`、メッセージ配信を`/liff/deliveries`で提供する
+2. The LINE Message Playground shall `/liff`を認証入口として認証済みownerを`/liff/channels`へ履歴置換し、チャネル管理を`/liff/channels`、アカウント管理を`/liff/account`、リッチメニューのチャネル選択を`/liff/rich-menus`、チャネル別管理を`/liff/rich-menus/{channelId}`、メッセージ配信を`/liff/deliveries`で提供する
 3. When ownerが定義済みURLを直接開く、再読み込みする、またはブラウザの戻る・進むを使う, the LINE Message Playground shall URLに対応する画面を表示する
-4. If `/`以外の未定義URLが要求される, the LINE Message Playground shall 404画面と`/liff`へ戻る導線を表示し、自動的にトップへ移動しない
+4. If `/`以外の未定義URLが要求される, the LINE Message Playground shall 404画面と`/liff/channels`へ戻る導線を表示し、自動的に機能画面へ移動しない
 5. If `{channelId}`が存在しない、形式が不正、またはownerが利用できない, the LINE Message Playground shall いずれも同じ「対象が見つからない」表示とチャネル選択画面への導線を示し、存在または権限を推測できる情報を示さない
 
 ### Requirement 2: 認証と安全な画面復帰
@@ -31,28 +31,28 @@
 #### 受入条件
 
 1. When 未認証のownerが定義済みの保護対象URLへアクセスする, the LINE Message Playground shall そのURLでログインを要求し、認証成功後に要求時の画面を表示する
-2. If 認証後の復帰先が定義済み内部URLではない, the LINE Message Playground shall 外部URLまたは任意URLへ移動せず`/liff`を表示する
+2. If 認証後の復帰先が定義済み内部URLではない, the LINE Message Playground shall 外部URLまたは任意URLへ移動せず`/liff/channels`を表示する
 3. When 表示中にowner sessionが失効する, the LINE Message Playground shall 現在の許可済みURLを維持し、保護対象内容を直ちに非表示にしてログインを要求する
 4. When session失効後にownerが再認証する, the LINE Message Playground shall 同じ許可済みURLへ復帰し、最新の保存状態を取得する
 5. If session失効前に送信、更新、削除、または外部状態変更が開始されている, the LINE Message Playground shall 再認証を理由にその操作を自動再実行しない
 6. While ownerの全連携解除が未完了である, the LINE Message Playground shall どの画面URLからも`/liff/account`へ移動し、回復画面だけを表示して4機能の共通ナビゲーションを表示しない
 7. When ownerの全連携解除が完了する, the LINE Message Playground shall 未認証状態へ移行し、再利用時にログインを要求する
 8. When ownerが明示的にログアウトする, the LINE Message Playground shall 履歴を置換して`/liff`へ移動し、未保存入力、プレビュー、復帰先、保持中の操作ID、owner別一時情報を消去する
-9. When ログアウト後にownerが再認証する, the LINE Message Playground shall 以前の機能画面へ自動復帰せずトップ画面から開始する
+9. When ログアウト後にownerが再認証する, the LINE Message Playground shall 以前の機能画面へ自動復帰せずチャネル管理画面から開始する
 
-### Requirement 3: 共通レイアウトとトップ画面
+### Requirement 3: 共通レイアウトと開始画面
 
 **目的:** ownerとして、どの通常画面からも現在地を把握して各機能へ移動したい。それにより、目的の操作を見つけやすくなる。
 
 #### 受入条件
 
 1. While 認証済みownerが通常画面を利用している, the LINE Message Playground shall アプリ名、4機能へのナビゲーション、owner表示名、ログアウト操作を持つ共通ヘッダーを表示する
-2. The LINE Message Playground shall 共通ナビゲーションとトップ画面の機能カードを、チャネル管理、アカウント管理、リッチメニュー管理、メッセージ配信の順で表示する
+2. The LINE Message Playground shall 共通ナビゲーションを、チャネル管理、アカウント管理、リッチメニュー管理、メッセージ配信の順で表示する
 3. When ownerが機能画面を表示する, the LINE Message Playground shall 現在の機能を視覚的にも支援技術からも識別可能にする
-4. When ownerが共通ナビゲーションを操作する, the LINE Message Playground shall トップ画面を経由せず選択した機能画面へ移動する
+4. When ownerが共通ナビゲーションを操作する, the LINE Message Playground shall 中間画面を経由せず選択した機能画面へ移動する
 5. The LINE Message Playground shall 各画面に可視の`h1`を一つだけ表示し、その見出しを画面名だけで構成する
-6. When ownerがトップ画面を表示する, the LINE Message Playground shall 4機能へのカードを表示し、各カード全体を画面遷移リンクとして操作可能にする
-7. While トップ画面を表示している, the LINE Message Playground shall 機能データ、機能状態、個別管理操作、配信操作、機能説明文を表示または取得しない
+6. When 認証済みownerが`/liff`を表示する, the LINE Message Playground shall 中間トップや機能カードを表示せずチャネル管理画面へ履歴置換する
+7. While チャネル管理画面から開始している, the LINE Message Playground shall 現在機能の目的、状態サマリー、主要操作、詳細情報、危険操作を視覚的な優先順位に従って表示する
 
 ### Requirement 4: チャネル管理画面の責務
 
@@ -100,7 +100,7 @@
 1. When ownerがメッセージ配信画面を表示する, the LINE Message Playground shall 配信元チャネル1件、登録済み配信先1件、件名、本文、受取確認の選択または入力を提供する
 2. When ownerが配信を実行する, the LINE Message Playground shall 送信前プレビュー、確認済み内容の送信、現在操作の処理状態と結果、完了後の新しい配信開始を既存契約どおり提供する
 3. If 配信結果が不明である, the LINE Message Playground shall 新規配信として自動再実行せず、同じ操作IDの状態再確認だけを提供する
-4. The LINE Message Playground shall 共通ナビゲーションとトップカードでは「メッセージ配信」、画面見出しでは「LINEテスト配信」と表示する
+4. The LINE Message Playground shall 共通ナビゲーションでは「メッセージ配信」、画面見出しでは「LINEテスト配信」と表示する
 5. While メッセージ配信画面を表示している, the LINE Message Playground shall 一括配信、配信予約、配信履歴一覧、配信テンプレート、または配信分析を提供しない
 
 ### Requirement 8: 画面離脱と受付済み処理
@@ -109,7 +109,7 @@
 
 #### 受入条件
 
-1. When ownerが共通ナビゲーション、トップへの移動、画面内リンク、戻る・進む、再読み込み、またはタブを閉じる操作で画面を離れる, the LINE Message Playground shall 破棄確認を表示せず未保存入力とプレビューを破棄し、遷移後に復元しない
+1. When ownerが共通ナビゲーション、アプリ名リンク、画面内リンク、戻る・進む、再読み込み、またはタブを閉じる操作で画面を離れる, the LINE Message Playground shall 破棄確認を表示せず未保存入力とプレビューを破棄し、遷移後に復元しない
 2. When ownerが同一画面内で削除、送信、外部状態変更、または入力消去を伴う既存操作を行う, the LINE Message Playground shall その操作に対する既存の確認を維持する
 3. While Backendが送信、適用、更新などを受付済みである, the LINE Message Playground shall 処理中の確認なしで別画面へ移動できるようにし、画面移動を理由に処理を中断または自動再送しない
 4. When ownerが受付済み処理の元画面へ戻る, the LINE Message Playground shall 保存済みの最新状態と追跡可能な進行中操作を再取得する
@@ -123,7 +123,7 @@
 #### 受入条件
 
 1. When ownerが機能画面を表示する, the LINE Message Playground shall 現在のURLに対応する機能だけを実行状態にし、その機能に必要なデータだけを取得する
-2. While トップ画面を表示している, the LINE Message Playground shall 認証確認以外の機能データを取得しない
+2. While 認証済みownerが`/liff`を表示している, the LINE Message Playground shall チャネル管理へ収束し、チャネル管理に必要なデータだけを取得する
 3. When ownerがデータ取得中に別画面へ移動する, the LINE Message Playground shall 可能な取得を中止し、中止できない取得の後着結果を移動先の状態へ反映しない
 4. When ownerが機能画面を再訪する, the LINE Message Playground shall 保存済みの最新状態を取得する
 5. While 読込み中または取得エラーが発生している, the LINE Message Playground shall 共通ヘッダーとページ見出しを維持し、ページ内に統一された読込み状態またはエラー状態を表示する
@@ -136,10 +136,10 @@
 
 #### 受入条件
 
-1. The LINE Message Playground shall トップのタイトルを`LINE Message Playground`、チャネル管理を`チャネル管理 | LINE Message Playground`、アカウント管理を`アカウント管理 | LINE Message Playground`、リッチメニュー選択を`リッチメニュー管理 | LINE Message Playground`、メッセージ配信を`LINEテスト配信 | LINE Message Playground`、404を`ページが見つかりません | LINE Message Playground`とする
+1. The LINE Message Playground shall チャネル管理を`チャネル管理 | LINE Message Playground`、アカウント管理を`アカウント管理 | LINE Message Playground`、リッチメニュー選択を`リッチメニュー管理 | LINE Message Playground`、メッセージ配信を`LINEテスト配信 | LINE Message Playground`、404を`ページが見つかりません | LINE Message Playground`とする
 2. When チャネル別リッチメニュー管理画面を表示する, the LINE Message Playground shall ページタイトルを`{チャネル名} | リッチメニュー管理`とする
-3. When 画面遷移リンクによってURLに対応する画面が変わる, the LINE Message Playground shall 移動先の`h1`へフォーカスを移す
-4. When 同一画面内でデータを再取得する, the LINE Message Playground shall `h1`へフォーカスを移動しない
+3. When 画面遷移リンクによってURLに対応する画面が変わる, the LINE Message Playground shall 移動先の`main`へフォーカスを移し、見出しに不快なフォーカス枠を表示せず支援技術へ画面変更を伝える
+4. When 同一画面内でデータを再取得する, the LINE Message Playground shall `main`へフォーカスを移動しない
 5. When 入力中にエラーまたは状態変化が発生する, the LINE Message Playground shall 支援技術へ通知し、現在の入力フォーカスを奪わない
 
 ### Requirement 11: 統一UIとresponsive表示
@@ -149,9 +149,9 @@
 #### 受入条件
 
 1. The LINE Message Playground shall 白、淡いグリーン、濃い文字色を基調とし、薄いグレーグリーンのページ背景、白いカード、細い境界線、控えめな影、主要操作とフォーカスのLINEグリーン、危険操作に限定した赤を全画面で一貫して使用する
-2. The LINE Message Playground shall 文字、入力欄、ボタン、リンク、余白、角丸、状態表示を全画面で統一し、派手なgradient、強い影、または不要なanimationを使用しない
-3. While 広い画面で表示している, the LINE Message Playground shall 共通ナビゲーションを横並び、トップ画面の機能カードを2列で表示する
-4. While 狭い画面で表示している, the LINE Message Playground shall 機能ナビゲーション、現在状態、owner表示、ログアウトを折り畳みメニューへ収め、トップ画面の機能カードを1列で表示する
+2. The LINE Message Playground shall 文字、入力欄、ボタン、リンク、余白、角丸、状態表示を全画面で統一し、背景の控えめなgradientとshadow以外の過剰な装飾または不要なanimationを使用しない
+3. While 広い画面で表示している, the LINE Message Playground shall 共通ナビゲーションを横並び、機能画面の状態カードと操作群を十分な余白で表示する
+4. While 狭い画面で表示している, the LINE Message Playground shall 機能ナビゲーション、現在状態、owner表示、ログアウトを折り畳みメニューへ収め、機能画面のカードと操作群を一列で読みやすく表示する
 5. The LINE Message Playground shall 対応画面幅でページ全体に不要な横scrollを発生させない
 6. The LINE Message Playground shall keyboardだけですべての操作を実行可能にし、keyboard trapを発生させず、可視で隠れないfocus表示を提供する
 7. The LINE Message Playground shall 通常文字に4.5:1以上、大きな文字とUI境界に3:1以上のcontrastを提供し、状態を色だけで表現しない

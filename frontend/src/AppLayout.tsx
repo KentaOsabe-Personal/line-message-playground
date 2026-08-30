@@ -37,7 +37,13 @@ export default function AppLayout({ displayName, onLogout, children }: AppLayout
   return (
     <div className="application-shell">
       <header className="application-header">
-        <Link className="application-brand" to="/liff">LINE Message Playground</Link>
+        <Link className="application-brand" to="/liff/channels">
+          <span className="application-brand-mark" aria-hidden="true">L</span>
+          <span className="application-brand-copy">
+            <strong>LINE Message Playground</strong>
+            <small>OWNER CONSOLE</small>
+          </span>
+        </Link>
         <button
           ref={menuButtonRef}
           type="button"
@@ -57,7 +63,10 @@ export default function AppLayout({ displayName, onLogout, children }: AppLayout
             ))}
           </nav>
           <div className="owner-actions">
-            <span className="owner-name">{displayName}</span>
+            <span className="owner-identity">
+              <span className="owner-avatar" aria-hidden="true">{displayName.slice(0, 1).toUpperCase()}</span>
+              <span className="owner-name">{displayName}</span>
+            </span>
             <button type="button" className="secondary" onClick={() => void onLogout()}>
               この端末からログアウト
             </button>

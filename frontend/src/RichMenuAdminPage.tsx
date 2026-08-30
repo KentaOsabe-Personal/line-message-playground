@@ -33,13 +33,16 @@ export default function RichMenuAdminPage({ channelApi: suppliedChannelApi, rich
   const navigate = useNavigate()
   const routeMeta = meta(location.pathname)
   const generation = useRef(0)
-  const [readController] = useState(() => new AbortController())
+  const readController = useRef<AbortController | null>(null)
   const [state, setState] = useState<DetailState>({ kind: 'loading' })
   const http = useMemo(() => createProtectedHttpClient({ onSessionInvalid }), [onSessionInvalid])
   const channelApi = useMemo(() => suppliedChannelApi ?? createChannelAdminApiClient(http), [http, suppliedChannelApi])
   const richApi = useMemo(() => suppliedRichApi ?? createRichMenuAdminApiClient(http), [http, suppliedRichApi])
 
   const loadChannel = useCallback(async () => {
+    readController.current?.abort()
+    const controller = new AbortController()
+    readController.current = controller
     const current = ++generation.current
     if (!isChannelAdminUuid(channelId)) {
       setState({ kind: 'notFound' })
@@ -47,8 +50,8 @@ export default function RichMenuAdminPage({ channelApi: suppliedChannelApi, rich
     }
     setState({ kind: 'loading' })
     try {
-      const channel = await channelApi.getChannel(channelId, { signal: readController.signal })
-      if (generation.current !== current) return
+      const channel = await channelApi.getChannel(channelId, { signal: controller.signal })
+      if (generation.current !== current || controller.signal.aborted) return
       if (channel.channelId !== channelId) {
         setState({ kind: 'notFound' })
       } else if (channel.providerId === null) {
@@ -68,9 +71,9 @@ export default function RichMenuAdminPage({ channelApi: suppliedChannelApi, rich
       }
       setState({ kind: 'failed' })
     }
-  }, [channelApi, channelId, onSessionInvalid, readController.signal])
+  }, [channelApi, channelId, onSessionInvalid])
 
-  useEffect(() => () => readController.abort(), [readController])
+  useEffect(() => () => readController.current?.abort(), [])
 
   useEffect(() => {
     void loadChannel()
@@ -82,7 +85,12 @@ export default function RichMenuAdminPage({ channelApi: suppliedChannelApi, rich
     : routeMeta.title
 
   return (
-    <PageFrame title={title} heading="リッチメニュー管理" routeFocusKey={location.pathname}>
+    <PageFrame
+      title={title}
+      heading="リッチメニュー管理"
+      description="内容を作成し、プレビューで確認してからLINEへ反映します。"
+      routeFocusKey={location.pathname}
+    >
       <Link className="back-link" to="/liff/rich-menus">チャネル選択へ戻る</Link>
       {state.kind === 'loading' && <p role="status">対象チャネルを確認しています…</p>}
       {state.kind === 'notFound' && <p role="alert">対象が見つかりません。</p>}
@@ -101,7 +109,7 @@ export default function RichMenuAdminPage({ channelApi: suppliedChannelApi, rich
           channelId={state.channel.channelId}
           channelApi={channelApi}
           richApi={richApi}
-          readSignal={readController.signal}
+          readSignal={readController.current?.signal}
           onSessionInvalid={onSessionInvalid}
           onBack={() => setState({ kind: 'notFound' })}
           onDeleted={() => navigate('/liff/rich-menus')}

@@ -17,7 +17,12 @@ export default function ChannelAdminPage({ api, onSessionInvalid }: ChannelAdmin
   const pageMeta = meta(location.pathname)
 
   return (
-    <PageFrame title={pageMeta.title} heading={pageMeta.heading} routeFocusKey={location.pathname}>
+    <PageFrame
+      title={pageMeta.title}
+      heading={pageMeta.heading}
+      description="Messaging APIチャネル、資格情報、Webhook接続を一か所で管理します。"
+      routeFocusKey={location.pathname}
+    >
       <ChannelAdminConsole
         api={api}
         onSessionInvalid={onSessionInvalid}

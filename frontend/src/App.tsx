@@ -3,10 +3,8 @@ import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useOutletCon
 import AuthGate from './AuthGate'
 import type { AuthGateProps } from './AuthGate'
 import AppLayout from './AppLayout'
-import HomePage from './HomePage'
 import NotFoundPage from './NotFoundPage'
-import PageFrame from './PageFrame'
-import { meta, parseProtectedPath } from './appRoutes'
+import { parseProtectedPath } from './appRoutes'
 import AccountConsole from './AccountConsole'
 import AccountPage from './AccountPage'
 import ChannelAdminPage from './ChannelAdminPage'
@@ -29,29 +27,19 @@ type AppRouterProps = {
   }>
 }
 
-function RouteScreen() {
-  const location = useLocation()
-  const pageMeta = meta(location.pathname)
-  return (
-    <PageFrame title={pageMeta.title} heading={pageMeta.heading} routeFocusKey={location.pathname}>
-      <section aria-label={`${pageMeta.heading}コンテンツ`} />
-    </PageFrame>
-  )
-}
-
 function RichMenuSelectionRoute({ api }: { api?: ChannelAdminApiClient }) {
   const context = useOutletContext<AuthGateContext>()
-  return <RichMenuChannelSelectionPage api={api} onSessionInvalid={() => { void context.refreshSession() }} />
+  return <RichMenuChannelSelectionPage api={api} onSessionInvalid={context.refreshSession} />
 }
 
 function RichMenuDetailRoute({ channelApi, richApi }: { channelApi?: ChannelAdminApiClient; richApi?: RichMenuAdminApiClient }) {
   const context = useOutletContext<AuthGateContext>()
-  return <RichMenuAdminPage channelApi={channelApi} richApi={richApi} onSessionInvalid={() => { void context.refreshSession() }} />
+  return <RichMenuAdminPage channelApi={channelApi} richApi={richApi} onSessionInvalid={context.refreshSession} />
 }
 
 function ChannelRoute({ api }: { api?: ChannelAdminApiClient }) {
   const context = useOutletContext<AuthGateContext>()
-  return <ChannelAdminPage api={api} onSessionInvalid={() => { void context.refreshSession() }} />
+  return <ChannelAdminPage api={api} onSessionInvalid={context.refreshSession} />
 }
 
 function AccountRoute({ api }: { api?: AccountApiClient }) {
@@ -61,7 +49,7 @@ function AccountRoute({ api }: { api?: AccountApiClient }) {
 
 function DeliveryRoute({ api }: { api?: LinkedDeliveryApiClient }) {
   const context = useOutletContext<AuthGateContext>()
-  return <DeliveryPage linkedClient={api} onSessionInvalid={() => { void context.refreshSession() }} />
+  return <DeliveryPage linkedClient={api} onSessionInvalid={context.refreshSession} />
 }
 
 function AuthenticatedApplication({ authGateProps }: AppRouterProps) {
@@ -91,7 +79,7 @@ export function AppRouter({ authGateProps, featureClients }: AppRouterProps) {
     <Routes>
       <Route path="/" element={<Navigate to="/liff" replace />} />
       <Route path="/liff" element={<AuthenticatedApplication authGateProps={authGateProps} />}>
-        <Route index element={<HomePage />} />
+        <Route index element={<Navigate to="channels" replace />} />
         <Route path="channels" element={<ChannelRoute api={featureClients?.channelApi} />} />
         <Route path="account" element={<AccountRoute api={featureClients?.accountApi} />} />
         <Route path="rich-menus" element={<RichMenuSelectionRoute api={featureClients?.channelApi} />} />

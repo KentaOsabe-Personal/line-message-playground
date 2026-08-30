@@ -59,7 +59,7 @@ describe('共通application UI', () => {
 
     expect(document.title).toBe('チャネル管理 | LINE Message Playground')
     expect(container.querySelectorAll('h1')).toHaveLength(1)
-    expect(document.activeElement).toBe(container.querySelector('h1'))
+    expect(document.activeElement).toBe(container.querySelector('main'))
     expect(container.querySelector('[role="status"]')?.textContent).toBe('読み込み中です')
 
     const input = container.querySelector('input') as HTMLInputElement
@@ -74,26 +74,22 @@ describe('共通application UI', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('取得できませんでした')
   })
 
-  // テストケース: 認証済みownerがトップ画面を表示する。
-  // 期待値: 共通headerと指定順のnavigation・カードを表示し、トップ以外の機能内容をmountしない。
-  test('renders authenticated navigation and data-free home cards in the specified order', async () => {
+  // テストケース: 認証済みownerが認証入口を表示する。
+  // 期待値: 中間トップを挟まず、共通header付きのチャネル管理へ直行する。
+  test('renders authenticated navigation and redirects to channels', async () => {
     await act(async () => root.render(
       <MemoryRouter initialEntries={['/liff']}><AppRouter authGateProps={authGateProps} /></MemoryRouter>,
     ))
 
     const navLabels = [...container.querySelectorAll('nav a')].map((link) => link.textContent)
     expect(navLabels).toEqual(['チャネル管理', 'アカウント管理', 'リッチメニュー管理', 'メッセージ配信'])
-    expect(container.querySelector('a[href="/liff"]')?.textContent).toContain('LINE Message Playground')
+    expect(container.querySelector('a.application-brand[href="/liff/channels"]')?.textContent).toContain('LINE Message Playground')
     expect(container.textContent).toContain('Owner')
     expect(container.textContent).toContain('ログアウト')
-    expect(container.querySelector('nav [aria-current="page"]')).toBeNull()
+    expect(container.querySelector('nav [aria-current="page"]')?.textContent).toBe('チャネル管理')
 
-    const cards = [...container.querySelectorAll('[data-home-card]')]
-    expect(cards.map((card) => card.textContent)).toEqual(navLabels)
-    expect(cards.map((card) => card.getAttribute('href'))).toEqual([
-      '/liff/channels', '/liff/account', '/liff/rich-menus', '/liff/deliveries',
-    ])
-    expect(container.querySelector('h1')?.textContent).toBe('トップ')
+    expect(container.querySelectorAll('[data-home-card]')).toHaveLength(0)
+    expect(container.querySelector('h1')?.textContent).toBe('チャネル管理')
     expect(authApi.bootstrap).toHaveBeenCalledTimes(1)
   })
 
@@ -108,12 +104,12 @@ describe('共通application UI', () => {
     await act(async () => menuButton.click())
     expect(menuButton.getAttribute('aria-expanded')).toBe('true')
 
-    const channelsLink = container.querySelector('nav a[href="/liff/channels"]') as HTMLAnchorElement
-    await act(async () => channelsLink.click())
-    expect(channelsLink.getAttribute('aria-current')).toBe('page')
+    const accountLink = container.querySelector('nav a[href="/liff/account"]') as HTMLAnchorElement
+    await act(async () => accountLink.click())
+    expect(accountLink.getAttribute('aria-current')).toBe('page')
     expect(menuButton.getAttribute('aria-expanded')).toBe('false')
-    expect(document.title).toBe('チャネル管理 | LINE Message Playground')
-    expect(document.activeElement).toBe(container.querySelector('h1'))
+    expect(document.title).toBe('アカウント管理 | LINE Message Playground')
+    expect(document.activeElement).toBe(container.querySelector('main'))
 
     await act(async () => menuButton.click())
     await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
@@ -122,7 +118,7 @@ describe('共通application UI', () => {
   })
 
   // テストケース: 未定義URLを表示する。
-  // 期待値: 認証・共通headerなしで専用title、単一h1、トップへの明示Linkを表示する。
+  // 期待値: 認証・共通application headerなしで専用title、単一h1、チャネル管理への明示Linkを表示する。
   test('renders a standalone protected-data-free 404 page', async () => {
     await act(async () => root.render(
       <MemoryRouter initialEntries={['/unknown']}><AppRouter authGateProps={authGateProps} /></MemoryRouter>,
@@ -131,8 +127,8 @@ describe('共通application UI', () => {
     expect(document.title).toBe('ページが見つかりません | LINE Message Playground')
     expect(container.querySelectorAll('h1')).toHaveLength(1)
     expect(container.querySelector('h1')?.textContent).toBe('ページが見つかりません')
-    expect(container.querySelector('a')?.getAttribute('href')).toBe('/liff')
-    expect(container.querySelector('header')).toBeNull()
+    expect(container.querySelector('a')?.getAttribute('href')).toBe('/liff/channels')
+    expect(container.querySelector('header.application-header')).toBeNull()
     expect(authApi.bootstrap).not.toHaveBeenCalled()
   })
 })

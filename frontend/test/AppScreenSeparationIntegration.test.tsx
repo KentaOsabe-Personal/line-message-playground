@@ -146,23 +146,23 @@ describe('app-screen-separation task 8 integration contracts', () => {
 
   describe('8.1 route、認証、共通shell', () => {
     // テストケース: `/`をBrowser履歴相当のmemory routerで開く。
-    // 期待値: `/liff`への遷移はREPLACEとなり、トップのtitle、単一h1、共通shellを表示する。
-    test('replaces root history and renders the authenticated top shell', async () => {
+    // 期待値: 中間トップを挟まず`/liff/channels`へREPLACEし、共通shellを表示する。
+    test('replaces root history and renders the authenticated channel shell', async () => {
       const api = authApi()
       const router = createMemoryRouter([
         {
           path: '*',
-          element: <><AppRouter authGateProps={authGateProps(api)} /><LocationProbe /></>,
+          element: <><AppRouter authGateProps={authGateProps(api)} featureClients={featureClients()} /><LocationProbe /></>,
         },
       ], { initialEntries: ['/'] })
 
       await act(async () => root.render(<RouterProvider router={router} />))
 
-      expect(router.state.location.pathname).toBe('/liff')
+      expect(router.state.location.pathname).toBe('/liff/channels')
       expect(router.state.historyAction).toBe('REPLACE')
-      expect(document.title).toBe('LINE Message Playground')
+      expect(document.title).toBe('チャネル管理 | LINE Message Playground')
       expect(container.querySelectorAll('h1')).toHaveLength(1)
-      expect(container.querySelector('h1')?.textContent).toBe('トップ')
+      expect(container.querySelector('h1')?.textContent).toBe('チャネル管理')
       expect(container.querySelector('header')).not.toBeNull()
       expect(api.bootstrap).toHaveBeenCalledTimes(1)
     })
@@ -173,7 +173,7 @@ describe('app-screen-separation task 8 integration contracts', () => {
       const router = createMemoryRouter([
         {
           path: '*',
-          element: <><AppRouter authGateProps={authGateProps(authApi())} /><LocationProbe /></>,
+          element: <><AppRouter authGateProps={authGateProps(authApi())} featureClients={featureClients()} /><LocationProbe /></>,
         },
       ], { initialEntries: ['/liff'] })
       await act(async () => root.render(<RouterProvider router={router} />))
@@ -183,10 +183,10 @@ describe('app-screen-separation task 8 integration contracts', () => {
       expect(router.state.historyAction).toBe('PUSH')
       expect(document.title).toBe('アカウント管理 | LINE Message Playground')
       expect(container.querySelector('nav [aria-current="page"]')?.textContent).toBe('アカウント管理')
-      expect(document.activeElement).toBe(container.querySelector('h1'))
+      expect(document.activeElement).toBe(container.querySelector('main'))
 
       await act(async () => { await router.navigate(-1) })
-      expect(container.querySelector('h1')?.textContent).toBe('トップ')
+      expect(container.querySelector('h1')?.textContent).toBe('チャネル管理')
       await act(async () => { await router.navigate(1) })
       expect(container.querySelector('h1')?.textContent).toBe('アカウント管理')
     })
@@ -210,10 +210,10 @@ describe('app-screen-separation task 8 integration contracts', () => {
   })
 
   describe('8.2 チャネルとアカウントのroute分離', () => {
-    // テストケース: top、チャネル、アカウントの各URLを独立して表示する。
-    // 期待値: 現在routeのConsoleだけがreadを開始し、topと他routeは不要なAPIを呼ばない。
+    // テストケース: 認証入口、チャネル、アカウントの各URLを独立して表示する。
+    // 期待値: 認証入口はチャネル管理へ収束し、現在routeのConsoleだけがreadを開始する。
     test.each([
-      ['/liff', 0, 0],
+      ['/liff', 1, 0],
       ['/liff/channels', 1, 0],
       ['/liff/account', 0, 1],
     ] as const)('isolates channel and account reads at %s', async (path, channelReads, accountReads) => {
@@ -405,12 +405,12 @@ describe('app-screen-separation task 8 integration contracts', () => {
       expect(JSON.stringify(window.sessionStorage)).not.toContain('channel-secret-canary')
     })
 
-    // テストケース: 認証済みトップと機能画面の共通shellをkeyboard操作可能なDOMとして確認する。
+    // テストケース: 認証入口から表示される機能画面の共通shellをkeyboard操作可能なDOMとして確認する。
     // 期待値: header、nav、main、単一h1、label付きdisclosure、24px対象classのLinkを維持する。
     test('exposes the shared landmarks and keyboard-operable navigation contract', async () => {
       await act(async () => root.render(
         <MemoryRouter initialEntries={['/liff']}>
-          <AppRouter authGateProps={authGateProps(authApi())} />
+          <AppRouter authGateProps={authGateProps(authApi())} featureClients={featureClients()} />
         </MemoryRouter>,
       ))
 
@@ -423,7 +423,9 @@ describe('app-screen-separation task 8 integration contracts', () => {
       await act(async () => disclosure.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
       await act(async () => disclosure.click())
       expect(disclosure.getAttribute('aria-expanded')).toBe('true')
-      expect(container.querySelectorAll('a[data-home-card]')).toHaveLength(4)
+      expect(container.querySelectorAll('a[data-home-card]')).toHaveLength(0)
+      expect(container.querySelector('h1')?.textContent).toBe('チャネル管理')
+      expect(container.querySelector('nav [aria-current="page"]')?.textContent).toBe('チャネル管理')
     })
   })
 })

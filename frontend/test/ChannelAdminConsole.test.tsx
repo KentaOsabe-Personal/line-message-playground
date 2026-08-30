@@ -96,8 +96,10 @@ test('exposes one channel rich-menu detail link without inline mounting its cons
   ))
   const open = [...container.querySelectorAll('a')].find(link => link.textContent === 'リッチメニューを管理')
   expect(open?.getAttribute('href')).toBe(`/liff/rich-menus/${scoped.channelId}`)
+  expect(open?.classList.contains('button-link')).toBe(true)
+  expect(open?.classList.contains('secondary')).toBe(false)
   expect(container.querySelector('.rich-menu-admin')).toBeNull()
-  expect(container.textContent).toContain('LINEチャネル管理')
+  expect(container.textContent).toContain('登録チャネル')
 })
 
 // テストケース: provider未設定のlegacyチャネルカードを描画する。
@@ -131,7 +133,7 @@ test('keeps channel-card mutations closed for a persisted deactivation intent', 
   } }
   const client = api([pending]); vi.mocked(client.getChannel).mockResolvedValue(pending)
   await act(async () => root.render(<ChannelAdminConsole api={client} />))
-  const edit = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '編集')
+  const edit = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '設定を編集')
   expect(edit?.disabled).toBe(true)
   expect(container.textContent).toContain('無効化 checking')
 })

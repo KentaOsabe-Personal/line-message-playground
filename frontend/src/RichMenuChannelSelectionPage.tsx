@@ -101,8 +101,20 @@ export default function RichMenuChannelSelectionPage({ api: suppliedApi, onSessi
   }, [load])
 
   return (
-    <PageFrame title={pageMeta.title} heading={pageMeta.heading} routeFocusKey={location.pathname}>
+    <PageFrame
+      title={pageMeta.title}
+      heading={pageMeta.heading}
+      description="編集・確認するチャネルを選択してください。チャネルごとにLINE上の状態を分離して管理します。"
+      routeFocusKey={location.pathname}
+    >
       <section className="rich-menu-channel-selection" aria-label="リッチメニュー管理対象チャネル">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">SELECT CHANNEL</p>
+            <h2>管理対象を選択</h2>
+            <p>利用状態を確認して、作業するチャネルを開きます。</p>
+          </div>
+        </div>
         {state.kind === 'loading' && <p role="status">チャネル一覧を読み込んでいます…</p>}
         {state.kind === 'ready' && <p className="sr-only" role="status">{state.choices.length}件のチャネルを表示しました。</p>}
         {state.kind === 'failed' && (
@@ -118,11 +130,11 @@ export default function RichMenuChannelSelectionPage({ api: suppliedApi, onSessi
           </div>
         )}
         {state.kind === 'ready' && state.choices.length > 0 && (
-          <div className="channel-list">
+          <div className="rich-menu-channel-grid">
             {state.choices.map((choice) => (
-              <article className="channel-card" key={choice.channelId}>
+              <article className="channel-card rich-menu-channel-card" key={choice.channelId}>
                 <div className="channel-card-heading">
-                  <h2>{choice.label}</h2>
+                  <div><p className="card-kicker">Rich menu workspace</p><h3>{choice.label}</h3></div>
                   <span className={`status ${choice.mode.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`}>{choice.stateLabel}</span>
                 </div>
                 {choice.unavailableReason !== null && <p>{choice.unavailableReason}</p>}

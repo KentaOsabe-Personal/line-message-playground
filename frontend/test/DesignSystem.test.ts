@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
 
 const stylesheet = readFileSync(`${process.cwd()}/src/style.css`, 'utf8')
+const authStylesheet = readFileSync(`${process.cwd()}/src/auth-login.css`, 'utf8')
 const themeBlock = stylesheet.match(/@theme\s*\{([\s\S]*?)\}/)?.[1] ?? ''
 const implementationCss = stylesheet.replace(/@theme\s*\{[\s\S]*?\}/, '')
 
@@ -42,13 +43,23 @@ describe('全画面design system', () => {
     expect(shadows.every((value) => value.startsWith('var('))).toBe(true)
   })
 
-  // テストケース: 共通header、navigation、top、404をwide／narrowで表示する。
-  // 期待値: wideは横navigationと2列card、narrowはdisclosureと1列cardになり横overflowしない。
-  test('7.2 defines responsive shell and home card contracts', () => {
+  // テストケース: 共通header、navigation、機能workspace、404をwide／narrowで表示する。
+  // 期待値: wideは横navigationと広いworkspace、narrowはdisclosureと1列layoutになり横overflowしない。
+  test('7.2 defines responsive shell and feature workspace contracts', () => {
     expect(stylesheet).toMatch(/\.application-navigation,[\s\S]*\.owner-actions\s*\{[^}]*display:\s*flex/s)
-    expect(stylesheet).toMatch(/\.home-card-grid\s*\{[^}]*repeat\(2,/s)
-    expect(stylesheet).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.home-card-grid\s*\{[^}]*grid-template-columns:\s*1fr/s)
+    expect(stylesheet).toMatch(/\.page-heading\s*\{[^}]*max-width:/s)
+    expect(stylesheet).toMatch(/\.delivery-target-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2/s)
+    expect(stylesheet).toMatch(/@media\s*\(max-width:\s*820px\)[\s\S]*\.delivery-target-grid,[\s\S]*grid-template-columns:\s*1fr/s)
     expect(stylesheet).toMatch(/\.not-found-link,[\s\S]*\.button-link\s*\{/)
+  })
+
+  // テストケース: 未認証owner向けのログイン画面をwide／narrowで表示する。
+  // 期待値: wideは紹介と認証操作を分離し、narrowは1列へ収め、LINEログインを主要buttonとして示す。
+  test('7.2 styles a responsive, explicit LINE login experience', () => {
+    expect(authStylesheet).toMatch(/\.auth-page \.auth-card\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.08fr\)/s)
+    expect(authStylesheet).toMatch(/\.auth-page \.line-login-button\s*\{[^}]*width:\s*100%[^}]*background:\s*var\(--color-line\)/s)
+    expect(authStylesheet).toMatch(/@media\s*\(max-width:\s*820px\)[\s\S]*\.auth-page \.auth-card\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s)
+    expect(authStylesheet).not.toMatch(/#[0-9a-fA-F]{3,8}|rgb\(/)
   })
 
   // テストケース: PageFrameがheading、content、loading、success、failureを共通表示する。
@@ -56,7 +67,7 @@ describe('全画面design system', () => {
   test('7.3 styles page frame and semantic statuses consistently', () => {
     expect(stylesheet).toMatch(/\.page-frame\s*\{[^}]*max-width:/s)
     expect(stylesheet).toMatch(/\.page-status-loading[\s\S]*\.page-status-success[\s\S]*\.page-status-error/)
-    expect(stylesheet).toMatch(/h1:focus-visible\s*\{[^}]*scroll-margin-block-start:/s)
+    expect(stylesheet).toMatch(/\.page-frame:focus\s*\{[^}]*outline:\s*none/s)
   })
 
   // テストケース: チャネル管理を共通card、form、danger actionで表示する。
