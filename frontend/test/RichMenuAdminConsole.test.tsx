@@ -48,6 +48,25 @@ describe('RichMenuAdminConsole', () => {
     expect(richApi.getDeactivation).toHaveBeenCalledWith(channelId, { signal: controller.signal })
   })
 
+  // テストケース: rich-menuの安全なreadをroute signalで中止する。
+  // 期待値: abortをread errorやunknown operationとして表示せず、mutationを開始しない。
+  test('6.2 treats an aborted rich-menu read as lifecycle completion', async () => {
+    const channelApi = channels(); const richApi = menus(); const controller = new AbortController()
+    let rejectRead!: (error: unknown) => void
+    vi.mocked(richApi.getState).mockReturnValue(new Promise((_resolve, reject) => { rejectRead = reject }))
+    await act(async () => root.render(
+      <RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi} readSignal={controller.signal} />,
+    ))
+
+    controller.abort()
+    await act(async () => rejectRead(new DOMException('aborted', 'AbortError')))
+
+    expect(container.querySelector('[role="alert"]')).toBeNull()
+    expect(container.textContent).not.toContain('管理状態を取得できませんでした')
+    expect(richApi.createPreview).not.toHaveBeenCalled()
+    expect(richApi.startOperation).not.toHaveBeenCalled()
+  })
+
   // テストケース: 成功表示後の再取得で一領域が失敗する。
   // 期待値: 再取得開始時点で古い操作を消し、失敗後は安全な再取得だけを表示する。
   test('does not retain stale actions while refresh fails', async () => {

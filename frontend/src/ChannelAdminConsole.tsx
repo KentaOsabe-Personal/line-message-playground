@@ -28,17 +28,23 @@ export default function ChannelAdminConsole({ api: providedApi, onSessionInvalid
   const [editingId, setEditingId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const generation = useRef(0)
+  const readController = useRef<AbortController | null>(null)
   const operationLocks = useRef(new Set<string>())
   const api = useMemo(() => providedApi ?? createChannelAdminApiClient(createProtectedHttpClient({ onSessionInvalid })), [providedApi, onSessionInvalid])
 
   const load = useCallback(async () => {
+    readController.current?.abort()
+    const controller = new AbortController()
+    readController.current = controller
     const currentGeneration = ++generation.current
     setNotice(null)
     dispatch({ type: 'loadStarted', generation: currentGeneration })
     try {
-      const items = await api.listChannels()
+      const items = await api.listChannels({ signal: controller.signal })
+      if (controller.signal.aborted) return
       dispatch({ type: 'loadSucceeded', generation: currentGeneration, items })
     } catch {
+      if (controller.signal.aborted) return
       dispatch({
         type: 'loadFailed', generation: currentGeneration,
         error: { code: 'load_failed', summary: 'チャネル一覧を取得できませんでした。' },
@@ -48,7 +54,7 @@ export default function ChannelAdminConsole({ api: providedApi, onSessionInvalid
 
   useEffect(() => {
     void load()
-    return () => { generation.current += 1 }
+    return () => { generation.current += 1; readController.current?.abort() }
   }, [load])
 
   const operations = state.state === 'ready' || state.state === 'empty' ? state.operations : {}

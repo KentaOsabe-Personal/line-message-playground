@@ -79,7 +79,9 @@ export default function RichMenuAdminConsole({ channelId, channelApi: suppliedCh
       }
       dispatch({ type: 'loadSucceeded', generation: current, value: { channel, templates, rich, history, deactivation } })
     } catch (error) {
+      if (readSignal?.aborted === true) return
       const code = error instanceof ChannelAdminApiError || error instanceof RichMenuAdminApiError ? error.error.code : null
+      if (code === 'aborted') return
       if (code === 'authentication_required') {
         onSessionInvalid?.()
         return

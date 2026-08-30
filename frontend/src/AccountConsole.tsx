@@ -55,6 +55,8 @@ export default function AccountConsole({
   const [operation, setOperation] = useState<string | null>(null)
   const [targetErrors, setTargetErrors] = useState<Record<string, string>>({})
   const [globalError, setGlobalError] = useState<string | null>(null)
+  const [readError, setReadError] = useState<string | null>(null)
+  const [readVersion, setReadVersion] = useState(0)
   const [preview, setPreview] = useState<UnlinkPreview | null>(null)
   const lifetime = useRef(0)
 
@@ -62,18 +64,19 @@ export default function AccountConsole({
 
   useEffect(() => {
     if (session.state !== 'authenticated') return
+    const controller = new AbortController()
     let current = true
     setLoading(true)
-    setGlobalError(null)
-    void client.listChannels().then((items) => {
+    setReadError(null)
+    void client.listChannels({ signal: controller.signal }).then((items) => {
       if (current) setChannels(items)
     }).catch((caught) => {
-      if (current) setGlobalError(caught instanceof AccountApiError ? caught.error.summary : '配信先を取得できませんでした。')
+      if (current && !controller.signal.aborted) setReadError(caught instanceof AccountApiError ? caught.error.summary : '配信先を取得できませんでした。')
     }).finally(() => {
       if (current) setLoading(false)
     })
-    return () => { current = false }
-  }, [client, session.state])
+    return () => { current = false; controller.abort() }
+  }, [client, readVersion, session.state])
 
   if (session.state === 'unlinking') {
     return <UnlinkRecoveryPanel
@@ -185,7 +188,8 @@ export default function AccountConsole({
       <section aria-labelledby="recipient-title">
         <h3 id="recipient-title">配信先管理</h3>
         {loading && <p aria-live="polite">配信先を読み込んでいます…</p>}
-        {!loading && channels.length === 0 && !globalError && <p>登録可能なチャネルはありません。</p>}
+        {readError !== null && <div role="alert"><p>{readError}</p><button type="button" onClick={() => setReadVersion((version) => version + 1)}>配信先を再取得</button></div>}
+        {!loading && channels.length === 0 && readError === null && <p>登録可能なチャネルはありません。</p>}
         <ul className="channel-list">
           {channels.map((channel) => {
             const busy = operation === channel.channelId

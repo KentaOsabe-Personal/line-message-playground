@@ -68,6 +68,7 @@ export default function RichMenuChannelSelectionPage({ api: suppliedApi, onSessi
   const location = useLocation()
   const pageMeta = meta(location.pathname)
   const generation = useRef(0)
+  const readController = useRef<AbortController | null>(null)
   const [state, setState] = useState<SelectionState>({ kind: 'loading' })
   const api = useMemo(
     () => suppliedApi ?? createChannelAdminApiClient(createProtectedHttpClient({ onSessionInvalid })),
@@ -75,11 +76,14 @@ export default function RichMenuChannelSelectionPage({ api: suppliedApi, onSessi
   )
 
   const load = useCallback(async () => {
+    readController.current?.abort()
+    const controller = new AbortController()
+    readController.current = controller
     const current = ++generation.current
     setState({ kind: 'loading' })
     try {
-      const items = await api.listChannels()
-      if (generation.current !== current) return
+      const items = await api.listChannels({ signal: controller.signal })
+      if (generation.current !== current || controller.signal.aborted) return
       setState({ kind: 'ready', choices: items.map(projectRichMenuChannelChoice) })
     } catch (error) {
       if (generation.current !== current) return
@@ -93,7 +97,7 @@ export default function RichMenuChannelSelectionPage({ api: suppliedApi, onSessi
 
   useEffect(() => {
     void load()
-    return () => { generation.current += 1 }
+    return () => { generation.current += 1; readController.current?.abort() }
   }, [load])
 
   return (

@@ -2,9 +2,10 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
-import type { LinkedDeliveryApiClient } from '../src/deliveryApi'
+import { DeliveryApiError, type LinkedDeliveryApiClient } from '../src/deliveryApi'
 import type { LinkedDeliveryStatus, LinkedPreviewResponse } from '../src/deliveryDto'
 import DeliveryForm from '../src/DeliveryForm'
+import { createOwnerSessionStorage } from '../src/ownerSessionStorage'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -89,6 +90,18 @@ const clientWith = (
   ...overrides,
 })
 
+const memoryStorage = (): Storage => {
+  const values = new Map<string, string>()
+  return {
+    get length() { return values.size },
+    clear: () => values.clear(),
+    getItem: (key) => values.get(key) ?? null,
+    key: (index) => [...values.keys()][index] ?? null,
+    removeItem: (key) => { values.delete(key) },
+    setItem: (key, value) => { values.set(key, value) },
+  }
+}
+
 let container: HTMLDivElement
 let root: Root
 
@@ -131,6 +144,7 @@ const preparePreview = async (client: LinkedDeliveryApiClient) => {
 
 describe('linked delivery preview and result UI', () => {
   beforeEach(() => {
+    window.sessionStorage.clear()
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
@@ -140,6 +154,103 @@ describe('linked delivery preview and result UI', () => {
     await act(async () => root.unmount())
     container.remove()
     vi.restoreAllMocks()
+    window.sessionStorage.clear()
+  })
+
+  // テストケース: 配信対象read中に配信画面をunmountする。
+  // 期待値: target readだけをabortし、後着結果やerrorを新画面へ表示しない。
+  test('6.3 and 6.4 abort target reads and fence late results at route lifetime end', async () => {
+    let resolveChannels!: (value: []) => void
+    const client = clientWith({
+      listChannels: vi.fn().mockReturnValue(new Promise((resolve) => { resolveChannels = resolve })),
+    })
+    await act(async () => root.render(<DeliveryForm linkedClient={client} />))
+    const signal = vi.mocked(client.listChannels).mock.calls[0]?.[0]?.signal as AbortSignal
+    expect(signal).toBeInstanceOf(AbortSignal)
+
+    await act(async () => root.render(<p>移動先</p>))
+    expect(signal.aborted).toBe(true)
+    await act(async () => resolveChannels([]))
+    expect(container.textContent).toBe('移動先')
+    expect(client.send).not.toHaveBeenCalled()
+    expect(client.preview).not.toHaveBeenCalled()
+  })
+
+  // テストケース: tab-localにprocessing配信operation IDだけが保存されている。
+  // 期待値: 入力やpreviewを復元せず、同じIDのstatus readだけで既存結果stateをhydrateする。
+  test('6.5 hydrates a saved processing operation using only its status read', async () => {
+    const storage = createOwnerSessionStorage(memoryStorage())
+    storage.saveDeliveryOperationId(operationId)
+    const client = clientWith({ checkStatus: vi.fn().mockResolvedValue(status('processing')) })
+
+    await act(async () => root.render(<DeliveryForm linkedClient={client} ownerSessionStorage={storage} />))
+
+    expect(client.checkStatus).toHaveBeenCalledTimes(1)
+    expect(client.checkStatus).toHaveBeenCalledWith(operationId, { signal: expect.any(AbortSignal) })
+    expect(client.listChannels).not.toHaveBeenCalled()
+    expect(client.send).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('配信を処理中です')
+    expect(storage.readDeliveryOperationId()).toBe(operationId)
+    expect(container.querySelector('[name="subject"]')).toBeNull()
+  })
+
+  // テストケース: 保存operationがunknownまたは完了状態へhydrateされ、新しい配信を開始する。
+  // 期待値: unknownではIDを保持し、完了後の明示操作だけでIDを削除して空入力へ戻る。
+  test.each(['unknown', 'succeeded', 'failed'] as const)('6.5 converges saved %s operation without restoring content', async (resultStatus) => {
+    const storage = createOwnerSessionStorage(memoryStorage())
+    storage.saveDeliveryOperationId(operationId)
+    const client = clientWith({ checkStatus: vi.fn().mockResolvedValue(status(resultStatus)) })
+    await act(async () => root.render(<DeliveryForm linkedClient={client} ownerSessionStorage={storage} />))
+
+    expect(storage.readDeliveryOperationId()).toBe(operationId)
+    if (resultStatus === 'unknown') {
+      expect(container.textContent).not.toContain('新しい配信')
+      return
+    }
+    await click('新しい配信')
+    expect(storage.readDeliveryOperationId()).toBeNull()
+    expect(container.querySelector('[name="subject"]')).not.toBeNull()
+    expect(client.listChannels).toHaveBeenCalledTimes(1)
+  })
+
+  // テストケース: 保存operation IDのstatusがnot-foundを返す。
+  // 期待値: IDを削除し、安全なmessageと新規配信入力だけへ収束する。
+  test('6.5 clears a missing saved operation and falls back safely', async () => {
+    const storage = createOwnerSessionStorage(memoryStorage())
+    storage.saveDeliveryOperationId(operationId)
+    const client = clientWith({
+      checkStatus: vi.fn().mockRejectedValue(new DeliveryApiError({ code: 'operation_not_found', summary: 'private' }, 404)),
+    })
+    await act(async () => root.render(<DeliveryForm linkedClient={client} ownerSessionStorage={storage} />))
+
+    expect(storage.readDeliveryOperationId()).toBeNull()
+    expect(container.textContent).toContain('以前の配信状態を確認できませんでした。新しい配信を開始できます。')
+    expect(container.textContent).not.toContain('private')
+    expect(container.querySelector('[name="subject"]')).not.toBeNull()
+    expect(client.send).not.toHaveBeenCalled()
+  })
+
+  // テストケース: 保存operationのstatus確認で401後、再認証により配信pageを再mountする。
+  // 期待値: 保存IDを維持して同じstatusだけを再確認し、新規sendを作らない。
+  test('6.6 rechecks the same saved operation after session invalidation', async () => {
+    const storage = createOwnerSessionStorage(memoryStorage())
+    storage.saveDeliveryOperationId(operationId)
+    const invalid = vi.fn()
+    const checkStatus = vi.fn()
+      .mockRejectedValueOnce(new DeliveryApiError({ code: 'authentication_required', summary: 'login' }, 401))
+      .mockResolvedValueOnce(status('succeeded'))
+    const client = clientWith({ checkStatus })
+
+    await act(async () => root.render(<DeliveryForm linkedClient={client} ownerSessionStorage={storage} onSessionInvalid={invalid} />))
+    expect(invalid).toHaveBeenCalledTimes(1)
+    expect(storage.readDeliveryOperationId()).toBe(operationId)
+    await act(async () => root.render(<p>login</p>))
+    await act(async () => root.render(<DeliveryForm linkedClient={client} ownerSessionStorage={storage} onSessionInvalid={invalid} />))
+
+    expect(checkStatus).toHaveBeenCalledTimes(2)
+    expect(checkStatus.mock.calls.map((call) => call[0])).toEqual([operationId, operationId])
+    expect(client.send).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('LINEに受け付けられました')
   })
 
   // テストケース: 5軸の入力から受取確認付きpreviewを表示し、入力へ戻る。
@@ -194,7 +305,7 @@ describe('linked delivery preview and result UI', () => {
 
     await act(async () => resolveSend(status('processing')))
     await click('状態を再確認')
-    expect(client.checkStatus).toHaveBeenCalledWith(operationId)
+    expect(client.checkStatus).toHaveBeenCalledWith(operationId, { signal: expect.any(AbortSignal) })
     expect(client.send).toHaveBeenCalledTimes(1)
     expect(container.textContent).toContain('LINEに受け付けられました')
     expect(container.textContent).toContain('配信状態')
@@ -242,7 +353,7 @@ describe('linked delivery preview and result UI', () => {
     expect(container.textContent).not.toContain(recipientId)
 
     await click('状態を再確認')
-    expect(client.checkStatus).toHaveBeenCalledWith(operationId)
+    expect(client.checkStatus).toHaveBeenCalledWith(operationId, { signal: expect.any(AbortSignal) })
     expect(client.send).toHaveBeenCalledTimes(1)
   })
 

@@ -19,6 +19,8 @@ import {
   transitionLinkedDelivery,
 } from './deliveryState'
 import { createProtectedHttpClient } from './httpApi'
+import { createOwnerSessionStorage } from './ownerSessionStorage'
+import type { OwnerSessionStorage } from './ownerSessionStorage'
 
 type LoadState<T> =
   | { status: 'loading' }
@@ -29,6 +31,7 @@ type Props = {
   linkedClient?: LinkedDeliveryApiClient
   createOperationId?: () => string
   onSessionInvalid?: () => void
+  ownerSessionStorage?: OwnerSessionStorage
 }
 
 const channelReason = (choice: DeliveryChannelChoice): string | null =>
@@ -105,7 +108,8 @@ function LinkedDeliveryForm({
   linkedClient,
   createOperationId = () => crypto.randomUUID(),
   onSessionInvalid,
-}: Pick<Props, 'linkedClient' | 'createOperationId' | 'onSessionInvalid'>) {
+  ownerSessionStorage: suppliedOwnerSessionStorage,
+}: Props) {
   const deliveryClient = useMemo(
     () => linkedClient ?? createLinkedDeliveryApiClient(createProtectedHttpClient({
       onSessionInvalid,
@@ -116,6 +120,9 @@ function LinkedDeliveryForm({
     transitionLinkedDelivery,
     initialLinkedDeliveryState,
   )
+  const [ownerSessionStorage] = useState(() => suppliedOwnerSessionStorage ?? createOwnerSessionStorage())
+  const [storedOperationId, setStoredOperationId] = useState(() => ownerSessionStorage.readDeliveryOperationId())
+  const [resumeMessage, setResumeMessage] = useState<string | null>(null)
   const [channels, setChannels] = useState<LoadState<DeliveryChannelChoice>>({
     status: 'loading',
   })
@@ -129,19 +136,26 @@ function LinkedDeliveryForm({
   const submitInFlight = useRef(false)
   const [statusError, setStatusError] = useState<SafeError | null>(null)
   const lifetime = useRef(0)
+  const statusControllers = useRef(new Set<AbortController>())
   const selectedChannelId = state.input.channelId
 
-  useEffect(() => () => { lifetime.current += 1 }, [])
+  useEffect(() => () => {
+    lifetime.current += 1
+    statusControllers.current.forEach((controller) => controller.abort())
+    statusControllers.current.clear()
+  }, [])
 
   useEffect(() => {
+    if (storedOperationId !== null) return
+    const controller = new AbortController()
     let active = true
     setChannels({ status: 'loading' })
-    void deliveryClient.listChannels().then(
+    void deliveryClient.listChannels({ signal: controller.signal }).then(
       (items) => {
         if (active) setChannels({ status: 'loaded', items })
       },
       (error: unknown) => {
-        if (active) {
+        if (active && !controller.signal.aborted) {
           setChannels({
             status: 'error',
             error: normalizeError(error, 'チャネル一覧を取得できませんでした。'),
@@ -151,24 +165,25 @@ function LinkedDeliveryForm({
     )
     return () => {
       active = false
+      controller.abort()
     }
-  }, [deliveryClient, channelLoadVersion])
+  }, [deliveryClient, channelLoadVersion, storedOperationId])
 
   useEffect(() => {
+    if (storedOperationId !== null) return
+    const controller = new AbortController()
     let active = true
     if (selectedChannelId === null) {
       setRecipients({ status: 'loaded', items: [] })
-      return () => {
-        active = false
-      }
+      return () => { active = false; controller.abort() }
     }
     setRecipients({ status: 'loading' })
-    void deliveryClient.listRecipients(selectedChannelId).then(
+    void deliveryClient.listRecipients(selectedChannelId, { signal: controller.signal }).then(
       (items) => {
         if (active) setRecipients({ status: 'loaded', items })
       },
       (error: unknown) => {
-        if (active) {
+        if (active && !controller.signal.aborted) {
           setRecipients({
             status: 'error',
             error: normalizeError(error, 'recipient一覧を取得できませんでした。'),
@@ -178,8 +193,44 @@ function LinkedDeliveryForm({
     )
     return () => {
       active = false
+      controller.abort()
     }
-  }, [deliveryClient, recipientLoadVersion, selectedChannelId])
+  }, [deliveryClient, recipientLoadVersion, selectedChannelId, storedOperationId])
+
+  useEffect(() => {
+    if (storedOperationId === null) return
+    const operationId = storedOperationId
+    const controller = new AbortController()
+    statusControllers.current.add(controller)
+    const operationLifetime = lifetime.current
+    dispatch({ type: 'hydrateStarted', operationId })
+    setStatusError(null)
+    void deliveryClient.checkStatus(operationId, { signal: controller.signal }).then((result) => {
+      if (controller.signal.aborted || lifetime.current !== operationLifetime) return
+      dispatch({ type: 'deliveryUpdated', result })
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted || lifetime.current !== operationLifetime) return
+      if (error instanceof DeliveryApiError && error.httpStatus === 401) {
+        if (linkedClient !== undefined) onSessionInvalid?.()
+        return
+      }
+      if (error instanceof DeliveryApiError && error.httpStatus === 404) {
+        ownerSessionStorage.clearDeliveryOperationId()
+        setStoredOperationId(null)
+        setResumeMessage('以前の配信状態を確認できませんでした。新しい配信を開始できます。')
+        dispatch({ type: 'hydrateMissing' })
+        return
+      }
+      setStatusError(normalizeError(error, '配信状態を確認できませんでした。'))
+      dispatch({ type: 'networkFailed' })
+    }).finally(() => {
+      statusControllers.current.delete(controller)
+    })
+    return () => {
+      controller.abort()
+      statusControllers.current.delete(controller)
+    }
+  }, [deliveryClient, linkedClient, onSessionInvalid, ownerSessionStorage, storedOperationId])
 
   const selectedRecipient = recipients.status === 'loaded'
     ? recipients.items.find((choice) =>
@@ -230,6 +281,7 @@ function LinkedDeliveryForm({
     submitInFlight.current = true
     setStatusError(null)
     const operationId = createOperationId()
+    ownerSessionStorage.saveDeliveryOperationId(operationId)
     const request = {
       ...state.input,
       channelId: state.input.channelId!,
@@ -261,23 +313,38 @@ function LinkedDeliveryForm({
       state.phase !== 'uncertain'
     ) return
     const operationId = state.operationId
+    const controller = new AbortController()
+    statusControllers.current.add(controller)
     const operationLifetime = lifetime.current
     setStatusError(null)
     dispatch({ type: 'checkStarted' })
     try {
-      const result = await deliveryClient.checkStatus(operationId)
+      const result = await deliveryClient.checkStatus(operationId, { signal: controller.signal })
       if (lifetime.current !== operationLifetime) return
       dispatch({ type: 'deliveryUpdated', result })
     } catch (error) {
-      if (lifetime.current !== operationLifetime) return
+      if (lifetime.current !== operationLifetime || controller.signal.aborted) return
       const safeError = normalizeError(error, '配信状態を確認できませんでした。')
+      if (error instanceof DeliveryApiError && error.httpStatus === 401) {
+        if (linkedClient !== undefined) onSessionInvalid?.()
+        return
+      }
       setStatusError(safeError)
       if (error instanceof DeliveryApiError && error.httpStatus === 404) {
         dispatch({ type: 'statusMissing' })
       } else {
         dispatch({ type: 'networkFailed' })
       }
+    } finally {
+      statusControllers.current.delete(controller)
     }
+  }
+
+  const startNewDelivery = () => {
+    ownerSessionStorage.clearDeliveryOperationId()
+    setStoredOperationId(null)
+    setResumeMessage(null)
+    dispatch({ type: 'newDelivery' })
   }
 
   const editing = state.phase === 'editing' || state.phase === 'previewing'
@@ -285,6 +352,7 @@ function LinkedDeliveryForm({
   return (
     <section className="delivery" aria-labelledby="delivery-title">
       <h2 id="delivery-title">配信内容</h2>
+      {resumeMessage !== null && <p className="notice" role="status">{resumeMessage}</p>}
 
       {editing && (
         <form onSubmit={(event) => { event.preventDefault(); void preview() }}>
@@ -535,7 +603,7 @@ function LinkedDeliveryForm({
           {statusError !== null && <p className="notice error" role="alert">{statusError.summary}</p>}
           <div className="actions">
             <button type="button" onClick={() => void checkStatus()}>状態を再確認</button>
-            <button type="button" className="secondary" onClick={() => dispatch({ type: 'newDelivery' })}>新しい配信</button>
+            <button type="button" className="secondary" onClick={startNewDelivery}>新しい配信</button>
           </div>
         </div>
       )}
@@ -570,7 +638,7 @@ function LinkedDeliveryForm({
           <div className="delivery-status-line"><strong>配信状態</strong><span>失敗</span></div>
           <DeliverySnapshotSummary result={state.result} />
           <ReceiptSummary receipt={state.result.receipt} />
-          <button type="button" onClick={() => dispatch({ type: 'newDelivery' })}>新しい配信</button>
+          <button type="button" onClick={startNewDelivery}>新しい配信</button>
         </div>
       )}
 
@@ -580,7 +648,7 @@ function LinkedDeliveryForm({
           <p>{state.error.summary}</p>
           <div className="actions">
             <button type="button" className="secondary" onClick={() => dispatch({ type: 'backToEditing' })}>入力へ戻る</button>
-            <button type="button" onClick={() => dispatch({ type: 'newDelivery' })}>新しい配信</button>
+            <button type="button" onClick={startNewDelivery}>新しい配信</button>
           </div>
         </div>
       )}

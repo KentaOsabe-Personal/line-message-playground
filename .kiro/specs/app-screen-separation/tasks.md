@@ -176,8 +176,8 @@
   - _Boundary: AppRouter, RichMenuChannelSelectionPage, RichMenuAdminPage_
   - _Depends: 5.1, 5.2, 5.3_
 
-- [ ] 6. route単位readと配信operation追跡を接続する
-- [ ] 6.1 (P) アカウント、チャネル、rich-menu selectorのsafe readをpage lifetimeへ接続する
+- [x] 6. route単位readと配信operation追跡を接続する
+- [x] 6.1 (P) アカウント、チャネル、rich-menu selectorのsafe readをpage lifetimeへ接続する
   - account／channel管理のlist、detail、状態GETとselectorのchannel list readへsignalを伝播し、route unmount時に中止する。
   - abort済みresponseをerror表示にせず、abort不可能な後着responseをgenerationで無視する。
   - 明示retryは同じreadだけを再実行し、update、unlink、credential確認等を対象にしない。
@@ -185,7 +185,7 @@
   - _Requirements: 4.4, 5.3, 6.1, 8.3, 8.4, 9.1, 9.3, 9.4, 9.5, 9.6, 9.7_
   - _Boundary: AccountPage, ChannelAdminPage, RichMenuChannelSelectionPage_
   - _Depends: 1.4, 4.1, 4.2, 5.4_
-- [ ] 6.2 (P) rich-menuのreadと状態確認をpage lifetimeへ接続する
+- [x] 6.2 (P) rich-menuのreadと状態確認をpage lifetimeへ接続する
   - list、detail、履歴、実状態確認のうち安全なreadだけへsignalを渡す。
   - preview、apply、detach、cleanup等のmutationにroute signalや汎用retryを渡さない。
   - abort／late responseは既存operation stateを上書きせず、再訪時にBackend projectionを取得する。
@@ -194,7 +194,7 @@
   - _Requirements: 6.9, 8.3, 8.4, 9.1, 9.3, 9.4, 9.5, 9.6, 9.7_
   - _Boundary: RichMenuAdminPage_
   - _Depends: 1.4, 5.4_
-- [ ] 6.3 (P) 配信対象とoperation状態のreadをpage lifetimeへ接続する
+- [x] 6.3 (P) 配信対象とoperation状態のreadをpage lifetimeへ接続する
   - channel／recipient取得と既存operation status確認へsignalを渡し、send／previewには渡さない。
   - abortと後着responseをerror表示や新規sendへ変換せず、現在generationだけを反映する。
   - retry操作はtarget／status取得だけに限定し、結果不明時は同じoperation IDの確認だけを許す。
@@ -202,7 +202,7 @@
   - _Requirements: 7.2, 7.3, 8.3, 8.4, 9.3, 9.4, 9.5, 9.6, 9.7_
   - _Boundary: DeliveryPage_
   - _Depends: 1.4, 4.3_
-- [ ] 6.4 route横断のlate result fenceとread retryを統合する
+- [x] 6.4 route横断のlate result fenceとread retryを統合する
   - route location／request generationを使い、中止不能または完了済みreadの後着結果を移動先へ反映しない。
   - 共通loading／error chromeを残し、安全なreadだけに明示retryを表示する。
   - status変化を色以外のtextとroleで通知し、refreshではh1や入力focusを移さない。
@@ -211,7 +211,7 @@
   - _Requirements: 2.5, 8.3, 8.4, 9.1, 9.3, 9.4, 9.5, 9.6, 9.7, 10.4, 10.5_
   - _Boundary: ScopedReadContract, FeaturePageAdapters, PageFrame_
   - _Depends: 6.1, 6.2, 6.3_
-- [ ] 6.5 配信operation IDを安全にhydrateできる状態へ接続する
+- [x] 6.5 配信operation IDを安全にhydrateできる状態へ接続する
   - send受付時にcanonical operation IDだけをtab-localへ保存し、processing／unknownでは保持する。
   - 保存IDのstatusを既存配信stateへhydrateし、本文、subject、recipient、previewを復元しない。
   - completed後の「新しい配信」でIDを削除し、invalid／not-found IDも安全なmessage後に消去する。
@@ -220,7 +220,7 @@
   - _Requirements: 7.2, 7.3, 8.4, 8.5, 8.6, 12.6_
   - _Boundary: OwnerSessionStorage, DeliveryPage_
   - _Depends: 1.3, 6.3_
-- [ ] 6.6 配信page再訪と再認証後の同一operation確認を統合する
+- [x] 6.6 配信page再訪と再認証後の同一operation確認を統合する
   - 再訪時に保存IDがあれば新規入力を復元せず、同じIDのstatus確認だけを開始する。
   - status確認の401では保護contentを外し、再認証後に同じIDを確認して新しいsendを作らない。
   - processing、succeeded、failed、unknownを既存契約どおり表示し、unknownでは新規自動再送を禁止する。

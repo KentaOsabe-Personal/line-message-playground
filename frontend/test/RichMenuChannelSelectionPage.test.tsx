@@ -39,6 +39,26 @@ describe('リッチメニューチャネル選択', () => {
     vi.clearAllMocks()
   })
 
+  // テストケース: selectorのchannel read中に別routeへ移動する。
+  // 期待値: selector固有signalを中止し、後着結果を描画しない。
+  test('6.1 aborts selector read and fences its late result on route leave', async () => {
+    let resolveRead!: (value: ChannelAdminItem[]) => void
+    const client = api([])
+    vi.mocked(client.listChannels).mockReturnValue(new Promise((resolve) => { resolveRead = resolve }))
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={['/liff/rich-menus']}>
+        <RichMenuChannelSelectionPage api={client} />
+      </MemoryRouter>,
+    ))
+    const signal = vi.mocked(client.listChannels).mock.calls[0]?.[0]?.signal as AbortSignal
+    expect(signal).toBeInstanceOf(AbortSignal)
+
+    await act(async () => root.render(<MemoryRouter><p>移動先</p></MemoryRouter>))
+    expect(signal.aborted).toBe(true)
+    await act(async () => resolveRead([channel()]))
+    expect(container.textContent).toBe('移動先')
+  })
+
   // テストケース: active、inactive、provider未設定、lifecycle進行中のチャネルを投影する。
   // 期待値: 各チャネルをeditable、readOnly、unavailable、recoveryOnlyへ純粋に分類する。
   test('5.1 projects every registered channel into one safe rich-menu mode', () => {

@@ -50,6 +50,24 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 
+// テストケース: チャネル一覧readの途中で管理画面をunmountする。
+// 期待値: read signalを中止し、mutation APIへsignalを追加しない。
+test('6.1 scopes channel reads to the console lifetime without changing mutation calls', async () => {
+  let resolveRead!: (value: ChannelAdminItem[]) => void
+  const client = api([])
+  vi.mocked(client.listChannels).mockReturnValue(new Promise((resolve) => { resolveRead = resolve }))
+  await act(async () => root.render(<ChannelAdminConsole api={client} />))
+
+  const signal = vi.mocked(client.listChannels).mock.calls[0]?.[0]?.signal as AbortSignal
+  expect(signal).toBeInstanceOf(AbortSignal)
+  await act(async () => root.render(<p>移動先</p>))
+  expect(signal.aborted).toBe(true)
+  await act(async () => resolveRead([channel()]))
+  expect(container.textContent).toBe('移動先')
+  expect(client.register).not.toHaveBeenCalled()
+  expect(client.update).not.toHaveBeenCalled()
+})
+
 // テストケース: 空一覧、activeチャネル、inactiveチャネルを順に描画する。
 // 期待値: 各状態を区別し、inactiveチャネルを利用可能とは表示しない。
 test('renders empty and ready states without treating inactive channels as available', async () => {
