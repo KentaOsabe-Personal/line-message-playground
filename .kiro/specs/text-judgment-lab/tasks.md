@@ -60,46 +60,46 @@
   - 完了時、拒否理由、再認証、利用確認再試行、読取専用会話保持を区別して表示・操作制御できる。
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.6, 10.5, 11.6_
 
-- [ ] 3. Jev判定と正規化境界を実装する
-- [ ] 3.1 (P) 固定9質問と最小相談文脈を構築する
+- [x] 3. Jev判定と正規化境界を実装する
+- [x] 3.1 (P) 固定9質問と最小相談文脈を構築する
   - topic、relevance、change、scope、workaround、result、impact evidence、Score、Noulを独立質問として固定する。
   - 現在発言、質問ID、確定回答、impact、直近2件の受理済み発言だけからstateを作る。
   - 完了時、失敗発言・別相談・全履歴・token・profileをJevへ送らず一括要求を生成できる。
   - _Requirements: 3.1, 3.5, 8.1, 8.2, 8.3, 8.9, 13.7_
   - _Boundary: JudgmentQuestions_
   - _Depends: 1.2_
-- [ ] 3.2 (P) Jev外部通信gatewayを実装する
+- [x] 3.2 (P) Jev外部通信gatewayを実装する
   - 固定endpoint・modelで一回だけPOSTし、接続2秒・全体8秒・128 KiB上限を適用する。
   - 非2xx、timeout、過大body、JSON envelope不正をtransport失敗へ変換し、自動retry、redirect、model fallbackを行わない。
   - 完了時、生request・response・API key・例外を上位へ漏らさずmonotonic所要時間を返す。
   - _Requirements: 3.1, 11.5, 11.6, 11.7, 13.6, 13.7_
   - _Boundary: JevGateway_
   - _Depends: 1.1, 1.2_
-- [ ] 3.3 (P) 判定応答の完全性検証と正規化を実装する
+- [x] 3.3 (P) 判定応答の完全性検証と正規化を実装する
   - transport検証済みJSONについて、model、全9回答、質問type、候補、確率、総和、confidence、有限数、score、noulの意味的完全性を検証する。
   - Choice 0.70、Score 1.5とevidence/confidence、Noul 0.20/0.80でEvidenceへ正規化する。
   - 完了時、部分結果を公開せず、丸め前数値と固定legendだけを安全な公開結果へ変換できる。
   - _Requirements: 3.1, 4.2, 4.3, 4.4, 6.3, 6.4, 7.1, 7.2, 7.3, 7.7, 12.3, 12.4_
   - _Boundary: JudgmentPolicy_
   - _Depends: 1.2_
-- [ ] 3.4 (P) 本人単位の短期利用量・同時実行制限を実装する
+- [x] 3.4 (P) 本人単位の短期利用量・同時実行制限を実装する
   - digestごとに同時1件、60秒10件をmutex、deque、実行中flagで管理する。
   - 失敗も件数へ含め、外部通信中はlockせず、例外時も実行枠を解放する。
   - 完了時、本文・判定を保持せず単一プロセス内で429と正常解放を再現できる。
   - _Requirements: 11.7, 13.2, 13.7_
   - _Boundary: LabLimits_
   - _Depends: 1.2_
-- [ ] 3.5 判定serviceで本人・利用量・Jev・正規化を合成する
+- [x] 3.5 判定serviceで本人・利用量・Jev・正規化を合成する
   - 実行枠確保、固定質問生成、gateway呼出し、全体正規化を順に合成する。
   - Jev返却後もprincipal期限を再確認し、失効結果を公開しない。
   - 完了時、成功結果または安全な失敗だけがHTTP境界へ返り、枠が必ず解放される。
   - _Requirements: 3.1, 3.6, 11.5, 11.6, 11.7_
-- [ ] 3.6 固定質問と判定policyを境界値で検証する
+- [x] 3.6 固定質問と判定policyを境界値で検証する
   - 9質問の独立性、unknown・未言及・要確認、否定、対象外混在をfixtureで検証する。
   - Choice、Score、Noulの閾値前後と欠損・未知・NaN・部分失敗を検証する。
   - 完了時、全ケースが日本語のテストケース・期待値コメント付きで再現可能に通る。
   - _Requirements: 3.1, 4.2, 4.3, 4.4, 6.3, 7.7, 11.6, 12.3, 12.4_
-- [ ] 3.7 gateway・service・利用量制限を障害条件で検証する
+- [x] 3.7 gateway・service・利用量制限を障害条件で検証する
   - HTTPX mockで遅いchunk、timeout、429、529、過大・不完全応答を再現する。
   - 一回だけの呼出し、全体失敗、期限再確認、同時1件・60秒10件、例外解放を検証する。
   - 完了時、外部負荷試験なしでretry禁止、部分結果非公開、制限境界が自動テストで通る。
