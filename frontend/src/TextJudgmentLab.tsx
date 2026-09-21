@@ -64,7 +64,7 @@ export default function TextJudgmentLab({ controller, access, getValidIdToken }:
           <details open={state.core.stage.presentation === 'details_open'}>
             <summary>詳しい手順</summary>
             <ol>{guide.steps.map((step) => <li key={step}>{step}</li>)}</ol>
-            <a href={getOfficialHelpLink(guide.helpUrl)}>LINE公式案内</a>
+            <a href={getOfficialHelpLink(guide.helpUrl)} rel="noopener noreferrer">LINE公式案内</a>
             <p>確認日: {guide.checkedOn}</p>
           </details>
           <p>{question?.prompt}</p>
@@ -75,6 +75,11 @@ export default function TextJudgmentLab({ controller, access, getValidIdToken }:
           : state.core.stage.outcome === 'unresolved' ? (state.core.confirmed.topic === 'notification_settings' ? LAB_CONTENT.messages.settingsUnresolved : LAB_CONTENT.messages.missingUnresolved)
             : LAB_CONTENT.messages[state.core.stage.outcome]
       )}</p>}
+      {state.core.stage.kind === 'ended' && state.core.stage.outcome === 'unresolved' && state.core.confirmed.topic !== null && state.core.confirmed.scope !== null && (() => {
+        const suffix = state.core.confirmed.scope === 'specific' ? 'specific' : 'all'
+        const guide = getGuide(`${state.core.confirmed.topic === 'missing_notification' ? 'missing' : 'settings'}_${suffix}`)
+        return <a href={getOfficialHelpLink(guide.helpUrl)} rel="noopener noreferrer">LINE公式案内</a>
+      })()}
     </div>
 
     {!ended && state.core.stage.kind === 'start' && <div aria-label="入力例">
