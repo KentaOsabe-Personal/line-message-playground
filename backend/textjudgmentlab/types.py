@@ -67,6 +67,10 @@ class LabPrincipal:
     def is_valid_at(self, now: datetime) -> bool:
         return now < self.expires_at
 
+    @property
+    def is_authenticated(self) -> bool:
+        return True
+
     def __repr__(self) -> str:
         return f"LabPrincipal(expires_at={self.expires_at!r}, owner_digest=<redacted>)"
 

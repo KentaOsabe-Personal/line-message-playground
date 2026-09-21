@@ -57,6 +57,20 @@ export type JudgmentResponse = {
   }
 }
 
+export type JudgmentRequest = {
+  contractVersion: 1
+  consultationId: string
+  requestId: string
+  revision: number
+  text: string
+  context: {
+    question: QuestionId
+    confirmed: ConfirmedAnswers
+    recentUserTexts: readonly string[]
+    impact: Impact
+  }
+}
+
 export type LabAccessState =
   | { kind: 'initializing' }
   | { kind: 'authorized'; expiresAt: string; remainingMs: number }

@@ -29,32 +29,32 @@
   - 完了時、ラボ無効状態で既存環境が起動でき、有効化時だけ不足設定がラボ503として観測できる。
   - _Requirements: 1.3, 13.2, 13.6, 13.7_
 
-- [ ] 2. 本人専用の認証境界を実装する
-- [ ] 2.1 (P) LINE ID token検証gatewayを実装する
+- [x] 2. 本人専用の認証境界を実装する
+- [x] 2.1 (P) LINE ID token検証gatewayを実装する
   - 固定verify endpointへサーバー設定channel IDで一回だけ照会し、接続を含む全体4秒期限の内側でissuer、audience、expiry、subjectを検証する。
   - audience違い、本人不一致、照会障害を安全な分類へ変換し、profile情報とraw subjectを捨てる。
   - 完了時、検証済み本人情報か固定失敗だけが認証境界へ返る。
   - _Requirements: 1.1, 1.2, 1.3, 1.6, 11.6, 13.6_
   - _Boundary: LabLineGateway_
   - _Depends: 1.1, 1.2_
-- [ ] 2.2 ラボ専用Bearer認証と本人permissionを実装する
+- [x] 2.2 ラボ専用Bearer認証と本人permissionを実装する
   - tokenから専用principalを作り、本人digestを定数時間比較し、Django userやowner sessionを作らない。
   - token期限を保護操作ごとに確認し、Jev判定を認証・認可に使わない。
   - 完了時、owner cookieだけではラボを使えず、ラボ証明だけでは管理権限を得られない。
   - _Requirements: 1.1, 1.2, 1.4, 1.5, 1.6, 3.6_
-- [ ] 2.3 ラボ専用の安全なHTTP基底境界を実装する
+- [x] 2.3 ラボ専用の安全なHTTP基底境界を実装する
   - Bearer認証・permission、canonical HTTPS Origin完全一致、raw body 32 KiB・Authorization 8 KiB上限、cookie/CSRF非依存を全Lab Viewへ固定する。
   - 認証、parse、media type、method、throttle、想定外例外を専用error schemaへ縮約し全応答をno-storeにする。
   - 完了時、成功・全失敗経路でowner APIのschemaやCSRF挙動を変更せず安全な応答を返す。
   - _Requirements: 1.2, 1.3, 1.4, 1.5, 11.6, 13.6, 13.7_
-- [ ] 2.4 (P) FrontendラボHTTP clientを実装する
+- [x] 2.4 (P) FrontendラボHTTP clientを実装する
   - Bearer token、credentials omit、cache no-store、canonical endpointでaccessとjudgmentを呼ぶ。
   - 401、403、429、502、503、504、通信失敗を会話・認証用の固定失敗へ変換する。
   - 完了時、cookieや秘密を保存せず検証済みDTOまたは安全な失敗だけを返す。
   - _Requirements: 1.4, 11.6, 13.6, 13.7_
   - _Boundary: LabHttpClient_
   - _Depends: 1.3, 1.5_
-- [ ] 2.5 LIFF本人確認と認証期限制御を実装する
+- [x] 2.5 LIFF本人確認と認証期限制御を実装する
   - 開発用LIFFだけを初期化してID tokenを取得し、profile取得や管理loginへfallbackしない。
   - serverTimeと往復時間、monotonic/wall-clock経過、visibilitychange/pageshowで期限を保守的に判定する。
   - 完了時、拒否理由、再認証、利用確認再試行、読取専用会話保持を区別して表示・操作制御できる。
