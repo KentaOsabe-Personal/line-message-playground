@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { AppRouter } from '../src/App'
 import type { AuthApiClient } from '../src/authApi'
 import type { LinePlatformLiffAdapter } from '../src/liffClient'
+import { LabHttpError, type LabHttpClient } from '../src/textJudgmentLabApi'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -74,6 +75,37 @@ describe('AppRouter', () => {
     expect(container.textContent).toContain('ページが見つかりません')
     expect(container.querySelector('a')?.getAttribute('href')).toBe('/liff/channels')
     expect(authApi.bootstrap).not.toHaveBeenCalled()
+  })
+
+  // テストケース: 専用ラボrouteへ直接アクセスする
+  // 期待値: owner認証・shellをmountせず、専用LIFFと専用APIだけを利用する
+  test('mounts text judgment lab route outside owner authentication and shell', async () => {
+    const labLiff: LinePlatformLiffAdapter = {
+      ...liffAdapter,
+      initialize: vi.fn().mockResolvedValue('liff_browser'),
+      getIdToken: vi.fn().mockReturnValue('lab-token'),
+    }
+    const labApi: LabHttpClient = {
+      checkAccess: vi.fn().mockRejectedValue(new LabHttpError('not_allowed')),
+      judge: vi.fn(),
+    }
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={['/labs/text-judgment']}>
+        <AppRouter
+          authGateProps={authProps}
+          featureClients={{ textJudgmentLabApi: labApi }}
+          textJudgmentLabAuthGateProps={{
+            liffAdapter: labLiff,
+            config: { liffId: '123-lab', liffUrl: 'https://liff.line.me/123-lab', entryUrl: 'https://lab.example.test/labs/text-judgment' },
+          }}
+        />
+      </MemoryRouter>,
+    ))
+    expect(labLiff.initialize).toHaveBeenCalledWith('123-lab')
+    expect(labApi.checkAccess).toHaveBeenCalledWith('lab-token')
+    expect(authApi.bootstrap).not.toHaveBeenCalled()
+    expect(container.querySelector('.app-layout')).toBeNull()
+    expect(container.textContent).toContain('このラボは利用できません')
   })
 
   // テストケース: canonical UUIDでないリッチメニューdetail URLへアクセスする。

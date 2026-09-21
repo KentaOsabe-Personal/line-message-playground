@@ -11,11 +11,14 @@ import ChannelAdminPage from './ChannelAdminPage'
 import DeliveryPage from './DeliveryPage'
 import RichMenuAdminPage from './RichMenuAdminPage'
 import RichMenuChannelSelectionPage from './RichMenuChannelSelectionPage'
+import TextJudgmentLabPage from './TextJudgmentLabPage'
 import type { AccountApiClient } from './accountApi'
 import type { AuthGateContext } from './AuthGate'
 import type { ChannelAdminApiClient } from './channelAdminApi'
 import type { LinkedDeliveryApiClient } from './deliveryApi'
 import type { RichMenuAdminApiClient } from './richMenuAdminApi'
+import type { LabHttpClient } from './textJudgmentLabApi'
+import type { TextJudgmentLabAuthGateProps } from './TextJudgmentLabAuthGate'
 
 type AppRouterProps = {
   authGateProps?: Omit<AuthGateProps, 'children' | 'currentPathname' | 'replacePath'>
@@ -24,7 +27,9 @@ type AppRouterProps = {
     accountApi?: AccountApiClient
     deliveryApi?: LinkedDeliveryApiClient
     richMenuApi?: RichMenuAdminApiClient
+    textJudgmentLabApi?: LabHttpClient
   }>
+  textJudgmentLabAuthGateProps?: Omit<TextJudgmentLabAuthGateProps, 'children' | 'api'>
 }
 
 function RichMenuSelectionRoute({ api }: { api?: ChannelAdminApiClient }) {
@@ -74,10 +79,11 @@ function AuthenticatedApplication({ authGateProps }: AppRouterProps) {
   )
 }
 
-export function AppRouter({ authGateProps, featureClients }: AppRouterProps) {
+export function AppRouter({ authGateProps, featureClients, textJudgmentLabAuthGateProps }: AppRouterProps) {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/liff" replace />} />
+      <Route path="/labs/text-judgment" element={<TextJudgmentLabPage api={featureClients?.textJudgmentLabApi} authGateProps={textJudgmentLabAuthGateProps} />} />
       <Route path="/liff" element={<AuthenticatedApplication authGateProps={authGateProps} />}>
         <Route index element={<Navigate to="channels" replace />} />
         <Route path="channels" element={<ChannelRoute api={featureClients?.channelApi} />} />

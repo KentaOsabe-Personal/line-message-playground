@@ -243,6 +243,63 @@ main {
   gap: 1.5rem;
 }
 
+.text-judgment-lab {
+  display: grid;
+  gap: 1rem;
+}
+
+.lab-safety-notice,
+.lab-message,
+.lab-guide {
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-border) 45%, transparent);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+}
+
+.lab-safety-notice {
+  border-left: 0.35rem solid var(--color-line);
+}
+
+.text-judgment-lab [role='log'] {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.text-judgment-lab form {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.text-judgment-lab textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.text-judgment-lab [aria-label='入力例'],
+.text-judgment-lab [aria-label='現在の選択肢'],
+.lab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.lab-judgment-details {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--color-surface-soft);
+}
+
+.lab-judgment-details dl {
+  display: grid;
+  grid-template-columns: minmax(10rem, auto) 1fr;
+  gap: 0.35rem 0.75rem;
+}
+
+.lab-judgment-details dd {
+  margin: 0;
+}
+
 .rich-menu-admin h2,
 .rich-menu-admin h3,
 .rich-menu-admin h4,

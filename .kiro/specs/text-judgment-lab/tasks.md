@@ -147,35 +147,35 @@
   - 完了時、確定値非破壊と巻き戻し禁止を含むedge caseが日本語コメント付きで通る。
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 10.1, 10.2, 10.3, 10.4, 10.6_
 
-- [ ] 5. 非同期制御と会話UIを接続する
-- [ ] 5.1 判定要求とページ寿命を管理するcontrollerを実装する
+- [x] 5. 非同期制御と会話UIを接続する
+- [x] 5.1 判定要求とページ寿命を管理するcontrollerを実装する
   - submitでsnapshot、consultationId、requestId、revision、15秒deadlineを保持し、選択肢は通信せず確定する。
   - stale・期限超過・認証失効結果を破棄し、失敗時はsnapshotとdraftへ戻して自動再送しない。
   - 完了時、pending中の中断・新規開始、abort、後着結果破棄、page内継続を一貫して扱える。
   - _Requirements: 2.2, 2.3, 2.4, 2.5, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7_
-- [ ] 5.2 会話入力・選択肢・状態表示UIを実装する
+- [x] 5.2 会話入力・選択肢・状態表示UIを実装する
   - role log、label付きtextarea、例文、現在選択肢、送信、中断、新規開始を表示する。
   - pending、failure、choices-only、終了をsemantic roleとtextで区別し、IME変換中Enterを送信しない。
   - 完了時、各状態で許可された操作だけが有効になり、過去選択肢は操作不能になる。
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 7.4, 7.5, 7.6, 9.6, 11.1, 11.2, 11.3, 13.4_
-- [ ] 5.3 (P) 発言別の判定詳細表示を実装する
+- [x] 5.3 (P) 発言別の判定詳細表示を実装する
   - 成功した本人発言へ初期状態で閉じたdetailsを関連付け、選択肢には判定を捏造しない。
   - Choice、Score、Noul、model、UI待ち時間、Jev時間を指定精度・意味・注意書き付きで示す。
   - 完了時、丸め前値で分岐しつつ表示値と測定区間を誤認なく観察できる。
   - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5_
   - _Boundary: JudgmentDetails_
   - _Depends: 1.3_
-- [ ] 5.4 認証・controller・会話をラボpageと独立routeへ合成する
+- [x] 5.4 認証・controller・会話をラボpageと独立routeへ合成する
   - PageFrame内で認証状態とcontrollerを同じpage寿命に保ち、管理shell外の専用routeへ配置する。
   - 初回拒否は相談を隠し、失効・一時障害では会話を読取専用で保持して全document navigationを使う。
   - 完了時、ラボrouteだけが専用LIFFとAPIを使い、既存owner復帰先や同時mountへ混入しない。
   - _Requirements: 1.3, 1.4, 1.5, 10.1, 10.5, 13.2_
-- [ ] 5.5 controllerの失敗・遅延・寿命制御を単体検証する
+- [x] 5.5 controllerの失敗・遅延・寿命制御を単体検証する
   - requestId、revision、相談ID、deadline、認証状態の不一致結果を破棄することを検証する。
   - 一般失敗、access unavailable、手動access再試行、中断、新規、page保持復帰を検証する。
   - 完了時、本文自動再送なし、snapshot復帰、storage非使用が日本語コメント付きテストで通る。
   - _Requirements: 10.2, 10.3, 10.4, 10.5, 10.6, 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 13.5_
-- [ ] 5.6 Frontend表示・認証境界を統合検証する
+- [x] 5.6 Frontend表示・認証境界を統合検証する
   - 自由文、例文、選択肢、IME、focus、pending、failure、終了時の操作性を検証する。
   - detailsの初期閉状態、全数値、時間ラベル、外部送信説明、認証拒否・失効表示を検証する。
   - 完了時、UI、JudgmentDetails、LabAuthGateを跨ぐ色だけに依存しない状態と秘密非表示が日本語コメント付きテストで通る。

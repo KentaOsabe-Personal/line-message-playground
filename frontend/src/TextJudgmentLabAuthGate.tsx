@@ -14,6 +14,7 @@ export type LabAuthContext = Readonly<{
   getValidIdToken: () => string | null
   recheckAccess: () => Promise<void>
   reauthenticate: () => void
+  invalidateAccess: (reason: 'auth_expired' | 'access_unavailable') => void
 }>
 
 export type TextJudgmentLabAuthGateProps = Readonly<{
@@ -186,12 +187,23 @@ export default function TextJudgmentLabAuthGate({
     }
   }, [adapter, requireReauthentication, runtimeConfig])
 
+  const invalidateAccess = useCallback((reason: 'auth_expired' | 'access_unavailable') => {
+    if (reason === 'auth_expired') {
+      requireReauthentication()
+      return
+    }
+    clearExpiryTimer()
+    expiry.current = null
+    setAccess({ kind: 'unavailable' })
+  }, [clearExpiryTimer, requireReauthentication])
+
   const context = useMemo<LabAuthContext>(() => ({
     access,
     getValidIdToken,
     recheckAccess: () => checkAccess(),
     reauthenticate,
-  }), [access, checkAccess, getValidIdToken, reauthenticate])
+    invalidateAccess,
+  }), [access, checkAccess, getValidIdToken, invalidateAccess, reauthenticate])
   const protectedContent = typeof children === 'function' ? children(context) : children
   const showContent = hasAuthorized.current
 
