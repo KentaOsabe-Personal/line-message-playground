@@ -181,18 +181,18 @@
   - 完了時、UI、JudgmentDetails、LabAuthGateを跨ぐ色だけに依存しない状態と秘密非表示が日本語コメント付きテストで通る。
   - _Requirements: 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 6.1, 6.2, 7.4, 7.5, 7.6, 7.7, 9.1, 9.3, 9.5, 9.6, 12.1, 12.2, 12.3, 12.4, 12.5, 13.4, 13.5_
 
-- [ ] 6. Backend・Frontend境界を統合する
-- [ ] 6.1 access・judgment APIとruntime依存を合成する
+- [x] 6. Backend・Frontend境界を統合する
+- [x] 6.1 access・judgment APIとruntime依存を合成する
   - accessとjudgment View、container、app URLConf、root includeを専用基底境界へ接続する。
   - 判定要求ごとに本人検証、入力検証、serviceを順に呼び、固定success/error schemaを返す。
   - 完了時、末尾slash redirectなしの2 endpointが有効化設定下で動き、無効時は安全に閉じる。
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 3.1, 3.6, 11.5, 11.6, 11.7, 13.6, 13.7_
-- [ ] 6.2 LINE本人確認・専用API境界・管理権限分離を統合検証する
+- [x] 6.2 LINE本人確認・専用API境界・管理権限分離を統合検証する
   - LINE mockでissuer・audience・期限境界・profile不要・本人不一致・4秒期限・照会障害を検証し、Bearer、Origin、body、media type、method、throttle、例外、no-store、input上限をHTTPで確認する。
   - owner cookieのみのラボ拒否、ラボ証明のみの管理拒否、owner session非生成を両方向に検証する。
   - 完了時、本人確認gatewayを含むラボとownerのcode、schema、cookie、CSRF契約が混在せず全ケースが通る。
   - _Requirements: 1.2, 1.3, 1.4, 1.5, 3.6, 11.5, 11.6, 11.7, 13.6, 13.7_
-- [ ] 6.3 Frontend・Backendの固定契約とroute寿命を統合検証する
+- [x] 6.3 Frontend・Backendの固定契約とroute寿命を統合検証する
   - 共通fixtureで候補、Score段階、Evidence、error、contractVersionの意味一致を検証する。
   - ラボrouteの再読込・復帰・404、既存/liff route、管理とラボ間のLIFF ID分離を検証する。
   - 完了時、契約ずれはDTO検証で失敗し、route移動で別機能を同時mountしないテストが通る。

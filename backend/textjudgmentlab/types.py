@@ -194,6 +194,7 @@ class JudgmentFailure:
         "rate_limited",
         "access_expired",
         "judge_unavailable",
+        "judge_timeout",
         "configuration_unavailable",
         "unexpected",
     ]

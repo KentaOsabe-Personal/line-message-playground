@@ -49,7 +49,7 @@ class LabBearerAuthentication(BaseAuthentication):
     def authenticate(self, request):
         runtime = self._runtime or settings.TEXT_JUDGMENT_LAB_RUNTIME
         if not isinstance(runtime, LabRuntimeConfigured):
-            raise LabAccessError("configuration_unavailable", 503)
+            raise LabAccessError("access_unavailable", 503)
 
         authorization = request.headers.get("Authorization")
         token = self._bearer_token(authorization)

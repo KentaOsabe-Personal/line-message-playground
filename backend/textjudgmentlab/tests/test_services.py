@@ -133,3 +133,19 @@ class JudgmentServiceTests(SimpleTestCase):
         result = async_to_sync(service.evaluate)(principal, _request())
 
         self.assertEqual(result, JudgmentFailure("judge_unavailable"))
+
+    # テストケース: gatewayの全体deadline超過をserviceへ返す。
+    # 期待値: 通常のJev障害と混同せずjudge_timeoutを維持する。
+    def test_preserves_transport_timeout_classification(self) -> None:
+        now = datetime(2026, 9, 21, tzinfo=UTC)
+        service = JudgmentService(
+            model="jev-1.13.0",
+            gateway=_Gateway(JevTransportFailure("judge_timeout")),
+            limits=LabLimits(),
+            clock=_Clock(now, now),
+        )
+        principal = LabPrincipal(now + timedelta(minutes=1), "owner-a")
+
+        result = async_to_sync(service.evaluate)(principal, _request())
+
+        self.assertEqual(result, JudgmentFailure("judge_timeout"))

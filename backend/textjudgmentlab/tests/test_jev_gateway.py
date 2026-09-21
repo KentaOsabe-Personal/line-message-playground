@@ -120,7 +120,7 @@ class JevGatewayTests(SimpleTestCase):
             result = async_to_sync(gateway.evaluate)({"model": "jev-1.13.0"})
         async_to_sync(client.aclose)()
 
-        self.assertIsInstance(result, JevTransportFailure)
+        self.assertEqual(result, JevTransportFailure("judge_timeout"))
 
     # テストケース: gateway自身が生成したclientで連続して二回評価する。
     # 期待値: 各評価が独立して一回POSTし、閉鎖済みclient例外を漏らさない。

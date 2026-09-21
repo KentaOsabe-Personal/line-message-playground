@@ -5,7 +5,7 @@ import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from time import monotonic
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -25,7 +25,7 @@ class JevTransportSuccess:
 
 @dataclass(frozen=True, slots=True)
 class JevTransportFailure:
-    code: str = "judge_unavailable"
+    code: Literal["judge_unavailable", "judge_timeout"] = "judge_unavailable"
 
 
 JevTransportResult = JevTransportSuccess | JevTransportFailure
@@ -82,7 +82,9 @@ class JevGateway:
                         body.extend(chunk)
                         if len(body) > _MAX_RESPONSE_BYTES:
                             return JevTransportFailure()
-        except (TimeoutError, httpx.RequestError, RuntimeError):
+        except (TimeoutError, httpx.TimeoutException):
+            return JevTransportFailure("judge_timeout")
+        except (httpx.RequestError, RuntimeError):
             return JevTransportFailure()
 
         try:

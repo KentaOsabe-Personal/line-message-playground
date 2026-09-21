@@ -161,7 +161,7 @@ def normalize_judgment(
     transport: JevTransportResult,
 ) -> JudgmentResult:
     if isinstance(transport, JevTransportFailure):
-        return JudgmentFailure("judge_unavailable")
+        return JudgmentFailure(transport.code)
     try:
         payload = transport.payload
         answers = payload.get("answers")

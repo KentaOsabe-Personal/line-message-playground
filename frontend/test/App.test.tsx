@@ -1,6 +1,6 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, useNavigate } from 'react-router'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { AppRouter } from '../src/App'
@@ -104,8 +104,78 @@ describe('AppRouter', () => {
     expect(labLiff.initialize).toHaveBeenCalledWith('123-lab')
     expect(labApi.checkAccess).toHaveBeenCalledWith('lab-token')
     expect(authApi.bootstrap).not.toHaveBeenCalled()
-    expect(container.querySelector('.app-layout')).toBeNull()
+    expect(container.querySelector('.application-shell')).toBeNull()
     expect(container.textContent).toContain('このラボは利用できません')
+  })
+
+  // テストケース: ラボから404へ移動して戻り、さらに同URLを再読込相当に再mountする。
+  // 期待値: 404ではどの認証も開始せず、復帰・再読込では新しいラボpage寿命として専用LIFFだけを再初期化する。
+  test('recreates only the lab lifetime after 404 return and reload', async () => {
+    const labLiff: LinePlatformLiffAdapter = {
+      ...liffAdapter,
+      initialize: vi.fn().mockResolvedValue('liff_browser'),
+      getIdToken: vi.fn().mockReturnValue('lab-token'),
+    }
+    const labApi: LabHttpClient = {
+      checkAccess: vi.fn().mockResolvedValue({
+        status: 'authorized', expiresAt: '2026-10-01T00:00:00Z', serverTime: '2026-09-21T00:00:00Z',
+      }),
+      judge: vi.fn(),
+    }
+    const Navigation = () => {
+      const navigate = useNavigate()
+      return <>
+        <button type="button" data-testid="unknown" onClick={() => navigate('/unknown')}>404へ</button>
+        <button type="button" data-testid="owner" onClick={() => navigate('/liff/channels')}>管理へ</button>
+        <button type="button" data-testid="lab" onClick={() => navigate('/labs/text-judgment')}>ラボへ</button>
+      </>
+    }
+    const labProps = {
+      authGateProps: authProps,
+      featureClients: { textJudgmentLabApi: labApi },
+      textJudgmentLabAuthGateProps: {
+        liffAdapter: labLiff,
+        config: { liffId: '123-lab', liffUrl: 'https://liff.line.me/123-lab', entryUrl: 'https://lab.example.test/labs/text-judgment' } as const,
+      },
+    }
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={['/labs/text-judgment']}>
+        <AppRouter {...labProps} />
+        <Navigation />
+      </MemoryRouter>,
+    ))
+    expect(labLiff.initialize).toHaveBeenCalledTimes(1)
+    expect(labLiff.initialize).toHaveBeenLastCalledWith('123-lab')
+    expect(liffAdapter.initialize).not.toHaveBeenCalled()
+
+    await act(async () => (container.querySelector('[data-testid="owner"]') as HTMLButtonElement).click())
+    await act(async () => { await Promise.resolve() })
+    expect(liffAdapter.initialize).toHaveBeenCalledTimes(1)
+    expect(liffAdapter.initialize).toHaveBeenLastCalledWith('123-a')
+    expect(labLiff.initialize).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('.application-shell')).not.toBeNull()
+
+    await act(async () => (container.querySelector('[data-testid="lab"]') as HTMLButtonElement).click())
+    expect(labLiff.initialize).toHaveBeenCalledTimes(2)
+    expect(liffAdapter.initialize).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('.application-shell')).toBeNull()
+
+    await act(async () => (container.querySelector('[data-testid="unknown"]') as HTMLButtonElement).click())
+    expect(container.textContent).toContain('ページが見つかりません')
+    expect(authApi.bootstrap).toHaveBeenCalledTimes(1)
+    expect(labLiff.initialize).toHaveBeenCalledTimes(2)
+
+    await act(async () => (container.querySelector('[data-testid="lab"]') as HTMLButtonElement).click())
+    expect(labLiff.initialize).toHaveBeenCalledTimes(3)
+    expect(authApi.bootstrap).toHaveBeenCalledTimes(1)
+
+    await act(async () => root.unmount())
+    root = createRoot(container)
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={['/labs/text-judgment']}><AppRouter {...labProps} /></MemoryRouter>,
+    ))
+    expect(labLiff.initialize).toHaveBeenCalledTimes(4)
+    expect(authApi.bootstrap).toHaveBeenCalledTimes(1)
   })
 
   // テストケース: canonical UUIDでないリッチメニューdetail URLへアクセスする。

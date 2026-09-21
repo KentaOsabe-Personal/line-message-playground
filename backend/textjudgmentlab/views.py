@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from hmac import compare_digest
 
+from asgiref.sync import async_to_sync
 from django.conf import settings
-from rest_framework import status
+from django.utils import timezone
 from rest_framework.exceptions import (
     APIException,
     AuthenticationFailed,
@@ -20,7 +21,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .authentication import IsLabOwner, LabAccessError, LabBearerAuthentication
+from .container import build_judgment_service
 from .runtime import LabRuntimeConfigured
+from .serializers import JudgmentRequestSerializer
+from .types import (
+    JudgmentFailure,
+    JudgmentSuccess,
+    KnownEvidence,
+)
 
 
 _MAX_BODY_BYTES = 32 * 1024
@@ -36,7 +44,8 @@ _ERRORS = {
     "method_not_allowed": (405, "この操作は利用できません。"),
     "rate_limited": (429, "時間をおいて再度お試しください。"),
     "access_unavailable": (503, "利用資格を確認できませんでした。"),
-    "configuration_unavailable": (503, "ラボを利用できません。"),
+    "judgment_failed": (502, "判定できませんでした。"),
+    "judgment_timeout": (504, "判定できませんでした。"),
     "unexpected": (500, "処理を完了できませんでした。"),
 }
 
@@ -57,7 +66,7 @@ class LabAPIView(APIView):
         if request.method == "POST":
             runtime = settings.TEXT_JUDGMENT_LAB_RUNTIME
             if not isinstance(runtime, LabRuntimeConfigured):
-                raise LabBoundaryError("configuration_unavailable")
+                raise LabBoundaryError("access_unavailable")
             supplied = request.headers.get("Origin")
             if (
                 not isinstance(supplied, str)
@@ -109,3 +118,95 @@ class LabAPIView(APIView):
             {"error": {"code": code, "message": message}},
             status=status_code or configured_status,
         )
+
+
+def _timestamp(value) -> str:
+    return value.isoformat().replace("+00:00", "Z")
+
+
+def _evidence(value):
+    if isinstance(value, KnownEvidence):
+        candidate = value.value
+        return {
+            "kind": "known",
+            "value": candidate.value if hasattr(candidate, "value") else candidate,
+        }
+    return {"kind": value.kind}
+
+
+def _choice(value):
+    return {
+        "type": value.type,
+        "choice": value.choice,
+        "probabilities": dict(value.probabilities),
+        "confidence": value.confidence,
+    }
+
+
+def _success_payload(result: JudgmentSuccess) -> dict[str, object]:
+    evidence = result.evidence
+    details = result.details
+    return {
+        "contractVersion": result.contract_version,
+        "consultationId": str(result.consultation_id),
+        "requestId": str(result.request_id),
+        "revision": result.revision,
+        "model": result.model,
+        "evidence": {
+            "topic": _evidence(evidence.topic),
+            "relevance": evidence.relevance.value,
+            "change": evidence.change.value,
+            "scope": _evidence(evidence.scope),
+            "workaround": _evidence(evidence.workaround),
+            "result": _evidence(evidence.result),
+            "impact": evidence.impact,
+            "urgency": _evidence(evidence.urgency),
+        },
+        "details": {
+            "choices": {key: _choice(value) for key, value in details.choices.items()},
+            "score": {
+                "type": details.score.type,
+                "score": details.score.score,
+                "legend": dict(details.score.legend),
+                "probabilities": dict(details.score.probabilities),
+                "confidence": details.score.confidence,
+            },
+            "noul": {"type": details.noul.type, "noul": details.noul.noul},
+            "jevElapsedMs": details.jev_elapsed_ms,
+        },
+    }
+
+
+class LabAccessAPIView(LabAPIView):
+    def post(self, request):
+        if not isinstance(request.data, dict) or request.data:
+            raise ValidationError("invalid access body")
+        return Response({
+            "status": "authorized",
+            "expiresAt": _timestamp(request.user.expires_at),
+            "serverTime": _timestamp(timezone.now()),
+        })
+
+
+class LabJudgmentAPIView(LabAPIView):
+    def post(self, request):
+        serializer = JudgmentRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = async_to_sync(build_judgment_service().evaluate)(
+            request.user,
+            serializer.to_request(),
+        )
+        if isinstance(result, JudgmentSuccess):
+            return Response(_success_payload(result))
+        if not isinstance(result, JudgmentFailure):
+            return self._error("unexpected")
+        mapping = {
+            "invalid_request": "invalid_input",
+            "rate_limited": "rate_limited",
+            "access_expired": "reauthentication_required",
+            "judge_unavailable": "judgment_failed",
+            "judge_timeout": "judgment_timeout",
+            "configuration_unavailable": "access_unavailable",
+            "unexpected": "unexpected",
+        }
+        return self._error(mapping[result.code])
