@@ -11,6 +11,7 @@ services:
     environment:
       NGROK_DOMAIN: ${NGROK_DOMAIN:-}
       VITE_LIFF_ID: ${VITE_LIFF_ID:-}
+      VITE_TEXT_JUDGMENT_LAB_LIFF_ID: ${VITE_TEXT_JUDGMENT_LAB_LIFF_ID:-}
     depends_on:
       backend:
         condition: service_started
@@ -44,6 +45,12 @@ services:
       LINE_LOGIN_PROVIDER_ID: ${LINE_LOGIN_PROVIDER_ID:-}
       LINE_LIFF_LINKED_CHANNEL_PUBLIC_ID: ${LINE_LIFF_LINKED_CHANNEL_PUBLIC_ID:-}
       LINE_OWNER_SUBJECT_DIGEST: ${LINE_OWNER_SUBJECT_DIGEST:-}
+      TEXT_JUDGMENT_LAB_ENABLED: ${TEXT_JUDGMENT_LAB_ENABLED:-false}
+      TEXT_JUDGMENT_LAB_CHANNEL_ID: ${TEXT_JUDGMENT_LAB_CHANNEL_ID:-}
+      TEXT_JUDGMENT_LAB_OWNER_DIGEST: ${TEXT_JUDGMENT_LAB_OWNER_DIGEST:-}
+      TEXT_JUDGMENT_LAB_ORIGIN: ${TEXT_JUDGMENT_LAB_ORIGIN:-}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      TEXT_JUDGMENT_LAB_MODEL: ${TEXT_JUDGMENT_LAB_MODEL:-jev-1.13.0}
       MYSQL_HOST: db
       MYSQL_PORT: 3306
       MYSQL_DATABASE: ${MYSQL_DATABASE:-line_message}
@@ -87,11 +94,10 @@ services:
     command:
       - http
       - --url=https://${NGROK_DOMAIN:-}
+      - --inspect=false
       - http://frontend:5173
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
-    ports:
-      - "127.0.0.1:4040:4040"
     depends_on:
       frontend:
         condition: service_healthy

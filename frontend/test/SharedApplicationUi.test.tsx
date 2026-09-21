@@ -18,6 +18,7 @@ const authApi: AuthApiClient = {
 
 const liffAdapter: LinePlatformLiffAdapter = {
   initialize: vi.fn().mockResolvedValue('external_browser'),
+  ensureProfilePermission: vi.fn().mockResolvedValue(true),
   isLoggedIn: vi.fn().mockReturnValue(false),
   login: vi.fn(),
   reauthenticate: vi.fn(),

@@ -1,12 +1,15 @@
 import os
 from pathlib import Path
 
+from textjudgmentlab.runtime import load_lab_runtime
+
 from .public_origin import build_trusted_https_origin, validate_public_host
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "")
 DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
+TEXT_JUDGMENT_LAB_RUNTIME = load_lab_runtime(os.environ, debug=DEBUG)
 PUBLIC_HOST = validate_public_host(os.getenv("NGROK_DOMAIN", ""))
 ALLOWED_HOSTS = [
     *os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(","),
@@ -50,6 +53,7 @@ INSTALLED_APPS = [
     "linewebhooks.apps.LineWebhooksConfig",
     "lineinteractions.apps.LineInteractionsConfig",
     "linerichmenus.apps.LineRichMenusConfig",
+    "textjudgmentlab.apps.TextJudgmentLabConfig",
 ]
 
 MIDDLEWARE = [

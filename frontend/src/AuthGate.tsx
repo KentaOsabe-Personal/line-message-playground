@@ -89,6 +89,11 @@ export default function AuthGate({
       const session = await api.bootstrap()
       if (!isCurrent()) return
       if (session.state !== 'anonymous') {
+        if (adapter.isLoggedIn() && !await adapter.ensureProfilePermission()) {
+          if (isCurrent()) dispatch({ type: 'failed', code: 'token_unavailable', retryable: true })
+          return
+        }
+        if (!isCurrent()) return
         if (
           session.state === 'unlinking' &&
           session.stage === 'deauthorization_pending' &&
@@ -107,6 +112,11 @@ export default function AuthGate({
         dispatch({ type: 'login_required' })
         return
       }
+      if (!await adapter.ensureProfilePermission()) {
+        if (isCurrent()) dispatch({ type: 'failed', code: 'token_unavailable', retryable: true })
+        return
+      }
+      if (!isCurrent()) return
       const idToken = adapter.getIdToken()
       if (idToken === null) {
         dispatch({ type: 'failed', code: 'token_unavailable', retryable: true })
