@@ -1,0 +1,226 @@
+# 実装計画
+
+- [x] 1. 基盤契約と安全な実行設定を整える
+- [x] 1.1 Backendラボ基盤とfail-closedな実行設定を追加する
+  - 専用packageとruntime設定検証を追加し、enabledの既定をfalseにする。
+  - 不足・不正設定やDEBUG有効時はラボだけを利用不可にし、既存管理機能の起動を妨げない。
+  - 完了時、DB migrationやbackground処理なしで安全な設定状態を取得できる。
+  - _Requirements: 1.3, 13.2, 13.6_
+- [x] 1.2 (P) Backendの入力・判定契約を型付きで定義する
+  - 本人principal、要求、Evidence、成功・失敗結果、固定enumをimmutableな型で表す。
+  - serializerで未知キー、UUID、revision、code point、既知enum、文脈矛盾を拒否する。
+  - 完了時、検証済み値だけがserviceへ渡り、秘密や生外部応答は公開型に入らない。
+  - _Requirements: 2.2, 3.1, 7.7, 11.6, 12.2, 12.3, 13.6, 13.7_
+  - _Boundary: Backend判定契約_
+- [x] 1.3 (P) Frontendの会話型と公開DTO検証を定義する
+  - 会話、質問、終了理由、公開判定、access状態を判別可能な型で表す。
+  - unknown応答からcontractVersion、enum、数値、確率、必須項目を実行時検証する。
+  - 完了時、不完全・未知・非有限な応答は会話へ入らず安全な失敗になる。
+  - _Requirements: 3.1, 7.7, 11.6, 12.1, 12.2, 12.3, 12.4, 12.5, 13.6_
+  - _Boundary: Frontend判定契約_
+- [x] 1.4 Frontendの固定質問・選択肢・案内内容を定義する
+  - LabContentが二相談の例文、会話上の一問ずつの質問、選択肢、4種のiPhone案内、終了文を固定する。
+  - 急ぎ用要点、公式HTTPSリンク、確認日、外部送信と架空相談の説明を安全なallowlistで持つ。
+  - 完了時、状態遷移とUIが同じ固定IDから内容を取得でき、自由生成を必要としない。
+  - _Requirements: 2.1, 2.7, 4.1, 4.5, 4.7, 4.8, 5.1, 5.2, 5.3, 6.1, 6.2, 6.3, 9.2, 9.4, 9.5, 13.3, 13.4_
+- [x] 1.5 ラボ設定をサービスへ安全に注入する
+  - Backend専用設定6個とFrontend公開LIFF IDだけをenv例、型宣言、Composeへ追加する。
+  - ngrok inspectionを無効化し、秘密をFrontendやngrokへ渡さず単一Backendプロセス前提を保つ。
+  - 完了時、ラボ無効状態で既存環境が起動でき、有効化時だけ不足設定がラボ503として観測できる。
+  - _Requirements: 1.3, 13.2, 13.6, 13.7_
+
+- [x] 2. 本人専用の認証境界を実装する
+- [x] 2.1 (P) LINE ID token検証gatewayを実装する
+  - 固定verify endpointへサーバー設定channel IDで一回だけ照会し、接続を含む全体4秒期限の内側でissuer、audience、expiry、subjectを検証する。
+  - audience違い、本人不一致、照会障害を安全な分類へ変換し、profile情報とraw subjectを捨てる。
+  - 完了時、検証済み本人情報か固定失敗だけが認証境界へ返る。
+  - _Requirements: 1.1, 1.2, 1.3, 1.6, 11.6, 13.6_
+  - _Boundary: LabLineGateway_
+  - _Depends: 1.1, 1.2_
+- [x] 2.2 ラボ専用Bearer認証と本人permissionを実装する
+  - tokenから専用principalを作り、本人digestを定数時間比較し、Django userやowner sessionを作らない。
+  - token期限を保護操作ごとに確認し、Jev判定を認証・認可に使わない。
+  - 完了時、owner cookieだけではラボを使えず、ラボ証明だけでは管理権限を得られない。
+  - _Requirements: 1.1, 1.2, 1.4, 1.5, 1.6, 3.6_
+- [x] 2.3 ラボ専用の安全なHTTP基底境界を実装する
+  - Bearer認証・permission、canonical HTTPS Origin完全一致、raw body 32 KiB・Authorization 8 KiB上限、cookie/CSRF非依存を全Lab Viewへ固定する。
+  - 認証、parse、media type、method、throttle、想定外例外を専用error schemaへ縮約し全応答をno-storeにする。
+  - 完了時、成功・全失敗経路でowner APIのschemaやCSRF挙動を変更せず安全な応答を返す。
+  - _Requirements: 1.2, 1.3, 1.4, 1.5, 11.6, 13.6, 13.7_
+- [x] 2.4 (P) FrontendラボHTTP clientを実装する
+  - Bearer token、credentials omit、cache no-store、canonical endpointでaccessとjudgmentを呼ぶ。
+  - 401、403、429、502、503、504、通信失敗を会話・認証用の固定失敗へ変換する。
+  - 完了時、cookieや秘密を保存せず検証済みDTOまたは安全な失敗だけを返す。
+  - _Requirements: 1.4, 11.6, 13.6, 13.7_
+  - _Boundary: LabHttpClient_
+  - _Depends: 1.3, 1.5_
+- [x] 2.5 LIFF本人確認と認証期限制御を実装する
+  - 開発用LIFFだけを初期化してID tokenを取得し、profile取得や管理loginへfallbackしない。
+  - serverTimeと往復時間、monotonic/wall-clock経過、visibilitychange/pageshowで期限を保守的に判定する。
+  - 完了時、拒否理由、再認証、利用確認再試行、読取専用会話保持を区別して表示・操作制御できる。
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.6, 10.5, 11.6_
+
+- [x] 3. Jev判定と正規化境界を実装する
+- [x] 3.1 (P) 固定9質問と最小相談文脈を構築する
+  - topic、relevance、change、scope、workaround、result、impact evidence、Score、Noulを独立質問として固定する。
+  - 現在発言、質問ID、確定回答、impact、直近2件の受理済み発言だけからstateを作る。
+  - 完了時、失敗発言・別相談・全履歴・token・profileをJevへ送らず一括要求を生成できる。
+  - _Requirements: 3.1, 3.5, 8.1, 8.2, 8.3, 8.9, 13.7_
+  - _Boundary: JudgmentQuestions_
+  - _Depends: 1.2_
+- [x] 3.2 (P) Jev外部通信gatewayを実装する
+  - 固定endpoint・modelで一回だけPOSTし、接続2秒・全体8秒・128 KiB上限を適用する。
+  - 非2xx、timeout、過大body、JSON envelope不正をtransport失敗へ変換し、自動retry、redirect、model fallbackを行わない。
+  - 完了時、生request・response・API key・例外を上位へ漏らさずmonotonic所要時間を返す。
+  - _Requirements: 3.1, 11.5, 11.6, 11.7, 13.6, 13.7_
+  - _Boundary: JevGateway_
+  - _Depends: 1.1, 1.2_
+- [x] 3.3 (P) 判定応答の完全性検証と正規化を実装する
+  - transport検証済みJSONについて、model、全9回答、質問type、候補、確率、総和、confidence、有限数、score、noulの意味的完全性を検証する。
+  - Choice 0.70、Score 1.5とevidence/confidence、Noul 0.20/0.80でEvidenceへ正規化する。
+  - 完了時、部分結果を公開せず、丸め前数値と固定legendだけを安全な公開結果へ変換できる。
+  - _Requirements: 3.1, 4.2, 4.3, 4.4, 6.3, 6.4, 7.1, 7.2, 7.3, 7.7, 12.3, 12.4_
+  - _Boundary: JudgmentPolicy_
+  - _Depends: 1.2_
+- [x] 3.4 (P) 本人単位の短期利用量・同時実行制限を実装する
+  - digestごとに同時1件、60秒10件をmutex、deque、実行中flagで管理する。
+  - 失敗も件数へ含め、外部通信中はlockせず、例外時も実行枠を解放する。
+  - 完了時、本文・判定を保持せず単一プロセス内で429と正常解放を再現できる。
+  - _Requirements: 11.7, 13.2, 13.7_
+  - _Boundary: LabLimits_
+  - _Depends: 1.2_
+- [x] 3.5 判定serviceで本人・利用量・Jev・正規化を合成する
+  - 実行枠確保、固定質問生成、gateway呼出し、全体正規化を順に合成する。
+  - Jev返却後もprincipal期限を再確認し、失効結果を公開しない。
+  - 完了時、成功結果または安全な失敗だけがHTTP境界へ返り、枠が必ず解放される。
+  - _Requirements: 3.1, 3.6, 11.5, 11.6, 11.7_
+- [x] 3.6 固定質問と判定policyを境界値で検証する
+  - 9質問の独立性、unknown・未言及・要確認、否定、対象外混在をfixtureで検証する。
+  - Choice、Score、Noulの閾値前後と欠損・未知・NaN・部分失敗を検証する。
+  - 完了時、全ケースが日本語のテストケース・期待値コメント付きで再現可能に通る。
+  - _Requirements: 3.1, 4.2, 4.3, 4.4, 6.3, 7.7, 11.6, 12.3, 12.4_
+- [x] 3.7 gateway・service・利用量制限を障害条件で検証する
+  - HTTPX mockで遅いchunk、timeout、429、529、過大・不完全応答を再現する。
+  - 一回だけの呼出し、全体失敗、期限再確認、同時1件・60秒10件、例外解放を検証する。
+  - 完了時、外部負荷試験なしでretry禁止、部分結果非公開、制限境界が自動テストで通る。
+  - _Requirements: 3.6, 11.5, 11.6, 11.7, 13.2, 13.6, 13.7_
+
+- [x] 4. 確定回答を守る会話状態遷移を実装する
+- [x] 4.1 会話coreと回答確定の不変条件を実装する
+  - consultation、revision、stage、confirmed、impact、clarification、topic pickerをimmutableに更新する。
+  - 未確定knownだけを確定し、矛盾する後続判定で既存slotを上書きしない。
+  - 完了時、相談・範囲・回避策・急ぎ・案内の優先順で常に一問だけ選べる。
+  - _Requirements: 2.6, 2.7, 3.2, 3.3, 3.4, 3.5_
+- [x] 4.2 通知が届かない相談の分岐を実装する
+  - 範囲、impact、回避策の順に必要項目だけを確認し、lowなら回避策質問を省略する。
+  - cannot_readは急ぎ確認なしで公式ヘルプ付き未解決、unknown範囲は全体案内へ進める。
+  - 完了時、すべて・特定・分からないとhigh/low/要確認の組合せが正しい案内へ到達する。
+  - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8_
+- [x] 4.3 設定相談と急ぎ表示の分岐を実装する
+  - 設定相談ではScoreにかかわらず回避策を質問せず、範囲から固定案内を選ぶ。
+  - urgency trueは要点先行、falseは詳細展開、要確認は急ぎ質問へ進める。
+  - 完了時、支障と急ぎを独立に扱い、全体・特定・分からないが期待表示へ到達する。
+  - _Requirements: 5.1, 5.2, 5.3, 5.4, 6.1, 6.2, 6.3, 6.4_
+- [x] 4.4 判定要確認と選択肢限定の進行を実装する
+  - 最初の要確認では自由文と選択肢を残し、同項目の再曖昧回答だけchoices-onlyへ移す。
+  - 選択肢確定後は次質問で自由入力を復帰し、通信失敗・対象外で試行回数を増やさない。
+  - 完了時、要確認、本人の分からない、通信失敗を別状態として同じ質問上で観測できる。
+  - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7_
+- [x] 4.5 対象外・複数相談・訂正希望を非破壊で処理する
+  - 開始時/途中の対象外、混在、二相談、relevance/change要確認を優先規則で処理する。
+  - 現相談選択はstageを復元し、別相談や訂正希望は自動変更せず新規開始を案内する。
+  - 完了時、確定回答を失わず直前質問へ戻り、別相談や巻き戻しを自動開始しない。
+  - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10_
+- [x] 4.6 結果確認・終了・やり直しの遷移を実装する
+  - topic別doneをresolved/settings_completed、not_doneをunresolved、中断をinterruptedへ対応させ、not_tried/cannot_checkでは終了せず案内と結果回答を維持する。
+  - 終了後は読取専用表示を保ち、新規・やり直しでは前相談を引き継がず初期化する。
+  - 完了時、解決・設定完了・未解決・中断を区別し、再読込復元や履歴一覧を要求しない。
+  - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 10.1, 10.2, 10.3, 10.4, 10.6_
+- [x] 4.7 二相談の主要分岐と確定不変条件を単体検証する
+  - 一括確定、矛盾維持、scope優先、impact/回避策、urgency、案内選択を表形式で検証する。
+  - 例文も自由文と同じ判定適用になり、選択肢は直接確定することを検証する。
+  - 完了時、二相談の主要経路が日本語コメント付きtable-driven testで通る。
+  - _Requirements: 2.3, 2.4, 2.5, 2.6, 2.7, 3.2, 3.3, 3.4, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 5.1, 5.2, 5.3, 5.4, 6.1, 6.2, 6.3, 6.4_
+- [x] 4.8 曖昧さ・複数相談・終了寿命を単体検証する
+  - 二度目の曖昧回答、選択肢限定解除、対象外、混在、二相談、訂正希望を検証する。
+  - 4終了理由、未試行維持、新規消去、再読込非復元のpure-state部分を検証する。
+  - 完了時、確定値非破壊と巻き戻し禁止を含むedge caseが日本語コメント付きで通る。
+  - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 10.1, 10.2, 10.3, 10.4, 10.6_
+
+- [x] 5. 非同期制御と会話UIを接続する
+- [x] 5.1 判定要求とページ寿命を管理するcontrollerを実装する
+  - submitでsnapshot、consultationId、requestId、revision、15秒deadlineを保持し、選択肢は通信せず確定する。
+  - stale・期限超過・認証失効結果を破棄し、失敗時はsnapshotとdraftへ戻して自動再送しない。
+  - 完了時、pending中の中断・新規開始、abort、後着結果破棄、page内継続を一貫して扱える。
+  - _Requirements: 2.2, 2.3, 2.4, 2.5, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7_
+- [x] 5.2 会話入力・選択肢・状態表示UIを実装する
+  - role log、label付きtextarea、例文、現在選択肢、送信、中断、新規開始を表示する。
+  - pending、failure、choices-only、終了をsemantic roleとtextで区別し、IME変換中Enterを送信しない。
+  - 完了時、各状態で許可された操作だけが有効になり、過去選択肢は操作不能になる。
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 7.4, 7.5, 7.6, 9.6, 11.1, 11.2, 11.3, 13.4_
+- [x] 5.3 (P) 発言別の判定詳細表示を実装する
+  - 成功した本人発言へ初期状態で閉じたdetailsを関連付け、選択肢には判定を捏造しない。
+  - Choice、Score、Noul、model、UI待ち時間、Jev時間を指定精度・意味・注意書き付きで示す。
+  - 完了時、丸め前値で分岐しつつ表示値と測定区間を誤認なく観察できる。
+  - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5_
+  - _Boundary: JudgmentDetails_
+  - _Depends: 1.3_
+- [x] 5.4 認証・controller・会話をラボpageと独立routeへ合成する
+  - PageFrame内で認証状態とcontrollerを同じpage寿命に保ち、管理shell外の専用routeへ配置する。
+  - 初回拒否は相談を隠し、失効・一時障害では会話を読取専用で保持して全document navigationを使う。
+  - 完了時、ラボrouteだけが専用LIFFとAPIを使い、既存owner復帰先や同時mountへ混入しない。
+  - _Requirements: 1.3, 1.4, 1.5, 10.1, 10.5, 13.2_
+- [x] 5.5 controllerの失敗・遅延・寿命制御を単体検証する
+  - requestId、revision、相談ID、deadline、認証状態の不一致結果を破棄することを検証する。
+  - 一般失敗、access unavailable、手動access再試行、中断、新規、page保持復帰を検証する。
+  - 完了時、本文自動再送なし、snapshot復帰、storage非使用が日本語コメント付きテストで通る。
+  - _Requirements: 10.2, 10.3, 10.4, 10.5, 10.6, 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 13.5_
+- [x] 5.6 Frontend表示・認証境界を統合検証する
+  - 自由文、例文、選択肢、IME、focus、pending、failure、終了時の操作性を検証する。
+  - detailsの初期閉状態、全数値、時間ラベル、外部送信説明、認証拒否・失効表示を検証する。
+  - 完了時、UI、JudgmentDetails、LabAuthGateを跨ぐ色だけに依存しない状態と秘密非表示が日本語コメント付きテストで通る。
+  - _Requirements: 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 6.1, 6.2, 7.4, 7.5, 7.6, 7.7, 9.1, 9.3, 9.5, 9.6, 12.1, 12.2, 12.3, 12.4, 12.5, 13.4, 13.5_
+
+- [x] 6. Backend・Frontend境界を統合する
+- [x] 6.1 access・judgment APIとruntime依存を合成する
+  - accessとjudgment View、container、app URLConf、root includeを専用基底境界へ接続する。
+  - 判定要求ごとに本人検証、入力検証、serviceを順に呼び、固定success/error schemaを返す。
+  - 完了時、末尾slash redirectなしの2 endpointが有効化設定下で動き、無効時は安全に閉じる。
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 3.1, 3.6, 11.5, 11.6, 11.7, 13.6, 13.7_
+- [x] 6.2 LINE本人確認・専用API境界・管理権限分離を統合検証する
+  - LINE mockでissuer・audience・期限境界・profile不要・本人不一致・4秒期限・照会障害を検証し、Bearer、Origin、body、media type、method、throttle、例外、no-store、input上限をHTTPで確認する。
+  - owner cookieのみのラボ拒否、ラボ証明のみの管理拒否、owner session非生成を両方向に検証する。
+  - 完了時、本人確認gatewayを含むラボとownerのcode、schema、cookie、CSRF契約が混在せず全ケースが通る。
+  - _Requirements: 1.2, 1.3, 1.4, 1.5, 3.6, 11.5, 11.6, 11.7, 13.6, 13.7_
+- [x] 6.3 Frontend・Backendの固定契約とroute寿命を統合検証する
+  - 共通fixtureで候補、Score段階、Evidence、error、contractVersionの意味一致を検証する。
+  - ラボrouteの再読込・復帰・404、既存/liff route、管理とラボ間のLIFF ID分離を検証する。
+  - 完了時、契約ずれはDTO検証で失敗し、route移動で別機能を同時mountしないテストが通る。
+  - _Requirements: 1.5, 2.2, 3.1, 10.4, 10.5, 11.6, 12.2, 12.3, 12.4, 12.5, 13.5, 13.6, 13.7_
+
+- [x] 7. 相談全体と安全性を自動検証する
+- [x] 7.1 通知不達相談を入力から終了まで統合検証する
+  - 例文と自由文からscope、high/要確認impact、workaround、urgency、案内、結果まで進める。
+  - cannot_read即未解決、done解決、not_done公式ヘルプに加え、言い換え・否定・曖昧回答の固定fixtureで判定詳細と会話分岐を比較する。
+  - 完了時、Choice・Score・Noulの違いを含む通知不達経路が固定応答で再現可能に通る。
+  - _Requirements: 2.3, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 6.1, 6.3, 9.1, 9.2, 12.6, 12.7, 12.8_
+- [x] 7.2 設定相談を入力から終了まで統合検証する
+  - 自由文から特定/全体範囲を確定し、Score highでも回避策を省略して案内へ進める。
+  - urgency false、設定完了・失敗、未試行・確認不能による案内保持を確認する。
+  - 完了時、設定相談の主要経路と判定差が固定応答で再現可能に通る。
+  - _Requirements: 2.2, 5.1, 5.2, 5.3, 5.4, 6.2, 9.3, 9.4, 9.5, 12.6, 12.8_
+- [x] 7.3 曖昧・対象外・複数相談・訂正の相談全体を統合検証する
+  - 自由文再確認からchoices-only、対象外、混在、二相談picker、現相談復帰を確認する。
+  - 別相談と訂正は新規開始案内に留め、中断・やり直し後に前相談を引き継がないことを確認する。
+  - 完了時、確定回答非破壊、自由入力復帰、自動切替・巻き戻し禁止がUIから再現可能に通る。
+  - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 9.6, 9.7, 10.1, 10.2, 10.3_
+- [x] 7.4 認証失効・通信失敗・pending・ページ寿命を統合検証する
+  - pending中の閲覧・中断・新規と追加入力停止、後着結果破棄、15秒超過を確認する。
+  - access障害の空再試行、本文非再送、再読込非復元、保持ページ復帰、期限切れ操作停止を確認する。
+  - 完了時、判定要確認・本人の分からない・通信失敗が混同されず全回復経路が通る。
+  - _Requirements: 1.4, 7.7, 10.4, 10.5, 10.6, 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 13.5, 13.6, 13.7_
+- [x] 7.5 production buildと自動回帰検証を完了する
+  - Frontend production build、対象Backend tests、既存認証・route回帰を実行する。
+  - 実機情報の記録機能を追加せず、本文・判定・秘密がstorage、URL、通常ログへ残らないことを自動検証する。
+  - 完了時、buildと自動回帰が成功し、実機確認なしで実装の完成を判定できる。
+  - _Requirements: 1.5, 12.8, 13.1, 13.2, 13.3, 13.4, 13.5, 13.6, 13.7_

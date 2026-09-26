@@ -1,11 +1,12 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { AppRouter } from '../src/App'
 import type { AuthApiClient } from '../src/authApi'
 import type { LinePlatformLiffAdapter } from '../src/liffClient'
+import { LabHttpError, type LabHttpClient } from '../src/textJudgmentLabApi'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -15,6 +16,7 @@ const authApi: AuthApiClient = {
 }
 const liffAdapter: LinePlatformLiffAdapter = {
   initialize: vi.fn().mockResolvedValue('external_browser'),
+  ensureProfilePermission: vi.fn().mockResolvedValue(true),
   isLoggedIn: vi.fn().mockReturnValue(false),
   login: vi.fn(), reauthenticate: vi.fn(), logout: vi.fn(),
   getIdToken: vi.fn().mockReturnValue(null), getAccessToken: vi.fn().mockReturnValue(null),
@@ -22,6 +24,10 @@ const liffAdapter: LinePlatformLiffAdapter = {
 const authProps = {
   config: { liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' } as const,
   authApi, liffAdapter,
+}
+
+function LocationProbe() {
+  return <span data-location>{useLocation().pathname}</span>
 }
 
 describe('AppRouter', () => {
@@ -73,6 +79,132 @@ describe('AppRouter', () => {
     expect(container.textContent).toContain('ページが見つかりません')
     expect(container.querySelector('a')?.getAttribute('href')).toBe('/liff/channels')
     expect(authApi.bootstrap).not.toHaveBeenCalled()
+  })
+
+  // テストケース: 専用ラボrouteへ直接アクセスする
+  // 期待値: owner認証・shellをmountせず、専用LIFFと専用APIだけを利用する
+  test('mounts text judgment lab route outside owner authentication and shell', async () => {
+    const labLiff: LinePlatformLiffAdapter = {
+      ...liffAdapter,
+      initialize: vi.fn().mockResolvedValue('liff_browser'),
+      getIdToken: vi.fn().mockReturnValue('lab-token'),
+    }
+    const labApi: LabHttpClient = {
+      checkAccess: vi.fn().mockRejectedValue(new LabHttpError('not_allowed')),
+      judge: vi.fn(),
+    }
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={['/liff/labs/text-judgment']}>
+        <AppRouter
+          authGateProps={authProps}
+          featureClients={{ textJudgmentLabApi: labApi }}
+          textJudgmentLabAuthGateProps={{
+            liffAdapter: labLiff,
+            config: { liffId: '123-lab', liffUrl: 'https://liff.line.me/123-lab/labs/text-judgment', entryUrl: 'https://lab.example.test/liff/labs/text-judgment' },
+          }}
+        />
+      </MemoryRouter>,
+    ))
+    expect(labLiff.initialize).toHaveBeenCalledWith('123-lab')
+    expect(labApi.checkAccess).toHaveBeenCalledWith('lab-token')
+    expect(authApi.bootstrap).not.toHaveBeenCalled()
+    expect(container.querySelector('.application-shell')).toBeNull()
+    expect(container.textContent).toContain('このラボは利用できません')
+  })
+
+  // テストケース: 旧ラボURLへ直接アクセスする。
+  // 期待値: LIFF Endpoint URL配下のcanonical入口へ置換し、owner認証を開始しない。
+  test('replaces the legacy lab route with the LIFF-compatible route', async () => {
+    const labLiff: LinePlatformLiffAdapter = {
+      ...liffAdapter,
+      initialize: vi.fn().mockResolvedValue('external_browser'),
+    }
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={['/labs/text-judgment']}>
+        <AppRouter textJudgmentLabAuthGateProps={{
+          liffAdapter: labLiff,
+          config: {
+            liffId: '123-lab',
+            liffUrl: 'https://liff.line.me/123-lab/labs/text-judgment',
+            entryUrl: 'https://lab.example.test/liff/labs/text-judgment',
+          },
+        }} />
+        <LocationProbe />
+      </MemoryRouter>,
+    ))
+    expect(container.querySelector('[data-location]')?.textContent).toBe('/liff/labs/text-judgment')
+    expect(labLiff.initialize).toHaveBeenCalledWith('123-lab')
+    expect(authApi.bootstrap).not.toHaveBeenCalled()
+  })
+
+  // テストケース: ラボから404へ移動して戻り、さらに同URLを再読込相当に再mountする。
+  // 期待値: 404ではどの認証も開始せず、復帰・再読込では新しいラボpage寿命として専用LIFFだけを再初期化する。
+  test('recreates only the lab lifetime after 404 return and reload', async () => {
+    const labLiff: LinePlatformLiffAdapter = {
+      ...liffAdapter,
+      initialize: vi.fn().mockResolvedValue('liff_browser'),
+      getIdToken: vi.fn().mockReturnValue('lab-token'),
+    }
+    const labApi: LabHttpClient = {
+      checkAccess: vi.fn().mockResolvedValue({
+        status: 'authorized', expiresAt: '2026-10-01T00:00:00Z', serverTime: '2026-09-21T00:00:00Z',
+      }),
+      judge: vi.fn(),
+    }
+    const Navigation = () => {
+      const navigate = useNavigate()
+      return <>
+        <button type="button" data-testid="unknown" onClick={() => navigate('/unknown')}>404へ</button>
+        <button type="button" data-testid="owner" onClick={() => navigate('/liff/channels')}>管理へ</button>
+        <button type="button" data-testid="lab" onClick={() => navigate('/liff/labs/text-judgment')}>ラボへ</button>
+      </>
+    }
+    const labProps = {
+      authGateProps: authProps,
+      featureClients: { textJudgmentLabApi: labApi },
+      textJudgmentLabAuthGateProps: {
+        liffAdapter: labLiff,
+        config: { liffId: '123-lab', liffUrl: 'https://liff.line.me/123-lab/labs/text-judgment', entryUrl: 'https://lab.example.test/liff/labs/text-judgment' } as const,
+      },
+    }
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={['/liff/labs/text-judgment']}>
+        <AppRouter {...labProps} />
+        <Navigation />
+      </MemoryRouter>,
+    ))
+    expect(labLiff.initialize).toHaveBeenCalledTimes(1)
+    expect(labLiff.initialize).toHaveBeenLastCalledWith('123-lab')
+    expect(liffAdapter.initialize).not.toHaveBeenCalled()
+
+    await act(async () => (container.querySelector('[data-testid="owner"]') as HTMLButtonElement).click())
+    await act(async () => { await Promise.resolve() })
+    expect(liffAdapter.initialize).toHaveBeenCalledTimes(1)
+    expect(liffAdapter.initialize).toHaveBeenLastCalledWith('123-a')
+    expect(labLiff.initialize).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('.application-shell')).not.toBeNull()
+
+    await act(async () => (container.querySelector('[data-testid="lab"]') as HTMLButtonElement).click())
+    expect(labLiff.initialize).toHaveBeenCalledTimes(2)
+    expect(liffAdapter.initialize).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('.application-shell')).toBeNull()
+
+    await act(async () => (container.querySelector('[data-testid="unknown"]') as HTMLButtonElement).click())
+    expect(container.textContent).toContain('ページが見つかりません')
+    expect(authApi.bootstrap).toHaveBeenCalledTimes(1)
+    expect(labLiff.initialize).toHaveBeenCalledTimes(2)
+
+    await act(async () => (container.querySelector('[data-testid="lab"]') as HTMLButtonElement).click())
+    expect(labLiff.initialize).toHaveBeenCalledTimes(3)
+    expect(authApi.bootstrap).toHaveBeenCalledTimes(1)
+
+    await act(async () => root.unmount())
+    root = createRoot(container)
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={['/liff/labs/text-judgment']}><AppRouter {...labProps} /></MemoryRouter>,
+    ))
+    expect(labLiff.initialize).toHaveBeenCalledTimes(4)
+    expect(authApi.bootstrap).toHaveBeenCalledTimes(1)
   })
 
   // テストケース: canonical UUIDでないリッチメニューdetail URLへアクセスする。

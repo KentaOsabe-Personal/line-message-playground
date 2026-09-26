@@ -15,6 +15,7 @@ let root: Root
 
 const adapter = (overrides: Partial<LinePlatformLiffAdapter> = {}): LinePlatformLiffAdapter => ({
   initialize: vi.fn().mockResolvedValue('external_browser'),
+  ensureProfilePermission: vi.fn().mockResolvedValue(true),
   isLoggedIn: vi.fn().mockReturnValue(false),
   login: vi.fn(),
   reauthenticate: vi.fn(),
@@ -87,6 +88,57 @@ describe('AuthGate', () => {
     expect(container.textContent).toContain('Owner')
     expect(container.textContent).toContain('保護画面')
     expect(container.textContent).not.toContain('userId')
+  })
+
+  // テストケース: Mini Appでprofile権限を許可してからID tokenを検証する。
+  // 期待値: 権限確認が完了するまでtokenを読まず、許可後にだけBackend loginへ進む。
+  test('requires Mini App profile permission before verifying the ID token', async () => {
+    let grantPermission: ((granted: boolean) => void) | undefined
+    const liffAdapter = adapter({
+      isLoggedIn: vi.fn().mockReturnValue(true),
+      ensureProfilePermission: vi.fn(() => new Promise<boolean>((resolve) => { grantPermission = resolve })),
+      getIdToken: vi.fn().mockReturnValue('raw-id-token'),
+    })
+    const authApi = api({
+      login: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }),
+    })
+
+    await act(async () => root.render(
+      <AuthGate
+        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
+        liffAdapter={liffAdapter}
+        authApi={authApi}
+      ><p>保護画面</p></AuthGate>,
+    ))
+
+    expect(liffAdapter.getIdToken).not.toHaveBeenCalled()
+    expect(authApi.login).not.toHaveBeenCalled()
+    await act(async () => grantPermission?.(true))
+    expect(liffAdapter.getIdToken).toHaveBeenCalledTimes(1)
+    expect(authApi.login).toHaveBeenCalledWith('raw-id-token')
+  })
+
+  // テストケース: Mini Appのprofile権限が利用者に許可されない。
+  // 期待値: profile欠落ID tokenをBackendへ送らず、本人確認情報不足として停止する。
+  test('does not verify an ID token when Mini App profile permission is denied', async () => {
+    const liffAdapter = adapter({
+      isLoggedIn: vi.fn().mockReturnValue(true),
+      ensureProfilePermission: vi.fn().mockResolvedValue(false),
+      getIdToken: vi.fn().mockReturnValue('profile-less-token'),
+    })
+    const authApi = api()
+
+    await act(async () => root.render(
+      <AuthGate
+        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
+        liffAdapter={liffAdapter}
+        authApi={authApi}
+      ><p>保護画面</p></AuthGate>,
+    ))
+
+    expect(liffAdapter.getIdToken).not.toHaveBeenCalled()
+    expect(authApi.login).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('本人確認情報を取得できません')
   })
 
   // テストケース: 認証済みownerが現在端末をlogoutする。
