@@ -10,8 +10,8 @@ describe('text judgment lab public configuration', () => {
       liffId: '1234567890-AbCdEf', currentOrigin: 'https://lab.example.test',
     })).toEqual({
       liffId: '1234567890-AbCdEf',
-      liffUrl: 'https://liff.line.me/1234567890-AbCdEf',
-      entryUrl: 'https://lab.example.test/labs/text-judgment',
+      liffUrl: 'https://liff.line.me/1234567890-AbCdEf/labs/text-judgment',
+      entryUrl: 'https://lab.example.test/liff/labs/text-judgment',
     })
   })
 

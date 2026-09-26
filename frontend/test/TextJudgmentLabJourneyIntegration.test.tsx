@@ -302,7 +302,7 @@ describe('文章判定ラボの相談全体', () => {
     expect(container.querySelector('textarea')?.disabled).toBe(false)
     await submitText('やはり分かりません')
     expect(controller.getState().core.clarification).toEqual({ question: 'topic', mode: 'choices_only' })
-    expect(container.textContent).toContain('この質問は選択肢で回答してください。')
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('この質問は選択肢で回答してください。')
     expect(container.querySelector('textarea')?.disabled).toBe(true)
 
     await click('通知が届かない')
@@ -486,7 +486,7 @@ describe('文章判定ラボの相談全体', () => {
     }
     await act(async () => root.render(<TextJudgmentLabPage api={api} authGateProps={{
       liffAdapter,
-      config: { liffId: '123-lab', liffUrl: 'https://liff.line.me/123-lab', entryUrl: 'https://lab.example.test/labs/text-judgment' },
+      config: { liffId: '123-lab', liffUrl: 'https://liff.line.me/123-lab/labs/text-judgment', entryUrl: 'https://lab.example.test/liff/labs/text-judgment' },
     }} />))
 
     await submitText('自動再送してはいけない本文')
@@ -518,7 +518,7 @@ describe('文章判定ラボの相談全体', () => {
     }
     const page = <TextJudgmentLabPage api={api} authGateProps={{
       liffAdapter,
-      config: { liffId: '123-lab', liffUrl: 'https://liff.line.me/123-lab', entryUrl: 'https://lab.example.test/labs/text-judgment' },
+      config: { liffId: '123-lab', liffUrl: 'https://liff.line.me/123-lab/labs/text-judgment', entryUrl: 'https://lab.example.test/liff/labs/text-judgment' },
     }} />
     await act(async () => root.render(page))
     await submitText('ページ寿命canary')

@@ -62,6 +62,8 @@ docker compose run --rm backend python manage.py derive_line_owner_digest --use-
 
 現在、文章判定ラボと管理画面は同じ開発用LINE Mini App channelを使います。管理画面用の`VITE_LIFF_ID`と文章判定ラボ用の`VITE_TEXT_JUDGMENT_LAB_LIFF_ID`には同じLIFF IDを設定し、`LINE_LOGIN_CHANNEL_ID`と`TEXT_JUDGMENT_LAB_CHANNEL_ID`にも同じMini App channel IDを設定します。`LINE_LOGIN_CHANNEL_SECRET`には同じMini AppのDeveloping channel secretを設定します。
 
+LINE Developers ConsoleのEndpoint URLは`https://${NGROK_DOMAIN}/liff`に設定します。管理画面はLIFF URLの基底`https://liff.line.me/${VITE_LIFF_ID}`、文章判定ラボは追加path付きの`https://liff.line.me/${VITE_TEXT_JUDGMENT_LAB_LIFF_ID}/labs/text-judgment`から開きます。直接確認する場合のラボURLは`https://${NGROK_DOMAIN}/liff/labs/text-judgment`です。`/labs/text-judgment`は互換入口としてcanonicalなラボURLへ転送されます。
+
 Mini App channelのWeb app settingsでは`openid`と`profile`を有効にし、対象のLINE公式アカウントを紐づけます。管理画面は起動時に`profile`の同意状態を確認し、未同意の場合だけMini Appの検証画面を表示します。権限が得られない場合は、プロフィールを含まないID tokenをBackendへ送らず認証を停止します。
 
 LINE Developers Consoleで開発用Mini App channelを開き、次の値を確認します。
@@ -74,7 +76,7 @@ LINE Developers Consoleで開発用Mini App channelを開き、次の値を確�
 | `TEXT_JUDGMENT_LAB_ORIGIN` | `https://${NGROK_DOMAIN}`。末尾slash、path、portなし | Backendのみ |
 | `TYPESAFE_API_KEY` | TypeSafe/Jevから発行されたAPI key | Backend秘密情報 |
 | `TEXT_JUDGMENT_LAB_MODEL` | 固定値`jev-1.13.0` | Backendのみ |
-| `TEXT_JUDGMENT_LAB_ENABLED` | 全ラボ実装と検証が完了するまでは`false` | Backendのみ |
+| `TEXT_JUDGMENT_LAB_ENABLED` | 全ラボ実装と検証が完了するまでは`false`、実機確認時は`true` | Backendのみ |
 
 #### 本人digestの生成
 
@@ -132,7 +134,7 @@ const idToken = liff.getIDToken()
 
 Frontendは取得した生ID tokenをラボAPIの`Authorization: Bearer ...`へ設定し、画面、URL、storage、通常ログには保存しません。BackendはtokenをLINEの`POST https://api.line.me/oauth2/v2.1/verify`へ一度だけ送り、`client_id`として`TEXT_JUDGMENT_LAB_CHANNEL_ID`を指定します。LINEが返した`iss`、`aud`、`exp`、`sub`を検証し、`SHA-256("<aud>:<sub>")`が設定済みowner digestと一致する場合だけ本人として許可します。
 
-通常、利用者がID tokenを求めたりコピーしたりする操作はありません。Frontendの認証実装が`liff.getIDToken()`を呼び、そのままBackendへ送ります。現時点では文章判定ラボの認証画面が未実装なので、ラボからID tokenを取得する操作もまだ提供されていません。
+通常、利用者がID tokenを求めたりコピーしたりする操作はありません。Frontendの認証実装が`liff.getIDToken()`を呼び、そのままBackendへ送ります。
 
 認証実装後にID token検証を手動確認する必要がある場合だけ、ブラウザ開発者ツールのSourcesで`const idToken = liff.getIDToken()`の直後にbreakpointを置き、ローカル変数`idToken`を一時的にコピーして次を実行します。iPhone上のMini Appを調べる場合はmacOS SafariのWebインスペクタから対象ページへ接続します。tokenをコマンドラインへ直接書かず、非表示入力します。確認後はtokenと応答を保存せず破棄します。
 

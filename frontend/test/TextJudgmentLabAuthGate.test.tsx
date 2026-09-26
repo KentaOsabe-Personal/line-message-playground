@@ -12,8 +12,8 @@ import type { LinePlatformLiffAdapter } from '../src/liffClient'
 
 const config = {
   liffId: '123-lab',
-  liffUrl: 'https://liff.line.me/123-lab' as const,
-  entryUrl: 'https://lab.example.test/labs/text-judgment' as const,
+  liffUrl: 'https://liff.line.me/123-lab/labs/text-judgment' as const,
+  entryUrl: 'https://lab.example.test/liff/labs/text-judgment' as const,
 }
 
 const adapter = (overrides: Partial<LinePlatformLiffAdapter> = {}): LinePlatformLiffAdapter => ({

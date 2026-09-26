@@ -1,6 +1,6 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter, useNavigate } from 'react-router'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { AppRouter } from '../src/App'
@@ -24,6 +24,10 @@ const liffAdapter: LinePlatformLiffAdapter = {
 const authProps = {
   config: { liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' } as const,
   authApi, liffAdapter,
+}
+
+function LocationProbe() {
+  return <span data-location>{useLocation().pathname}</span>
 }
 
 describe('AppRouter', () => {
@@ -90,13 +94,13 @@ describe('AppRouter', () => {
       judge: vi.fn(),
     }
     await act(async () => root.render(
-      <MemoryRouter initialEntries={['/labs/text-judgment']}>
+      <MemoryRouter initialEntries={['/liff/labs/text-judgment']}>
         <AppRouter
           authGateProps={authProps}
           featureClients={{ textJudgmentLabApi: labApi }}
           textJudgmentLabAuthGateProps={{
             liffAdapter: labLiff,
-            config: { liffId: '123-lab', liffUrl: 'https://liff.line.me/123-lab', entryUrl: 'https://lab.example.test/labs/text-judgment' },
+            config: { liffId: '123-lab', liffUrl: 'https://liff.line.me/123-lab/labs/text-judgment', entryUrl: 'https://lab.example.test/liff/labs/text-judgment' },
           }}
         />
       </MemoryRouter>,
@@ -106,6 +110,31 @@ describe('AppRouter', () => {
     expect(authApi.bootstrap).not.toHaveBeenCalled()
     expect(container.querySelector('.application-shell')).toBeNull()
     expect(container.textContent).toContain('このラボは利用できません')
+  })
+
+  // テストケース: 旧ラボURLへ直接アクセスする。
+  // 期待値: LIFF Endpoint URL配下のcanonical入口へ置換し、owner認証を開始しない。
+  test('replaces the legacy lab route with the LIFF-compatible route', async () => {
+    const labLiff: LinePlatformLiffAdapter = {
+      ...liffAdapter,
+      initialize: vi.fn().mockResolvedValue('external_browser'),
+    }
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={['/labs/text-judgment']}>
+        <AppRouter textJudgmentLabAuthGateProps={{
+          liffAdapter: labLiff,
+          config: {
+            liffId: '123-lab',
+            liffUrl: 'https://liff.line.me/123-lab/labs/text-judgment',
+            entryUrl: 'https://lab.example.test/liff/labs/text-judgment',
+          },
+        }} />
+        <LocationProbe />
+      </MemoryRouter>,
+    ))
+    expect(container.querySelector('[data-location]')?.textContent).toBe('/liff/labs/text-judgment')
+    expect(labLiff.initialize).toHaveBeenCalledWith('123-lab')
+    expect(authApi.bootstrap).not.toHaveBeenCalled()
   })
 
   // テストケース: ラボから404へ移動して戻り、さらに同URLを再読込相当に再mountする。
@@ -127,7 +156,7 @@ describe('AppRouter', () => {
       return <>
         <button type="button" data-testid="unknown" onClick={() => navigate('/unknown')}>404へ</button>
         <button type="button" data-testid="owner" onClick={() => navigate('/liff/channels')}>管理へ</button>
-        <button type="button" data-testid="lab" onClick={() => navigate('/labs/text-judgment')}>ラボへ</button>
+        <button type="button" data-testid="lab" onClick={() => navigate('/liff/labs/text-judgment')}>ラボへ</button>
       </>
     }
     const labProps = {
@@ -135,11 +164,11 @@ describe('AppRouter', () => {
       featureClients: { textJudgmentLabApi: labApi },
       textJudgmentLabAuthGateProps: {
         liffAdapter: labLiff,
-        config: { liffId: '123-lab', liffUrl: 'https://liff.line.me/123-lab', entryUrl: 'https://lab.example.test/labs/text-judgment' } as const,
+        config: { liffId: '123-lab', liffUrl: 'https://liff.line.me/123-lab/labs/text-judgment', entryUrl: 'https://lab.example.test/liff/labs/text-judgment' } as const,
       },
     }
     await act(async () => root.render(
-      <MemoryRouter initialEntries={['/labs/text-judgment']}>
+      <MemoryRouter initialEntries={['/liff/labs/text-judgment']}>
         <AppRouter {...labProps} />
         <Navigation />
       </MemoryRouter>,
@@ -172,7 +201,7 @@ describe('AppRouter', () => {
     await act(async () => root.unmount())
     root = createRoot(container)
     await act(async () => root.render(
-      <MemoryRouter initialEntries={['/labs/text-judgment']}><AppRouter {...labProps} /></MemoryRouter>,
+      <MemoryRouter initialEntries={['/liff/labs/text-judgment']}><AppRouter {...labProps} /></MemoryRouter>,
     ))
     expect(labLiff.initialize).toHaveBeenCalledTimes(4)
     expect(authApi.bootstrap).toHaveBeenCalledTimes(1)

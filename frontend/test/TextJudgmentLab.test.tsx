@@ -16,6 +16,8 @@ describe('文章判定ラボ表示', () => {
   beforeEach(() => { container = document.createElement('div'); document.body.append(container); root = createRoot(container) })
   afterEach(async () => { await act(async () => root.unmount()); container.remove() })
 
+  // テストケース: 初期画面で外部送信説明、会話、例文、自由入力を表示してIME変換する。
+  // 期待値: 各入力手段を識別でき、IME変換中のEnterでは判定要求を送らない。
   it('外部送信説明、例文、label付き入力と会話logを表示し、IME中Enterでは送信しない', async () => {
     const judge = vi.fn((_token: string, _request: unknown, _signal?: AbortSignal) => new Promise<JudgmentResponse>(() => undefined))
     const controller = createTextJudgmentLabController({ judge }, { now: () => 1, uuid: vi.fn().mockReturnValue('id') })
@@ -35,6 +37,32 @@ describe('文章判定ラボ表示', () => {
     expect(judge).not.toHaveBeenCalled()
   })
 
+  // テストケース: 初期画面をチャット、クイック返信、判定用例文、入力、補助操作へ分ける。
+  // 期待値: 発話者と操作目的を構造・ラベル・文字で識別でき、色だけに依存しない。
+  it('会話、選択肢、判定用例文、入力、補助操作を視覚階層ごとに分ける', async () => {
+    const controller = createTextJudgmentLabController({ judge: vi.fn() }, { now: () => 1, uuid: vi.fn().mockReturnValue('id') })
+    await act(async () => root.render(<TextJudgmentLab controller={controller} access={{ kind: 'authorized', expiresAt: '2099-01-01', remainingMs: 1000 }} getValidIdToken={() => 'token'} />))
+
+    expect(container.querySelector('.lab-conversation [role="log"]')).not.toBeNull()
+    const chatScroll = container.querySelector('.lab-chat-scroll') as HTMLDivElement
+    expect(chatScroll.contains(container.querySelector('.lab-conversation'))).toBe(true)
+    expect(chatScroll.contains(container.querySelector('.lab-choice-panel'))).toBe(true)
+    expect(chatScroll.contains(container.querySelector('.lab-composer'))).toBe(false)
+    expect(container.querySelector('.lab-conversation-header .lab-action-danger')?.textContent).toBe('相談を終了する')
+    expect(container.querySelector('.lab-conversation-header .lab-header-actions button:last-child')?.textContent).toBe('新しい相談を始める')
+    expect(container.querySelector('[aria-label="ラボからのメッセージ"]')?.textContent).toContain('どちらについて相談しますか？')
+    expect(container.querySelector('.lab-choice-panel .lab-section-title')?.textContent).toContain('相談内容を選ぶ')
+    expect(container.querySelector('[aria-label="現在の選択肢"]')).not.toBeNull()
+    expect(container.querySelector('details.lab-examples > summary')?.textContent).toContain('文章を送って判定を試す')
+    expect(container.querySelectorAll('.lab-choice')).toHaveLength(2)
+    expect(container.querySelector('form.lab-composer textarea')?.getAttribute('placeholder')).toContain('相談内容を入力')
+    expect(container.querySelector('form.lab-composer .lab-send')?.textContent).toBe('送信')
+
+    Object.defineProperty(chatScroll, 'scrollHeight', { configurable: true, value: 480 })
+    await act(async () => (container.querySelector('.lab-choice') as HTMLButtonElement).click())
+    expect(chatScroll.scrollTop).toBe(480)
+  })
+
   // テストケース: 通常の自由文をtextareaへ入力して送信する
   // 期待値: 現在の相談文脈と本文を一回だけjudgeへ渡す
   it('自由文をUIから一回だけ判定要求へ渡す', async () => {
@@ -51,6 +79,8 @@ describe('文章判定ラボ表示', () => {
     expect(judge.mock.calls[0][1]).toMatchObject({ text: '通知が来ないです', context: { question: 'start' } })
   })
 
+  // テストケース: 成功した発言に関連付く判定詳細を初期表示する。
+  // 期待値: detailsは閉じたまま、Choice・Score・Noul・モデル・二つの測定区間を確認できる。
   it('判定詳細を初期状態で閉じ、全数値と二つの測定区間を表示する', async () => {
     const judgment = {
       contractVersion: 1, consultationId: 'c', requestId: 'r', revision: 0, model: 'jev-model',
@@ -103,10 +133,12 @@ describe('文章判定ラボ表示', () => {
     await act(async () => topic.click())
     expect(judge).not.toHaveBeenCalled()
     expect(container.textContent).toContain('選択肢で回答')
+    expect(container.querySelector('[aria-label="あなたのメッセージ"]')?.textContent).toContain('通知が届かない')
+    expect(container.querySelector('[aria-label="ラボからのメッセージ"]')?.textContent).toContain('範囲を教えてください')
     expect(topic.isConnected).toBe(false)
     await act(async () => controller.interrupt())
     expect(container.querySelector('textarea')).toBeNull()
-    expect(container.textContent).toContain('相談を中断しました')
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('相談を中断しました')
     expect(container.textContent).toContain('新しい相談を始める')
   })
 
@@ -119,12 +151,12 @@ describe('文章判定ラボ表示', () => {
     await act(async () => root.render(<TextJudgmentLab controller={controller} access={{ kind: 'authorized', expiresAt: '2099-01-01', remainingMs: 1000 }} getValidIdToken={() => 'token'} />))
     const example = [...container.querySelectorAll('button')].find((button) => button.textContent === 'LINEの通知が届きません')!
     await act(async () => example.click())
-    expect(container.textContent).toContain('判定中です')
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('判定中です')
     expect(container.querySelector('textarea')?.disabled).toBe(true)
     expect([...container.querySelectorAll('button')].find((button) => button.textContent === '相談を終了する')?.disabled).toBe(false)
     await act(async () => reject(new Error('network')))
     const textarea = container.querySelector('textarea')!
-    expect(container.textContent).toContain('判定できませんでした')
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('判定できませんでした')
     expect(textarea.value).toBe('LINEの通知が届きません')
     expect(document.activeElement).toBe(textarea)
     expect(judge).toHaveBeenCalledTimes(1)
@@ -143,7 +175,7 @@ describe('文章判定ラボ表示', () => {
     }
     await act(async () => root.render(<TextJudgmentLabPage api={api} authGateProps={{
       liffAdapter,
-      config: { liffId: '123-lab', liffUrl: 'https://liff.line.me/123-lab', entryUrl: 'https://lab.example.test/labs/text-judgment' },
+      config: { liffId: '123-lab', liffUrl: 'https://liff.line.me/123-lab/labs/text-judgment', entryUrl: 'https://lab.example.test/liff/labs/text-judgment' },
     }} />))
     expect(container.textContent).toContain('文章判定ラボ')
     expect(container.textContent).toContain('このラボは利用できません')

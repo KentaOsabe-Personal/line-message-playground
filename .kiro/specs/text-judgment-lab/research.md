@@ -13,7 +13,7 @@
 ### 既存コードとの接続
 
 - **確認元:** `frontend/src/App.tsx`、`AuthGate.tsx`、`appRoutes.ts`、`liffConfig.ts`、`liffClient.ts`、`httpApi.ts`、`PageFrame.tsx`、`backend/config/settings.py`、`backend/config/urls.py`、`backend/lineaccounts/gateway.py`、`views.py`、`runtime.py`、`compose.yaml`。
-- `/liff`はowner認証済みshellである。兄弟route `/labs/text-judgment`なら、管理APIや復帰先許可リストへラボの意味を持ち込まずに済む。
+- `/liff`はowner認証済みshellである。ラボはReact routeとしてowner shellの外側に置きつつ、LIFF SDKのEndpoint URL制約に合わせてURLを`/liff/labs/text-judgment`とする。管理APIや復帰先許可リストへラボの意味を持ち込まない。
 - DRFの既定認証・権限とglobal exception handlerはowner専用である。既存handlerは`{error: {code, summary}}`とowner用codeを返すため、ラボの全Viewは専用認証・権限に加え、認証・権限処理中の例外も`{error: {code, message}}`へ変換する専用`LabAPIView`境界を必要とする。
 - 既存LINE gatewayは`name`を必須とする。`openid`だけで成立するラボの契約にはそのまま適用できない。
 - `liffClient.ts`の既存adapterはID token取得を提供し、再利用できる。SDK singletonのため、異なるLIFF ID間の移動は文書全体のnavigationで行う。

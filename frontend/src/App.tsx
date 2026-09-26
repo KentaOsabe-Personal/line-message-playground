@@ -83,7 +83,8 @@ export function AppRouter({ authGateProps, featureClients, textJudgmentLabAuthGa
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/liff" replace />} />
-      <Route path="/labs/text-judgment" element={<TextJudgmentLabPage api={featureClients?.textJudgmentLabApi} authGateProps={textJudgmentLabAuthGateProps} />} />
+      <Route path="/labs/text-judgment" element={<Navigate to="/liff/labs/text-judgment" replace />} />
+      <Route path="/liff/labs/text-judgment" element={<TextJudgmentLabPage api={featureClients?.textJudgmentLabApi} authGateProps={textJudgmentLabAuthGateProps} />} />
       <Route path="/liff" element={<AuthenticatedApplication authGateProps={authGateProps} />}>
         <Route index element={<Navigate to="channels" replace />} />
         <Route path="channels" element={<ChannelRoute api={featureClients?.channelApi} />} />

@@ -16,7 +16,7 @@ export default function TextJudgmentLabPage({ api, authGateProps }: Readonly<{
   authGateProps?: Omit<TextJudgmentLabAuthGateProps, 'children' | 'api'>
 }>) {
   const client = useMemo(() => api ?? createLabHttpClient(), [api])
-  return <PageFrame title="文章判定ラボ" heading="文章判定ラボ" routeFocusKey="text-judgment-lab" description="通知相談の文章判定と会話分岐を確認します。">
+  return <PageFrame title="文章判定ラボ" heading="文章判定ラボ" className="lab-page-frame" routeFocusKey="text-judgment-lab" description="通知相談の文章判定と会話分岐を確認します。">
     <TextJudgmentLabAuthGate {...authGateProps} api={client}>
       {(context) => <LabConversation context={context} api={client} />}
     </TextJudgmentLabAuthGate>

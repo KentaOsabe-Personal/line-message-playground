@@ -8,6 +8,7 @@ export type PageStatus = Readonly<{
 export type PageFrameProps = Readonly<{
   title: string
   heading: string
+  className?: string
   description?: string
   routeFocusKey: string
   status?: PageStatus
@@ -17,6 +18,7 @@ export type PageFrameProps = Readonly<{
 export default function PageFrame({
   title,
   heading,
+  className,
   description,
   routeFocusKey,
   status,
@@ -33,7 +35,7 @@ export default function PageFrame({
   }, [routeFocusKey])
 
   return (
-    <main ref={mainRef} className="page-frame" tabIndex={-1} aria-labelledby="page-heading">
+    <main ref={mainRef} className={`page-frame${className ? ` ${className}` : ''}`} tabIndex={-1} aria-labelledby="page-heading">
       <header className="page-heading">
         <p className="eyebrow">LINE MESSAGE PLAYGROUND</p>
         <h1 id="page-heading">{heading}</h1>

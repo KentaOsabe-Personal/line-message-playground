@@ -183,7 +183,7 @@ _更新日: 2026-08-29。Phase 3としてFrontendのアプリ画面分割を追�
 
 ### Specs (dependency order)
 
-- [ ] text-judgment-lab -- 本人向け開発用LINEミニアプリで、通知相談の会話、Jev判定、固定案内と判定詳細の観察を提供する。Dependencies: line-account-linking, app-screen-separation
+- [x] text-judgment-lab -- 本人向け開発用LINEミニアプリで、通知相談の会話、Jev判定、固定案内と判定詳細の観察を提供する。Dependencies: line-account-linking, app-screen-separation
 
 ---
 _更新日: 2026-09-20。既存の完了状態を保持し、Phase 4として文章判定ラボのDiscovery結果を追加。_

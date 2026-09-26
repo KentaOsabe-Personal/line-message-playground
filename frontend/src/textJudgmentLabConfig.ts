@@ -1,10 +1,11 @@
-const LAB_ENTRY_PATH = '/labs/text-judgment'
+const LAB_ENTRY_PATH = '/liff/labs/text-judgment'
+const LAB_LIFF_PATH = '/labs/text-judgment'
 const liffIdPattern = /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/
 
 export type TextJudgmentLabConfig = Readonly<{
   liffId: string
   liffUrl: `https://liff.line.me/${string}`
-  entryUrl: `https://${string}/labs/text-judgment`
+  entryUrl: `https://${string}/liff/labs/text-judgment`
 }>
 
 export class TextJudgmentLabConfigError extends Error {
@@ -38,7 +39,7 @@ export function createTextJudgmentLabConfig(input: {
 
   return Object.freeze({
     liffId: input.liffId,
-    liffUrl: `https://liff.line.me/${input.liffId}`,
-    entryUrl: `${origin.origin}${LAB_ENTRY_PATH}` as `https://${string}/labs/text-judgment`,
+    liffUrl: `https://liff.line.me/${input.liffId}${LAB_LIFF_PATH}`,
+    entryUrl: `${origin.origin}${LAB_ENTRY_PATH}` as `https://${string}/liff/labs/text-judgment`,
   })
 }

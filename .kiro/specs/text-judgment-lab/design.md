@@ -20,7 +20,7 @@ Android、多人数利用、一般公開、自由な回答文生成、別AI、�
 
 ### 本Specが所有する範囲
 
-- `/labs/text-judgment`の入口、ラボ専用の本人確認、認証期限による操作制御。
+- LIFF Endpoint URL `/liff`配下の`/liff/labs/text-judgment`入口、ラボ専用の本人確認、認証期限による操作制御。旧`/labs/text-judgment`はcanonical入口へ転送する。
 - `/api/labs/text-judgment/`のDTO、固定Jev質問、外部呼出し、応答検証、判定正規化。
 - ページ内の相談状態、質問順、回答確定、案内、終了・中断・やり直し、遅延結果の破棄。
 - 入力・判定詳細・外部送信の説明、固定iPhone案内、代表例の自動統合検証。
@@ -46,7 +46,7 @@ Android、多人数利用、一般公開、自由な回答文生成、別AI、�
 
 ### 既存アーキテクチャとの接続
 
-現在の`/liff`はowner認証済みshellで、DRFもowner認証・権限が既定である。ラボrouteはその兄弟として配置し、全ラボViewで専用認証・権限・エラー変換を指定する。既存のowner復帰先許可リストには追加しない。
+現在の`/liff`はowner認証済みshellで、DRFもowner認証・権限が既定である。ラボrouteはLIFF Endpoint URLの配下でSDK初期化を保証するため`/liff/labs/text-judgment`とするが、React routeとしてはowner shellの外側に配置する。全ラボViewで専用認証・権限・エラー変換を指定し、既存のowner復帰先許可リストには追加しない。
 
 `liffClient.ts`は再利用するが、既存のprofile必須LINE gatewayとcookie前提HTTP clientは再利用しない。異なるLIFF IDを一つのSDK singletonで切り替えないよう、管理画面との移動には文書全体のnavigationを使う。
 
