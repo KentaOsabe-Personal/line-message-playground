@@ -1,52 +1,7 @@
 # caveman
 
-Talk like smart caveman. Same brain, fewer tokens.
+明示的に選ぶ会話の圧縮モードです。一般的な短文の依頼では自動選択しません。技術内容・条件・数値・言語は保持し、安全や手順の明確さが必要なら通常文体に戻します。
 
-## What it does
+`/caveman lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra|off` で選択します。既定は `full`、解除は `off`、`stop caveman`、`normal mode` です。削減率や品質同等性を保証するものではありません。
 
-Compress model responses to caveman-style prose by dropping articles, filler,
-pleasantries, and hedging. Instruction preserves technical detail, code blocks,
-error strings, and symbols. Result depends on model and workload; no aggregate
-reduction or quality-equivalence claim is published, and mode persists until
-changed or stopped.
-
-Six intensity levels:
-
-| Level | What change |
-|-------|-------------|
-| `lite` | Drop filler/hedging. Sentences stay full. Professional but tight. |
-| `full` | Default. Drop articles, fragments OK, short synonyms. |
-| `ultra` | Bare fragments. Abbreviations (DB, auth, fn). Arrows for causality. |
-| `wenyan-lite` | Classical Chinese register, light compression. |
-| `wenyan-full` | Maximum 文言文 compression. |
-| `wenyan-ultra` | Extreme classical compression. |
-
-Auto-clarity rule: caveman drops to normal prose for security warnings, irreversible-action confirmations, multi-step sequences where fragment ambiguity risks misread, and when user repeats a question. Resumes after the clear part.
-
-## How to invoke
-
-```
-/caveman              # full mode (default)
-/caveman lite         # lighter compression
-/caveman ultra        # extreme compression
-/caveman wenyan       # classical Chinese
-stop caveman          # back to normal prose
-```
-
-## Example output
-
-Question: "Why does my React component re-render?"
-
-Normal prose:
-> Your component re-renders because you create a new object reference each render. Wrapping it in `useMemo` will fix the issue.
-
-Caveman (full):
-> New object ref each render. Inline object prop = new ref = re-render. Wrap in `useMemo`.
-
-Caveman (ultra):
-> Inline obj prop → new ref → re-render. `useMemo`.
-
-## See also
-
-- [`SKILL.md`](./SKILL.md): full LLM-facing instructions
-- [Caveman README](../../README.md): repo overview, install, benchmarks
+6モードと保持条件は [SKILL.md](SKILL.md) を参照してください。保存する文書やPRには通常の文章とプロジェクトの言語規約を使います。

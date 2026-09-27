@@ -1,90 +1,10 @@
-# Steering Principles
+# Steeringの原則
 
-Steering files are **project memory**, not exhaustive specifications.
+steeringは判断に必要なproject memoryです。組織化、命名、import、architecture判断、技術標準を記録し、全file・component・dependency・実装詳細の一覧にしません。既存patternに従うcodeが増えただけなら更新不要です。
 
----
-
-## Content Granularity
-
-### Golden Rule
-> "If new code follows existing patterns, steering shouldn't need updating."
-
-### ✅ Document
-- Organizational patterns (feature-first, layered)
-- Naming conventions (PascalCase rules)
-- Import strategies (absolute vs relative)
-- Architectural decisions (state management)
-- Technology standards (key frameworks)
-
-### ❌ Avoid
-- Complete file listings
-- Every component description
-- All dependencies
-- Implementation details
-- Agent-specific tooling directories (e.g. `.cursor/`, `.gemini/`, `.claude/`)
-- Detailed documentation of `.kiro/` metadata directories (settings, automation)
-
-### Example Comparison
-
-**Bad** (Specification-like):
-```markdown
-- /components/Button.tsx - Primary button with variants
-- /components/Input.tsx - Text input with validation
-- /components/Modal.tsx - Modal dialog
-... (50+ files)
-```
-
-**Good** (Project Memory):
-```markdown
-## UI Components (`/components/ui/`)
-Reusable, design-system aligned primitives
-- Named by function (Button, Input, Modal)
-- Export component + TypeScript interface
-- No business logic
-```
-
----
-
-## Security
-
-Never include:
-- API keys, passwords, credentials
-- Database URLs, internal IPs
-- Secrets or sensitive data
-
----
-
-## Quality Standards
-
-- **Single domain**: One topic per file
-- **Concrete examples**: Show patterns with code
-- **Explain rationale**: Why decisions were made
-- **Maintainable size**: 100-200 lines typical
-
----
-
-## Preservation (when updating)
-
-- Preserve user sections and custom examples
-- Additive by default (add, don't replace)
-- Add `updated_at` timestamp
-- Note why changes were made
-
----
-
-## Notes
-
-- Templates are starting points, customize as needed
-- Follow same granularity principles as core steering
-- All steering files loaded as project memory
-- Light references to `.kiro/specs/` and `.kiro/steering/` are acceptable; avoid other `.kiro/` directories
-- Custom files equally important as core files
-
----
-
-## File-Specific Focus
-
-- **product.md**: Purpose, value, business context (not exhaustive features)
-- **tech.md**: Key frameworks, standards, conventions (not all dependencies)
-- **structure.md**: Organization patterns, naming rules (not directory trees)
-- **Custom files**: Specialized patterns (API, testing, security, etc.)
+- 1文書1topicとし、具体例と理由を必要な範囲で添える。100〜200行は目安で、行数のために情報を増やさない。
+- API key、password、credential、秘密のdatabase URL、内部IP等を含めない。
+- 更新時はuser sectionとcustom例を保護し、不確かなpolicy変更を勝手に行わない。変更理由と日付を記す。
+- productは目的・価値・business context、techはstack・判断・標準、structureは配置・命名・依存pattern、customは該当topicに限定する。
+- agent-specific toolingや `.kiro/settings/` 内部をsteeringへ展開しない。specとsteeringへの軽い参照は許容する。
+- 全文書を読むのはsteering全体の同期時。通常作業はcoreと関連custom・局所AGENTSに限定する。customの重要度は適用範囲で判断し、常時読み込みと混同しない。

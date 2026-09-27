@@ -1,0 +1,371 @@
+{
+  "migration": "gpt6-20260927T003825Z",
+  "created_at": "20260927T003825Z",
+  "scope_root": "/Users/osabekenta/myStudy/line-message-playground",
+  "files": [
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/AGENTS.md",
+      "backup": "original/AGENTS.md",
+      "sha256": "297f31917e029e7418568f0cd5f76fd1ef9ce3500a2cf9211b35e3a3c612bcd3",
+      "bytes": 5141
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.kiro/steering/tech.md",
+      "backup": "original/.kiro/steering/tech.md",
+      "sha256": "9a5488414908a9778b25097058be6cb4e1206df23fa413d15c35517e9ed9144a",
+      "bytes": 16527
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.kiro/steering/structure.md",
+      "backup": "original/.kiro/steering/structure.md",
+      "sha256": "688dc60d1a7340bd8762ac861b7b392bba098e9781f69e361233f0c3ea40b462",
+      "bytes": 10146
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/caveman/README.md",
+      "backup": "original/.agents/skills/caveman/README.md",
+      "sha256": "e86f4b56765fc288859a8a1f3e3814c990ba920b326c40c55667b56d44c58c1e",
+      "bytes": 1902
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/caveman/SKILL.md",
+      "backup": "original/.agents/skills/caveman/SKILL.md",
+      "sha256": "3edd677596cbf12f010f25f05dfb1e8a6c9c178d92499c86e5b5afa44c86c16c",
+      "bytes": 6698
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/create-pr/SKILL.ja.review.md",
+      "backup": "original/.agents/skills/create-pr/SKILL.ja.review.md",
+      "sha256": "085669d038422b8cbbb22908ddd134e913fed7bfca18bab7176df478756d23d1",
+      "bytes": 8821
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/create-pr/SKILL.md",
+      "backup": "original/.agents/skills/create-pr/SKILL.md",
+      "sha256": "88f787ffdc8ea9fcd9b07d0bc92eab3919863c30d8e9524e594d3053fae2cd90",
+      "bytes": 8102
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/create-pr/agents/openai.yaml",
+      "backup": "original/.agents/skills/create-pr/agents/openai.yaml",
+      "sha256": "cde18abfd3f8a1484ca18a2e13e5a13af4bbbebef01f0ea69b314209bda8fb50",
+      "bytes": 196
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/create-pr/references/publish-history.md",
+      "backup": "original/.agents/skills/create-pr/references/publish-history.md",
+      "sha256": "1d98f40204a1b5bc97e9f190d9fa0b1592d3252ebb546374b8591d9482222711",
+      "bytes": 1967
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/domain-modeling/ADR_FORMAT.md",
+      "backup": "original/.agents/skills/domain-modeling/ADR_FORMAT.md",
+      "sha256": "f1f36cd3f8d3b6474ddd5855da4e233bfc4ae1a1c5024909ccf11871819a41b2",
+      "bytes": 2766
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/domain-modeling/CONTEXT_FORMAT.md",
+      "backup": "original/.agents/skills/domain-modeling/CONTEXT_FORMAT.md",
+      "sha256": "b8cc318f2a4285b530e908b6bc43901c3c5cd11100362636bbc4216639bef597",
+      "bytes": 2299
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/domain-modeling/SKILL.md",
+      "backup": "original/.agents/skills/domain-modeling/SKILL.md",
+      "sha256": "152e2c97239affb12a60c5f4a7e74ab546a49ae169688c81f4e2ccc42dafa579",
+      "bytes": 3427
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/domain-modeling/agents/openai.yml",
+      "backup": "original/.agents/skills/domain-modeling/agents/openai.yml",
+      "sha256": "03dd3b9e5f8c5a43a1a49f6ad1d188dfbab9a4b3e7beeffffd8c4009d2f061ca",
+      "bytes": 100
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/gh-stack/SKILL.md",
+      "backup": "original/.agents/skills/gh-stack/SKILL.md",
+      "sha256": "d02c3b73baacaded037f7c1dac95b45987f91facbce402dc252b652636991402",
+      "bytes": 43525
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-debug/SKILL.md",
+      "backup": "original/.agents/skills/kiro-debug/SKILL.md",
+      "sha256": "c5ce75a0f76d5f587830d5c79c57adf05d6515badc5cff9b3d547bd942bc9514",
+      "bytes": 5282
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-debug/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-debug/agents/openai.yaml",
+      "sha256": "b758f4ab344af0fea6d29fbb950f6b816af1862d7d33e704b2ead3bd4954e87b",
+      "bytes": 178
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-discovery/SKILL.md",
+      "backup": "original/.agents/skills/kiro-discovery/SKILL.md",
+      "sha256": "6e81499c67d7af8902570a264478bdb285dfae1b62416f0c8ddbcc2fde3db0e9",
+      "bytes": 14415
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-discovery/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-discovery/agents/openai.yaml",
+      "sha256": "22ebe6712d9d0f89b6357faa83e48377b2853e5f72d0ab67b8102e6f745a6a36",
+      "bytes": 185
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-impl/SKILL.md",
+      "backup": "original/.agents/skills/kiro-impl/SKILL.md",
+      "sha256": "16d5e98a6ae3887a94e59ba8cdabd8506db083abf717ffcdfb418f83e93f1a60",
+      "bytes": 20123
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-impl/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-impl/agents/openai.yaml",
+      "sha256": "97bdc4f10f6efb05a425df149be6dd61bbfb61a2573a82cf2ad19f07c95929bf",
+      "bytes": 273
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-impl/templates/debugger-prompt.md",
+      "backup": "original/.agents/skills/kiro-impl/templates/debugger-prompt.md",
+      "sha256": "3cb5073b42e786b5d3a3beaabac1e3651c8b17d10c4b419c5ad8b1fd3a324e4a",
+      "bytes": 3256
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-impl/templates/implementer-prompt.md",
+      "backup": "original/.agents/skills/kiro-impl/templates/implementer-prompt.md",
+      "sha256": "64c4d35f5bd6981cb3e1470df15fdba672514fe82cb65918727e05f3702041f8",
+      "bytes": 6643
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-impl/templates/reviewer-prompt.md",
+      "backup": "original/.agents/skills/kiro-impl/templates/reviewer-prompt.md",
+      "sha256": "a8c3b0d790b4079a4a4a28f4c30adc7908920d254b0342651443bf1cbdd6b436",
+      "bytes": 5835
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-review/SKILL.md",
+      "backup": "original/.agents/skills/kiro-review/SKILL.md",
+      "sha256": "d245e5183131cea39e1bb9dcb316038454169dcb89ea5a73fd45ff8d58705b5a",
+      "bytes": 7646
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-review/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-review/agents/openai.yaml",
+      "sha256": "2bef0057e0a4e2db53377e2479e7c5f4b7a30eca9b42ffccdde4f09860416d03",
+      "bytes": 292
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-batch/SKILL.md",
+      "backup": "original/.agents/skills/kiro-spec-batch/SKILL.md",
+      "sha256": "2c12c7a51b2005287d6adcfc9686643e895d843ed2a916d1282bbd20253ce39c",
+      "bytes": 9967
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-batch/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-spec-batch/agents/openai.yaml",
+      "sha256": "312a60f578322711cb1c2cb8ec2046f4100c8a7543ee2f0e97dbffa1ebdd1208",
+      "bytes": 131
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-design/SKILL.md",
+      "backup": "original/.agents/skills/kiro-spec-design/SKILL.md",
+      "sha256": "776fc5ca486fca1170686e71c9ba97f111b7e5a08e592ea49f091c1c2041f200",
+      "bytes": 12122
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-design/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-spec-design/agents/openai.yaml",
+      "sha256": "3f7a8457db937cb9ccf4e2586b2dbc31a90a8ff504fa4057186d3caf11434f8d",
+      "bytes": 166
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-design/rules/design-discovery-full.md",
+      "backup": "original/.agents/skills/kiro-spec-design/rules/design-discovery-full.md",
+      "sha256": "51a4386b8afeafddb32e2b115dafa05ffc09045beb092301deda5f656a7e4436",
+      "bytes": 3796
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-design/rules/design-discovery-light.md",
+      "backup": "original/.agents/skills/kiro-spec-design/rules/design-discovery-light.md",
+      "sha256": "cc96d009e42e2d4a030e24b72ba92025a520d35354684fa93a9d68e9a3e3947e",
+      "bytes": 1553
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-design/rules/design-principles.md",
+      "backup": "original/.agents/skills/kiro-spec-design/rules/design-principles.md",
+      "sha256": "5033327db3fc6b93d2381a1795b27e4bb6e9f73561e84128a83dca54671d1bfe",
+      "bytes": 12015
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-design/rules/design-review-gate.md",
+      "backup": "original/.agents/skills/kiro-spec-design/rules/design-review-gate.md",
+      "sha256": "a892242998ab94ab9f82bcc9b750e11332d76f5ada230a4ed8a17bb445aab824",
+      "bytes": 5491
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-design/rules/design-synthesis.md",
+      "backup": "original/.agents/skills/kiro-spec-design/rules/design-synthesis.md",
+      "sha256": "e2b38d4a652973344ff5b69fab56798c8eebaecdf86df16024305e666ba0ba83",
+      "bytes": 1859
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-quick/SKILL.md",
+      "backup": "original/.agents/skills/kiro-spec-quick/SKILL.md",
+      "sha256": "dd59afc197705494ddc204dc2c9191882a1f9fd1dea1bbfd4ae44e2cba4dcaf6",
+      "bytes": 9017
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-quick/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-spec-quick/agents/openai.yaml",
+      "sha256": "14de92d462c4d8b4b773c0495dbf980decd52202a63edc0c919fb3f91e4492d2",
+      "bytes": 164
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-requirements/SKILL.md",
+      "backup": "original/.agents/skills/kiro-spec-requirements/SKILL.md",
+      "sha256": "35837b4fcfbe639e4b54515e0d5485d567bdcc1c24143519a6f1fd0d0d6c73b8",
+      "bytes": 9264
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-requirements/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-spec-requirements/agents/openai.yaml",
+      "sha256": "abf191f0929e70b61e55ce643f0889fdd8b4d4294af8b103def6a973436ed27b",
+      "bytes": 170
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-requirements/rules/ears-format.md",
+      "backup": "original/.agents/skills/kiro-spec-requirements/rules/ears-format.md",
+      "sha256": "562201acd01905aaa04e77dbc6796e024af6e0aaf534882279bc650f18025b12",
+      "bytes": 2953
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-requirements/rules/requirements-review-gate.md",
+      "backup": "original/.agents/skills/kiro-spec-requirements/rules/requirements-review-gate.md",
+      "sha256": "9b2ad5cf3449612fa41c6e1d20feb1a9d85f47df02e91b7fa22edc6a0abefcae",
+      "bytes": 5383
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-tasks/SKILL.md",
+      "backup": "original/.agents/skills/kiro-spec-tasks/SKILL.md",
+      "sha256": "9706f14542fd3bbc4ecf6427f5c7d2e2a494e7abc41e8b2f81f11bf860d9bafe",
+      "bytes": 10720
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-tasks/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-spec-tasks/agents/openai.yaml",
+      "sha256": "e1bdb2eedec1372525e3d0a237f80ad0ea77b332c4792fb4d970510623b2a7f6",
+      "bytes": 157
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-tasks/rules/tasks-generation.md",
+      "backup": "original/.agents/skills/kiro-spec-tasks/rules/tasks-generation.md",
+      "sha256": "bd7961a459233857d44c7dd7b64ad27bf9e335f89e281373d75f014d1a77962c",
+      "bytes": 12487
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-tasks/rules/tasks-parallel-analysis.md",
+      "backup": "original/.agents/skills/kiro-spec-tasks/rules/tasks-parallel-analysis.md",
+      "sha256": "e6c9dad086b3ec5e25a97313967d4a115c20bd58160a0d9c77fa1ea948f173b1",
+      "bytes": 2531
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-steering/SKILL.md",
+      "backup": "original/.agents/skills/kiro-steering/SKILL.md",
+      "sha256": "0ed80e5e6441ea677b45c86300172b294cca459b0b922e087a829f0874b01b77",
+      "bytes": 4558
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-steering/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-steering/agents/openai.yaml",
+      "sha256": "e0568d48c6a5ead9a659b6f0d4a2acc9e333d36fcc429770442c3a67bf7445fd",
+      "bytes": 163
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-steering/rules/steering-principles.md",
+      "backup": "original/.agents/skills/kiro-steering/rules/steering-principles.md",
+      "sha256": "da53daeabb0299e9f429213af362b54cef93260a1a221b960965956c426df58f",
+      "bytes": 2374
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-steering-custom/SKILL.md",
+      "backup": "original/.agents/skills/kiro-steering-custom/SKILL.md",
+      "sha256": "cac16690dc4c3388e66a6dc73c7b9844a8366897901ef1210cd29d3676d13ef6",
+      "bytes": 4826
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-steering-custom/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-steering-custom/agents/openai.yaml",
+      "sha256": "3a25cca2c5b682adb45cf8ff881cbc74d77033a0feb90d070e7829fde6e5bd08",
+      "bytes": 178
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-steering-custom/rules/steering-principles.md",
+      "backup": "original/.agents/skills/kiro-steering-custom/rules/steering-principles.md",
+      "sha256": "da53daeabb0299e9f429213af362b54cef93260a1a221b960965956c426df58f",
+      "bytes": 2374
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-validate-design/SKILL.md",
+      "backup": "original/.agents/skills/kiro-validate-design/SKILL.md",
+      "sha256": "cfe55680d725b588e296d1979b2819d738f3995e35ca5eed9c061e94b5a95250",
+      "bytes": 5066
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-validate-design/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-validate-design/agents/openai.yaml",
+      "sha256": "a12e7c2f457ca2bd0d29f355b57f46e027922e803aa5f4ec03ee2f1ec6f1ce51",
+      "bytes": 171
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-validate-design/rules/design-review.md",
+      "backup": "original/.agents/skills/kiro-validate-design/rules/design-review.md",
+      "sha256": "3917978761b6d94188abb3ee0d32a9885c77b2b956c37a22cfbea3c19d308a21",
+      "bytes": 4369
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-validate-gap/SKILL.md",
+      "backup": "original/.agents/skills/kiro-validate-gap/SKILL.md",
+      "sha256": "2536230bfc8abe45c83e6a04947f9c85c14a3e2588024cf3f11fd7cc7d73dec2",
+      "bytes": 5436
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-validate-gap/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-validate-gap/agents/openai.yaml",
+      "sha256": "f597ad952200df881ac6b78f7b7a8dc535dd6997698c8f170968cd731d385a6b",
+      "bytes": 179
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-validate-gap/rules/gap-analysis.md",
+      "backup": "original/.agents/skills/kiro-validate-gap/rules/gap-analysis.md",
+      "sha256": "220c22c9cc8da70311ae9a8dff2a27b86623eb2f70197c4b9aff6cd4aec1d1a2",
+      "bytes": 5094
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-validate-impl/SKILL.md",
+      "backup": "original/.agents/skills/kiro-validate-impl/SKILL.md",
+      "sha256": "363e9b0bcbd8130e1cbb669bd7c23269eea0fb151ce18c85040e7dce5181e3bd",
+      "bytes": 11366
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-validate-impl/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-validate-impl/agents/openai.yaml",
+      "sha256": "b9932ad2644e3e00e7229f37efb7a6b384e2fd85090000bcf9ab760c36dc692e",
+      "bytes": 286
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-verify-completion/SKILL.md",
+      "backup": "original/.agents/skills/kiro-verify-completion/SKILL.md",
+      "sha256": "389b056b47c9295df32787fec284a97f53b02555443bdd4343d3e61ac499efbb",
+      "bytes": 3902
+    },
+    {
+      "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-verify-completion/agents/openai.yaml",
+      "backup": "original/.agents/skills/kiro-verify-completion/agents/openai.yaml",
+      "sha256": "05758a85e372d079199baadc94c392cddf24d1b85b4b7ee932bc40bbcf58ef9b",
+      "bytes": 159
+    }
+  ],
+  "absent_overrides": [
+    "/Users/osabekenta/myStudy/line-message-playground/AGENTS.override.md"
+  ],
+  "restore_note": "作業を停止し、現状との差分を確認してから、filesのbackupをsourceへ復元する。移行で新規作成したファイルはMigration Reportで確認し、退避してから除去する。無関係な変更を上書きしない。"
+}

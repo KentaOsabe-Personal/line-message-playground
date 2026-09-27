@@ -1,0 +1,160 @@
+{
+  "migration": "gpt6-20260927T003825Z",
+  "apply": "PASS",
+  "verify": "PASS_WITH_RECORDED_MANUAL_REVIEW",
+  "sol_information_review": "PASS_STATIC",
+  "astra_scope_review": "PASS_STATIC_EXCEPT_PRESERVED_MANUAL_REVIEW",
+  "model_comparison_run": false,
+  "tests": {
+    "count": 28,
+    "seconds": 9.156,
+    "exit_code": 0,
+    "scripts_and_test_files_unchanged": 23
+  },
+  "structural_verification": {
+    "skills_before_self_retirement": 29,
+    "skills_after_self_retirement": 28,
+    "skill_names": [
+      "caveman",
+      "create-pr",
+      "domain-modeling",
+      "gh-stack",
+      "gpt6-codex-modernizer",
+      "grill-with-docs",
+      "grilling",
+      "hatch-pet",
+      "imagegen",
+      "kiro-debug",
+      "kiro-discovery",
+      "kiro-impl",
+      "kiro-review",
+      "kiro-spec-batch",
+      "kiro-spec-design",
+      "kiro-spec-init",
+      "kiro-spec-quick",
+      "kiro-spec-requirements",
+      "kiro-spec-status",
+      "kiro-spec-tasks",
+      "kiro-steering",
+      "kiro-validate-design",
+      "kiro-validate-gap",
+      "kiro-validate-impl",
+      "openai-docs",
+      "plugin-creator",
+      "review-agent",
+      "skill-creator",
+      "skill-installer"
+    ],
+    "yaml_files": 26,
+    "markdown_links": 67,
+    "python_scripts_parsed": 30,
+    "pet_python_unchanged": 23,
+    "backup_files_verified": 91,
+    "baseline_unchanged": 144,
+    "changed": [
+      "/Users/osabekenta/.codex/skills/hatch-pet/SKILL.md",
+      "/Users/osabekenta/.codex/skills/hatch-pet/references/qa-rubric.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/domain-modeling/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-quick/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-impl/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-impl/templates/reviewer-prompt.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-impl/templates/implementer-prompt.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-impl/templates/debugger-prompt.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-validate-gap/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/gh-stack/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-tasks/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-design/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-requirements/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-validate-design/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-discovery/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-debug/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-review/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-validate-impl/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-steering/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-steering/rules/steering-principles.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/caveman/README.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/caveman/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/create-pr/SKILL.ja.review.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/create-pr/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-batch/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-spec-batch/agents/openai.yaml",
+      "/Users/osabekenta/myStudy/line-message-playground/.kiro/steering/structure.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.kiro/steering/tech.md",
+      "/Users/osabekenta/.codex/AGENTS.md",
+      "/Users/osabekenta/myStudy/line-message-playground/AGENTS.md"
+    ],
+    "missing": [
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-verify-completion/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-verify-completion/agents/openai.yaml",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-steering-custom/SKILL.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-steering-custom/agents/openai.yaml",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-steering-custom/rules/steering-principles.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/create-pr/references/publish-history.md"
+    ],
+    "errors": [],
+    "warnings": [
+      {
+        "kind": "unchanged-legacy-frontmatter",
+        "path": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/grill-with-docs/SKILL.md",
+        "detail": "Unexpected key(s) in SKILL.md frontmatter: disable-model-invocation. Allowed properties are: allowed-tools, description, license, metadata, name",
+        "action": "MANUAL_REVIEW"
+      }
+    ]
+  },
+  "metrics": {
+    "repository": {
+      "before_skills": 23,
+      "after_skills": 21,
+      "before_lines": 4021,
+      "after_lines": 776,
+      "before_bytes": 203231,
+      "after_bytes": 59506
+    },
+    "user_including_system": {
+      "before_skills": 8,
+      "after_skills": 7,
+      "before_lines": 2332,
+      "after_lines": 979,
+      "before_bytes": 158862,
+      "after_bytes": 62078
+    },
+    "root_and_core": {
+      "before": {
+        "lines": 477,
+        "bytes": 41783
+      },
+      "after": {
+        "lines": 259,
+        "bytes": 21173
+      }
+    }
+  },
+  "scope": {
+    "tracked_changes": 33,
+    "new_instruction_files": [
+      ".agents/skills/gh-stack/references/commands.md",
+      ".agents/skills/gh-stack/references/workflows.md",
+      ".agents/skills/kiro-discovery/references/workflow.md",
+      ".agents/skills/kiro-impl/references/completion-gate.md",
+      ".agents/skills/kiro-steering/references/custom-steering.md",
+      ".kiro/steering/line-integration.md",
+      "backend/AGENTS.md",
+      "frontend/AGENTS.md"
+    ],
+    "application_source_changes": [],
+    "overrides_absent": true,
+    "unmodified_protected": [
+      "/Users/osabekenta/myStudy/line-message-playground/.kiro/steering/product.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.kiro/steering/spec-sizing.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.kiro/steering/roadmap.md",
+      "/Users/osabekenta/myStudy/line-message-playground/.codex/agents/spec-reviewer.toml"
+    ]
+  },
+  "report": "/Users/osabekenta/myStudy/line-message-playground/docs/codex-gpt6-migration-report-2026-09-27.md",
+  "report_sha256": "c5376876778890b77660d8d30fecd03b6db580abb0664854b590e123c17127ee",
+  "self_retirement": {
+    "state_at_report_write": "PENDING_FINAL_RENAME",
+    "source": "/Users/osabekenta/.codex/skills/gpt6-codex-modernizer",
+    "destination": "/Users/osabekenta/.codex/migration-backups/gpt6-20260927T003825Z/retired/gpt6-codex-modernizer"
+  }
+}

@@ -1,103 +1,19 @@
 ---
 name: kiro-validate-design
-description: Interactive technical design quality review and validation
+description: Review an existing Kiro technical design when design validation is requested. Returns an interactive GO or NO-GO assessment with requirement and design evidence; it does not generate the design or replace the generation-time gate.
 metadata:
   shared-rules: "design-review.md"
 ---
 
+# 生成済み設計の検証
 
-# Technical Design Validation
+対象specのmetadata、requirements、design、core steering、対象サービスと関連customの規則を読みます。designがなければ `$kiro-spec-design` へ返します。生成metadataが未設定なら警告して実文書をreviewできます。
 
-<background_information>
-- **Mission**: Conduct interactive quality review of technical design to ensure readiness for implementation
-- **Success Criteria**:
-  - Critical issues identified (maximum 3 most important concerns)
-  - Balanced assessment with strengths recognized
-  - Clear GO/NO-GO decision with rationale
-  - Actionable feedback for improvements if needed
-</background_information>
+[design-review.md](rules/design-review.md) を正本として、既存architectureとの適合、設計整合、型・interface、保守性をreviewします。必要なcode pattern調査は独立して委譲できます。
 
-<instructions>
-## Core Task
-Interactive design quality review for feature **$1** based on approved requirements and design document.
+- 重要な懸念は最大3件、保持すべき良い点は1〜2件を示す。
+- 各指摘にrequirement ID、design節、影響、修正案を付ける。曖昧な設計意図は対話で確認し、技術選択や実装設計をこのreviewで勝手に確定しない。
+- `GO`／`NO-GO` と根拠を示す。NO-GOはdesign修正と再検証へ、GOはtasks生成前の人間の確認へ案内する。
+- 説明はspecの言語。未指定は `en`。steering不足は未確認範囲として示す。
 
-## Execution Steps
-
-1. **Gather Context**:
-   - Read `.kiro/specs/$1/spec.json` for language and metadata
-   - Read `.kiro/specs/$1/requirements.md` for requirements
-   - Read `.kiro/specs/$1/design.md` for design document
-   - Core steering context: `product.md`, `tech.md`, `structure.md`
-   - Additional steering files only when directly relevant to architecture boundaries, integrations, runtime prerequisites, domain rules, security/performance constraints, or team conventions that affect implementation readiness
-   - Relevant local agent skills or playbooks only when they clearly match the feature's host environment or use case and provide review-relevant context
-
-#### Parallel Research
-
-The following research areas are independent and can be executed in parallel:
-1. **Context & rules loading**: Spec documents, core steering, task-relevant extra steering, relevant local agent skills/playbooks, and `rules/design-review.md` from this skill's directory for review criteria
-2. **Codebase pattern survey**: Gather existing architecture patterns, naming conventions, and component structure from the codebase to use as reference during review
-
-If multi-agent is enabled, spawn sub-agents for each area above. Otherwise execute sequentially.
-
-After all parallel research completes, synthesize findings for review.
-
-2. **Execute Design Review**:
-   - Reference conversation history when available: leverage prior requirements discussion and user's stated design intent
-   - Follow design-review.md process: Analysis → Critical Issues → Strengths → GO/NO-GO
-   - Limit to 3 most important concerns
-   - Engage interactively with user — ask clarifying questions, propose alternatives
-   - Use language specified in spec.json for output
-
-3. **Decision and Next Steps**:
-   - Clear GO/NO-GO decision with rationale
-   - Provide specific actionable next steps (see Next Phase below)
-
-## Important Constraints
-- **Quality assurance, not perfection seeking**: Accept acceptable risk
-- **Critical focus only**: Maximum 3 issues, only those significantly impacting success
-- **Conversation-aware**: Leverage discussion history for requirements context and user intent when available
-- **Interactive approach**: Engage in dialogue, ask clarifying questions, propose alternatives
-- **Balanced assessment**: Recognize both strengths and weaknesses
-- **Actionable feedback**: All suggestions must be implementable
-- **Context Discipline**: Start with core steering and expand only with review-relevant steering or use-case-aligned local agent skills/playbooks
-</instructions>
-
-## Tool Guidance
-- **Read first**: Load spec, core steering, relevant local playbooks/agent skills, and rules before review
-- **Grep if needed**: Search codebase for pattern validation or integration checks
-- **Interactive**: Engage with user throughout the review process
-
-## Output Description
-Provide output in the language specified in spec.json with:
-
-1. **Review Summary**: Brief overview (2-3 sentences) of design quality and readiness
-2. **Critical Issues**: Maximum 3, following design-review.md format
-3. **Design Strengths**: 1-2 positive aspects
-4. **Final Assessment**: GO/NO-GO decision with rationale and next steps
-
-**Format Requirements**:
-- Use Markdown headings for clarity
-- Follow design-review.md output format
-- Keep summary concise
-
-## Safety & Fallback
-
-### Error Scenarios
-- **Missing Design**: If design.md doesn't exist, stop with message: "Run `$kiro-spec-design $1` first to generate design document"
-- **Design Not Generated**: If design phase not marked as generated in spec.json, warn but proceed with review
-- **Empty Steering Directory**: Warn user that project context is missing and may affect review quality
-- **Language Undefined**: Default to English (`en`) if spec.json doesn't specify language
-
-### Next Phase: Task Generation
-
-**If Design Passes Validation (GO Decision)**:
-- Review feedback and apply changes if needed
-- Run `$kiro-spec-tasks $1` to generate implementation tasks
-- Or `$kiro-spec-tasks $1 -y` to auto-approve and proceed directly
-
-**If Design Needs Revision (NO-GO Decision)**:
-- Address critical issues identified
-- Re-run `$kiro-spec-design $1` with improvements
-- Re-validate with `$kiro-validate-design $1`
-
-**Note**: Design validation is recommended but optional. Quality review helps catch issues early.
+この検証は任意の再レビューです。design生成時の必須gateを置き換えません。

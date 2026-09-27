@@ -1,0 +1,14 @@
+[
+  {
+    "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-steering-custom",
+    "retired": "/Users/osabekenta/myStudy/line-message-playground/.migration-backups/gpt6-20260927T003825Z/retired/kiro-steering-custom"
+  },
+  {
+    "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/kiro-verify-completion",
+    "retired": "/Users/osabekenta/myStudy/line-message-playground/.migration-backups/gpt6-20260927T003825Z/retired/kiro-verify-completion"
+  },
+  {
+    "source": "/Users/osabekenta/myStudy/line-message-playground/.agents/skills/create-pr/references/publish-history.md",
+    "retired": "/Users/osabekenta/myStudy/line-message-playground/.migration-backups/gpt6-20260927T003825Z/retired/publish-history.md"
+  }
+]

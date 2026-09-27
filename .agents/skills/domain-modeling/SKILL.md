@@ -1,74 +1,14 @@
 ---
 name: domain-modeling
-description: Build and sharpen a project's domain model. Use when the user wants to pin down domain terminology or a ubiquitous language, record an architectural decision, or when another skill needs to maintain the domain model.
+description: Define or revise domain terminology and record consequential architectural decisions in CONTEXT.md and ADRs. Use when the domain model changes or an explicitly selected workflow needs documentation; ordinary glossary reading does not require this skill.
 ---
 
-# Domain Modeling
+# ドメインモデルの記録
 
-Actively build and sharpen the project's domain model as you design. This is the *active* discipline — challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. (Merely *reading* `CONTEXT.md` for vocabulary is not this skill — that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
+用語・関係・境界を明確にし、合意した語彙と判断を記録します。既存語彙を読むだけの作業にはこのSkillを必要としません。
 
-## File structure
-
-Most repos have a single context:
-
-```
-/
-├── CONTEXT.md
-├── docs/
-│   └── adr/
-│       ├── 0001-event-sourced-orders.md
-│       └── 0002-postgres-for-write-model.md
-└── src/
-```
-
-If a `CONTEXT-MAP.md` exists at the root, the repo has multiple contexts. The map points to where each one lives:
-
-```
-/
-├── CONTEXT-MAP.md
-├── docs/
-│   └── adr/                          ← system-wide decisions
-├── src/
-│   ├── ordering/
-│   │   ├── CONTEXT.md
-│   │   └── docs/adr/                 ← context-specific decisions
-│   └── billing/
-│       ├── CONTEXT.md
-│       └── docs/adr/
-```
-
-Create files lazily — only when you have something to write. If no `CONTEXT.md` exists, create one when the first term is resolved. If no `docs/adr/` exists, create it when the first ADR is needed.
-
-## During the session
-
-### Challenge against the glossary
-
-When the user uses a term that conflicts with the existing language in `CONTEXT.md`, call it out immediately. "Your glossary defines 'cancellation' as X, but you seem to mean Y — which is it?"
-
-### Sharpen fuzzy language
-
-When the user uses vague or overloaded terms, propose a precise canonical term. "You're saying 'account' — do you mean the Customer or the User? Those are different things."
-
-### Discuss concrete scenarios
-
-When domain relationships are being discussed, stress-test them with specific scenarios. Invent scenarios that probe edge cases and force the user to be precise about the boundaries between concepts.
-
-### Cross-reference with code
-
-When the user states how something works, check whether the code agrees. If you find a contradiction, surface it: "Your code cancels entire Orders, but you just said partial cancellation is possible — which is right?"
-
-### Update CONTEXT.md inline
-
-When a term is resolved, update `CONTEXT.md` right there. Don't batch these up — capture them as they happen. Use the format in [CONTEXT-FORMAT.md](./CONTEXT-FORMAT.md).
-
-`CONTEXT.md` should be totally devoid of implementation details. Do not treat `CONTEXT.md` as a spec, a scratch pad, or a repository for implementation decisions. It is a glossary and nothing else.
-
-### Offer ADRs sparingly
-
-Only offer to create an ADR when all three are true:
-
-1. **Hard to reverse** — the cost of changing your mind later is meaningful
-2. **Surprising without context** — a future reader will wonder "why did they do it this way?"
-3. **The result of a real trade-off** — there were genuine alternatives and you picked one for specific reasons
-
-If any of the three is missing, skip the ADR. Use the format in [ADR-FORMAT.md](./ADR-FORMAT.md).
+- rootの `CONTEXT-MAP.md` があれば対応するcontextへ、なければ `CONTEXT.md` と `docs/adr/` を使う。ファイルは記録すべき内容ができた時に作成する。
+- 既存定義と異なる用語、曖昧な同義語、コードと説明の食い違いは具体例とともに確認する。通常のfactは環境から調べ、業務上の選択を勝手に決めない。
+- 解決した用語は [CONTEXT_FORMAT.md](CONTEXT_FORMAT.md) に従いその場で更新する。CONTEXTは語彙に限定し、spec・scratchpad・実装詳細を置かない。
+- ADRは「変更を戻すコストが高い」「背景なしでは意外」「実際のトレードオフがある」の3条件が揃う場合だけ提案する。[ADR_FORMAT.md](ADR_FORMAT.md) の短い形式と連番を使う。
+- 複数contextでは語彙・context固有ADRを各所有範囲へ置き、全体の決定をrootのADRへ残す。

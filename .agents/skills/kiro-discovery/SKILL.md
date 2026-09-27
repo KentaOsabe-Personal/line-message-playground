@@ -1,278 +1,83 @@
 ---
 name: kiro-discovery
-description: Entry point for new work. Determines the best action path or work decomposition (update existing spec, create new spec, mixed decomposition, or no spec needed) and refines ideas through structured dialogue.
+description: Choose the Kiro specification path when scope is unclear or a new feature needs a brief or roadmap decomposition. Distinguishes existing-spec updates, direct implementation, new specs, and mixed work; does not turn routine fixes into mandatory interviews.
 ---
 
+# Kiro作業の分解
 
-# Discovery
+既存specの更新、直接実装、新規spec、roadmap分割を選び、合意した範囲をbriefへ保存します。工程全体の案内は [workflow.md](references/workflow.md)。
 
-<background_information>
-- **Success Criteria**:
-  - Correct action path or work decomposition identified based on existing project state
-  - User's intent clarified through questions, not assumptions
-  - Output is an actionable next step (not just a description)
-</background_information>
+## 経路選択
 
-<instructions>
+まず `.kiro/specs/*/spec.json` のfeature・phase・approvals、steeringの存在、root構造を調べます。既存roadmapと [サイズ方針](../../../.kiro/steering/spec-sizing.md) は読み、関係のないspec本文を一括で読まないようにします。
 
-## Step 1: Lightweight Scan
+| Path | 選択条件 | 次の行動 |
+|---|---|---|
+| A | 意味のある要求が1つの既存spec内に収まる | 対象specの更新を提案して停止 |
+| B | 新規・既存specの更新を必要としないbug fix、設定、小さな変更 | 直接実装を提案して停止 |
+| C | 新規の単一specで `PASS (single-spec)` | briefを作成 |
+| D | サイズ方針で `SPLIT_REQUIRED` | roadmapと各新規specのbriefを作成 |
+| E | 既存spec更新・新規spec・直接実装の混在 | 新規specがある場合だけ混在roadmapを作成 |
 
-Gather **only metadata** to determine the action path. Do NOT read full file contents yet.
+C／D／Eを選ぶ前に、テスト・移行・統合を含む1〜3時間単位の実行task数、責任境界、判定理由を示して方向を確認します。独立した境界が複数あるだけで分割せず、サイズ方針の複合リスク・review不収束条件を適用します。
 
-- **Specs inventory**: Scan `.kiro/specs/*/spec.json` for `name`, `phase` fields and `approvals` status. Note feature names and their current status.
-- **Steering existence**: Check which files exist in `.kiro/steering/` (product.md, tech.md, structure.md, roadmap.md, spec-sizing.md). Do NOT read their contents yet, except for the two files explicitly required below.
-- **Roadmap check**: If `.kiro/steering/roadmap.md` exists, read it. This contains project-level context (approach, scope, constraints, spec list) from a previous discovery session. Use it to restore project context.
-- **Sizing policy**: Read `.kiro/steering/spec-sizing.md` if it exists. Its gate is mandatory before selecting Path C, D, or E.
-- **Top-level structure**: List the project root directory to note key directories and files. Do NOT recurse into subdirectories.
+## 範囲と方針の合意
 
-This step should consume minimal context. If `specs/` is empty and no steering exists, note "greenfield project" and move to Step 2.
+C／D／Eではcore steering、対象サービスAGENTS、隣接specの要件を読む。大きな調査は独立したcodebase／domain調査へ委譲でき、既存・新規境界、依存、patternを短く返してもらいます。小さく明確な作業では委譲しません。
 
-## Step 2: Determine Action Path
+不明な項目だけを一問ずつ確認します：誰の問題か、完成時の結果、Boundary Candidates、Out of Boundary、既存specとの接点、Upstream／Downstream、制約。factは環境から調べます。
 
-Based on the user's request and the metadata from Step 1, determine which path applies:
+2〜3の具体的な方針を利点・欠点・範囲とともに比較し、推奨を示します。選択後はfreshな調査workerで保守状況、ライセンス、互換性、致命的制約を確認し、問題があれば選択へ戻ります。合意した方針でサイズ判定をやり直し、最終範囲を確認します。
 
-**Path A: Existing spec covers this**
-- The request is an extension, enhancement, or fix within an existing spec's domain
-- Every meaningful part of the request fits that same spec boundary
-- Any remaining small follow-up work can be handled directly without creating a new spec
-- Skip remaining steps
+## 保存契約
 
-**Path B: No spec needed**
-- The request is a bug fix, config change, simple refactor, or trivial addition
-- No meaningful part of the request needs a new or updated spec boundary
-- The request does not need to update an existing spec either
-- Skip remaining steps
+次のcommandを案内する前に、合意した結果を対象specの言語で保存し、読み返して確認します。過去の完了項目・既存の合意は保護します。
 
-**Path C: New single-scope feature**
-- The request is new, doesn't overlap with existing specs, and fits in one spec
-- The Spec Size Assessment returns `PASS (single-spec)`
+単一specの `.kiro/specs/<feature>/brief.md` は次を含みます。
 
-**Path D: Multi-scope decomposition needed**
-- The request would produce 40+ executable tasks in a single spec, has the compound boundary-risk signals defined by `spec-sizing.md`, or otherwise returns `SPLIT_REQUIRED` because a bounded review scope is unlikely to converge
-
-**Path E: Mixed decomposition**
-- The request contains a mix of: existing spec extensions, one or more new spec candidates, and optional direct-implementation work
-- Use this path only when at least one genuinely new spec boundary is needed
-
-Before choosing Path C/D/E, perform the Spec Size Assessment required by `spec-sizing.md`. Estimate executable 1-3 hour tasks including testing, migration, and integration work; do not wait for task generation to reveal the size. Present the verdict and evidence with the determined path (or mixed decomposition) to the user and confirm before proceeding.
-For Path A/B, recommend the next action and stop.
-
-## Step 3: Deep Context Loading
-
-**Only for Path C, D, and E.** Now load the context needed for discovery.
-
-**In main context** (essential for dialogue with user):
-- **Steering documents**: Read product.md and tech.md (if they exist) for project goals, constraints, and tech stack
-- **Relevant specs**: If the request is adjacent to an existing spec, read that spec's requirements.md to understand boundaries and avoid overlap
-
-**Delegate to sub-agent** (keeps exploration out of main context):
-- **Codebase exploration**: Spawn a sub-agent to explore the codebase and return a structured summary. Ask it to summarize: (1) tech stack and frameworks, (2) directory structure and key modules, (3) patterns and conventions used, (4) areas relevant to the user's request. The sub-agent returns findings under 200 lines.
-- For Path D/E, also ask the sub-agent to identify natural domain boundaries, existing module separation, and which areas look like existing-spec extensions vs new boundaries.
-- Skip sub-agent dispatch for small/obvious requests where the top-level directory listing from Step 1 is sufficient.
-
-**Context budget**: Keep total content loaded into main context under ~500 lines. The sub-agent handles the heavy exploration.
-
-## Step 4: Understand the Idea
-
-Ask clarifying questions **sequentially** (not all at once), prioritizing boundary discovery over feature detail:
-
-1. **Who and why**: Who has the problem? What pain does it cause?
-2. **Desired outcome**: What should be true when this is done?
-3. **Boundary candidates**: What are the natural responsibility seams in this work? Where could this be split so implementation can proceed independently?
-4. **Out of boundary**: What should this spec explicitly NOT own, even if related?
-5. **Existing vs new**: Which parts seem like extensions to existing specs, and which parts look like genuinely new boundaries?
-6. **Upstream / downstream**: What existing systems, specs, or components does this depend on? What future work is likely to depend on this?
-7. **Constraints**: Are there technology, timeline, or compatibility constraints?
-
-Ask only questions whose answers you cannot infer from the context already loaded. Skip questions that steering documents already answer. If the user already provided a clear description, skip to Step 5.
-The goal is NOT to assign final owners yet. The goal is to discover the cleanest responsibility boundaries that can later become specs, tasks, and review scopes.
-
-## Step 5: Propose Approaches
-
-Propose **2-3 concrete approaches** with trade-offs:
-
-For each approach:
-- **Approach name**: One-line summary
-- **How it works**: 2-3 sentences on the technical approach
-- **Pros**: What makes this approach good
-- **Cons**: What are the risks or downsides
-- **Scope estimate**: Rough complexity (small / medium / large)
-
-If technical research is needed (unfamiliar framework, library evaluation), spawn a sub-agent to research and return a concise summary. Ask it to compare options, check latest versions, and note known issues. Raw search results never enter the main context.
-
-Recommend one approach and explain why.
-
-**After the user selects an approach**, spawn a sub-agent to verify viability before proceeding to Step 6. Ask it to check: (1) Are these technologies still actively maintained? (2) Any license incompatibilities (e.g., GPL contamination)? (3) Do the components actually work together for the use case? (4) Any known showstoppers (critical bugs, security vulnerabilities, platform limitations)? Return only issues found, or "No issues found" if everything checks out.
-
-If the viability check reveals issues, present them to the user and revisit the approach selection. If no issues, proceed to Step 6.
-
-## Step 6: Refine and Confirm
-
-- Address user's questions or concerns about the approaches
-- Narrow scope if needed: favor smaller, deliverable increments and cleaner responsibility seams
-- Re-run the Spec Size Assessment after the approach is selected and scope is refined. Path C may proceed only with `PASS (single-spec)`; otherwise switch to Path D/E.
-- For Path D/E: propose work decomposition with dependency ordering
-  - Each new boundary-worthy feature = one spec
-  - Existing spec extensions are explicitly listed with their target spec
-  - Truly small direct-implementation items are listed separately instead of being forced into a spec
-  - Dependencies between specs/workstreams are explicit
-  - Consider vertical slices (end-to-end value) vs horizontal layers (one layer at a time) based on the project needs
-- Confirm the final direction
-
-## Step 7: Write Files to Disk
-
-**CRITICAL: You MUST write these files to disk BEFORE suggesting any next command. Conversation text does not survive session boundaries. If you skip this step, all discovery analysis is lost when the session ends.**
-
-**For Path C (single spec)**:
-
-Write `.kiro/specs/<feature-name>/brief.md` to disk with this structure:
-
-```
-# Brief: <feature-name>
-
+```md
+# Brief: <feature>
 ## Problem
-[who has the problem, what pain it causes]
-
+<対象利用者と問題>
 ## Current State
-[what exists today, what's the gap]
-
+<現状と不足>
 ## Desired Outcome
-[what should be true when done]
-
+<完成時の結果>
 ## Approach
-[chosen approach and why]
-
+<選択した方針と理由>
 ## Scope
-- **In**: [what this feature includes]
-- **Out**: [what's explicitly excluded]
-
+- In: <含む範囲>
+- Out: <含まない範囲>
 ## Boundary Candidates
-- [responsibility seam 1]
-- [responsibility seam 2]
-
+<責任境界候補>
 ## Out of Boundary
-- [explicit non-goals this spec does not own]
-
+<このspecが所有しない責務>
 ## Upstream / Downstream
-- **Upstream**: [existing systems/specs this depends on]
-- **Downstream**: [likely consumers or follow-on specs]
-
+<依存元と利用先>
 ## Existing Spec Touchpoints
-- **Extends**: [existing spec(s) this work updates, if any]
-- **Adjacent**: [neighbor specs or modules to avoid overlapping]
-
+- Extends: <既存spec>
+- Adjacent: <隣接spec>
 ## Spec Size Assessment
-- **Verdict**: PASS (single-spec)
-- **Projected executable tasks**: [range, including tests/migrations/integration]
-- **Independent responsibility seams**: [count and names]
-- **Rationale**: [why this remains one spec]
-
+- Verdict: PASS (single-spec)
+- Projected executable tasks: <範囲>
+- Independent responsibility seams: <数と名称>
+- Rationale: <単一specとしてreview可能な根拠>
 ## Constraints
-[technology, compatibility, or other constraints]
+<制約>
 ```
 
-**For Path D (multi-spec decomposition)**:
+D／Eでは `.kiro/steering/roadmap.md` に Overview、Approach Decision（選択・理由・不採用案）、Scope、Constraints、Boundary Strategy、分割前のSpec Size Assessmentを記録します。機械的な読み取りに使う次の見出しを保持します。
 
-Write these to disk:
-- `.kiro/steering/roadmap.md`
-- `.kiro/specs/<feature>/brief.md` for every feature listed under `## Specs (dependency order)`
-
-Use this roadmap structure:
-
-```
-# Roadmap
-
-## Overview
-[Project goal and chosen approach -- 1-2 paragraphs]
-
-## Approach Decision
-- **Chosen**: [approach name and summary]
-- **Why**: [key reasoning]
-- **Rejected alternatives**: [what was considered and why it was rejected]
-
-## Scope
-- **In**: [what the overall project includes]
-- **Out**: [what is explicitly excluded]
-
-## Constraints
-[technology, compatibility, timeline, or other project-wide constraints]
-
-## Boundary Strategy
-- **Why this split**: [why these spec boundaries improve independence]
-- **Shared seams to watch**: [cross-spec boundaries needing careful review]
-
-## Spec Size Assessment
-- **Verdict**: SPLIT_REQUIRED
-- **Projected executable tasks before split**: [range]
-- **Independent responsibility seams**: [count and names]
-- **Rationale**: [which sizing criteria required decomposition]
-
+```md
 ## Specs (dependency order)
-- [ ] feature-a -- [one-line description]. Dependencies: none
-- [ ] feature-b -- [one-line description]. Dependencies: feature-a
-- [ ] feature-c -- [one-line description]. Dependencies: feature-a, feature-b
+- [ ] feature-a -- <説明>. Dependencies: none
+- [ ] feature-b -- <説明>. Dependencies: feature-a
 ```
 
-Then write `.kiro/specs/<feature>/brief.md` for **every** feature listed under `## Specs (dependency order)` using the Path C brief format. This enables parallel spec creation via `$kiro-spec-batch`.
+この節は**新規specだけ**です。列挙した全新規specにPath Cと同形式のbriefと個別のサイズ判定を作ります。Eの既存更新は `## Existing Spec Updates`、直接実装は `## Direct Implementation Candidates` に分け、batch実行対象へ混入させません。新規specがない場合はEへ進みません。
 
-**For Path E (mixed decomposition)**:
+既存roadmapへの再入では必要な次specのbriefと変更された順序・範囲を更新し、既存の完了・過去phaseを上書きしません。
 
-Use the same roadmap structure as Path D, plus these additional sections:
+## 次の入口
 
-```
-## Existing Spec Updates
-- [ ] existing-feature-a -- [one-line description of the extension]. Dependencies: none
-- [ ] existing-feature-b -- [one-line description of the extension]. Dependencies: feature-a
-
-## Direct Implementation Candidates
-- [ ] small-item-a -- [why this stays direct implementation]
-- [ ] small-item-b -- [why this stays direct implementation]
-
-## Specs (dependency order)
-- [ ] new-feature-a -- [one-line description]. Dependencies: none
-- [ ] new-feature-b -- [one-line description]. Dependencies: new-feature-a
-```
-
-Path E rules:
-- Keep `## Specs (dependency order)` reserved for **new specs only** so `$kiro-spec-batch` can still parse it unchanged
-- Record existing-spec extensions under `## Existing Spec Updates`
-- Record true no-spec work under `## Direct Implementation Candidates`
-- Write `brief.md` only for the **new specs** listed under `## Specs (dependency order)`
-
-**Re-entry (roadmap.md already exists)**:
-Write the next new spec's brief.md to disk. Update roadmap.md if scope/ordering changed, preserving completed items and prior phases.
-
-After writing, verify the files exist by reading them back.
-
-## Step 8: Suggest Next Steps
-
-Suggest the next command and stop. Do NOT automatically run downstream spec generation from this skill.
-
-- Path A: `$kiro-spec-requirements {feature}` to update the existing spec
-- Path B: Recommend direct implementation without creating a spec
-- Path C: Default to `$kiro-spec-init <feature-name>`
-  - Optional fast path: `$kiro-spec-quick <feature-name>` when the user explicitly wants to continue immediately
-- Path D: Default to `$kiro-spec-batch` (creates all specs in parallel based on roadmap.md dependency order)
-  - Optional cautious path: `$kiro-spec-init <first-feature-name>` when the user wants to validate the first slice before batching the rest
-- Path E: Choose the next command based on the new-spec portion of the decomposition
-  - If there is exactly one new spec: `$kiro-spec-init <new-feature-name>`
-  - If there are multiple new specs: `$kiro-spec-batch`
-  - Also note which existing specs should be revisited with `$kiro-spec-requirements <feature>`
-- Re-entry: `$kiro-spec-init <next-feature-name>` or `$kiro-spec-batch` if multiple specs remain
-
-If the decomposition contains only existing-spec updates plus direct implementation candidates, do NOT use Path E. Prefer Path A when one existing spec is the clear home, or recommend the existing-spec update plus direct implementation work without creating roadmap entries.
-
-</instructions>
-
-## Critical Constraints
-- **Files on disk are the source of continuity**: For Path C/D/E, write brief.md and roadmap.md to disk as needed before suggesting the next command. Do NOT leave discovery results only in conversation text.
-- **Sizing evidence is mandatory**: Do not write a Path C brief without a `Spec Size Assessment`, and do not silently override `SPLIT_REQUIRED`.
-
-## Safety & Fallback
-
-**Roadmap Already Exists (re-entry)**:
-- Read roadmap.md to restore project context before asking questions
-- Determine next spec based on completed specs' status
-- Write brief.md for the next spec only (just-in-time)
-- Update roadmap.md if scope/ordering changed based on implementation experience
-- Append new specs as a new phase if the request expands the project, don't overwrite existing content
+Aは `$kiro-spec-requirements <feature>`、Bは直接実装、Cは `$kiro-spec-init <feature>`。明示的な連続生成希望なら `$kiro-spec-quick`。D／Eの新規specが複数なら `$kiro-spec-batch`、1件ならinitへ案内します。既存更新・直接実装の残作業も示し、下流のspec生成は自動実行しません。

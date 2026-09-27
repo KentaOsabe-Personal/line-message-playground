@@ -41,34 +41,7 @@ Frontend は ES Modules、React JSX transform、ES2022 を前提とします。B
 
 ## 開発標準
 
-### 型安全性
-
-- TypeScript は `strict`、`isolatedModules`、`noEmit` を有効にする
-- JavaScript を混在させず、API レスポンス等の境界データには型を与える
-- Production build は `tsc -b` を Vite build より先に実行し、型エラーをビルドの失敗とする
-
-### API
-
-- HTTP API は `/api/` 配下に置く
-- Django REST Framework の View と Response を使い、公開契約を HTTP テストで検証する
-- 外部サービス呼び出しは Backend に閉じ込め、Frontend から LINE API を直接呼ばない
-- owner 向け API はサーバー側 session で本人状態を確認し、状態変更では exact origin と CSRF token の両方を検証する
-- 公開 Webhook は owner session の対象外とし、署名検証前の body や識別情報を信頼しない
-- owner 向けチャネル管理 API は、read を含めて active owner session と同一 provider を transaction 内で再検証する
-- 更新・有効化・無効化・削除は timezone-aware な `updatedAt` を revision として受け取り、stale な操作を明示的に拒否する
-
-### Frontend の画面境界
-
-- `BrowserRouter` と静的 route registry を画面選択の基準とし、認証済み機能は route-driven shell の配下へ置く
-- 認証後の復帰先は `/liff` 配下の定義済み path だけを許可し、外部 URL、query、hash、非 canonical な動的 ID を復帰先として信頼しない
-- 現在の route に対応する機能だけを mount し、route page は既存 Component の合成と寿命だけを担当する。API schema、DTO 検証、業務状態機械を router loader／action や page adapter へ複製しない
-- 表示用 read は画面離脱時に `AbortSignal` で中止するか後着結果を破棄する。Backend が受け付けた mutation は画面離脱で中断・自動再送せず、operation ID と authoritative なサーバー状態から追跡する
-
-### UI とアクセシビリティ
-
-- Tailwind CSS の共通 theme token を色、余白、角丸、影、focus 表現の source of truth とし、機能固有 CSS に値を重複させない
-- 共通 shell は wide／narrow の navigation、単一のページ見出し、`document.title`、route 変更時の main focus を一貫して提供する
-- loading、success、failure、unknown は色だけに依存せず、テキストと semantic role で区別する。keyboard focus、contrast、長い識別子の折返し、reduced motion を共通品質として検証する
+サービス固有の規則は [Frontend AGENTS](../../frontend/AGENTS.md) と [Backend AGENTS](../../backend/AGENTS.md) を参照します。設計時・root起点の作業でも対象サービスの規則を読みます。
 
 ### 秘密情報と環境設定
 
@@ -81,13 +54,9 @@ Frontend は ES Modules、React JSX transform、ES2022 を前提とします。B
 - リポジトリ内の既定パスワードや secret はローカル開発専用とし、本番相当環境では必ず上書きする
 - 秘密情報を含む DB の general query log は無効にし、ログや例外は秘密値を保持しない安全な分類へ変換する
 
-### テスト
+### テストと検証の範囲
 
-- Frontend は Vitest と jsdom を使い、テストコードを `/frontend/test/` に置く
-- Backend は Django test runner と DRF `APITestCase` を使い、status code と response body の両方を検証する
-- Frontend・Backendとも、各テスト定義の直前に日本語コメントで `テストケース:` と `期待値:` を1行ずつ記載し、入力・操作と観測可能な期待結果を具体的に示す
-- 外部作用、状態 projection、並行更新を扱う境界は、単体・統合に加えて競合、安全性、処理時間と query budget をリスクに応じて検証する
-- 現時点で CI、Python 静的型検査、coverage、E2E、共通 lint/formatter は導入されていないため、未確立の必須基準を仮定しない
+サービスごとのテスト配置・日本語コメント規約は各AGENTSにあります。現時点でCI、Python静的型検査、coverage、E2E、共通lint/formatterは導入されていないため、未確立の必須基準を仮定しません。
 
 ## 共通コマンド
 
@@ -119,53 +88,8 @@ ngrokの割り当て済み開発用ドメインを`NGROK_DOMAIN`、authtokenを`
 
 Backend は MySQL の healthcheck 成功後に起動し、起動時に migration を適用します。Frontend は Backend コンテナの起動後に開始します。定期的な Backend API の healthcheck は実行しません。
 
-### LINE 配信
+### LINE連携
 
-送信処理は Backend のサービス境界に閉じ込めます。プレビュー時に正規化済み内容を確認トークンへ結び付け、送信時に内容の一致を再検証します。トークンは不透明な値とし、本文や操作 ID を含めません。
+送信、認証・資格情報、Webhook、リッチメニューの詳細は [line-integration.md](line-integration.md) にあります。これらの機能・画面・契約の設計や変更時に読みます。結果不明を成功扱いせず、外部作用の自動再送を避け、所有権を証明できない外部資源を変更・削除しない原則を守ります。
 
-操作 ID を LINE retry key と監査レコードに一貫して使用し、同じ操作は保存済み結果へ収束させます。外部通信はデータベース transaction の外で行い、処理中レコードの一意制約と条件付き更新で並行送信や結果の上書きを防ぎます。
-
-配信状態は `processing`、`succeeded`、`failed`、`unknown` を区別します。タイムアウト等の結果不明時は自動再送せず、状態確認 API で既存操作を確認してから明示的な再試行を許可します。LINE SDK の生の例外や認証情報、固定宛先は公開 API や通常ログへ出さず、安全なエラー分類へ変換します。
-
-push 送信は選択された登録済みチャネルのアクセストークンと、本人連携済み配信先の LINE user ID を実行時に解決します。固定設定の宛先やアクセストークンを参照する旧 runtime は使用しません。チャネルシークレットは push 送信では使用せず、Webhook 境界だけが署名検証のために参照します。利用上限確認は将来の運用機能として扱います。
-
-確認トークンにはチャネル・配信先・本文の revision を結び付け、送信直前に live target と再照合します。配信成功後の受取確認は署名済み capability を postback action へ渡し、配信状態とは別の一回限りの transition として確定します。
-
-### LINE アカウントとチャネル資格情報
-
-LIFF から得た token は Backend の LINE Login 境界で検証し、provider と owner allowlist に一致した identity だけをサーバー側 session へ結び付けます。Frontend は session cookie を直接解釈せず、session API の安全な状態表現を使います。
-
-複数 Messaging API チャネルの資格情報は DB へ暗号化して保存し、復号可能な値を repository 境界の外へ不必要に広げません。keyring の先頭を現用鍵とし、旧鍵を残した再暗号化、検証、撤去の順でローテーションします。鍵を失った DB は復号できないため、バックアップと旧鍵の保持期間を一体で判断します。
-
-owner 向けチャネル管理では、資格情報を create／replace 入力だけの write-only 値とし、read model と API response は設定状態と更新日時だけを返します。read と mutation は active owner と同一 provider を transaction 内で fence し、mutation は `updatedAt` revision による optimistic concurrency を使います。削除時はチャネルを lock した後に配信・配信先・Webhook 等の参照を再確認し、参照中の削除を拒否します。
-
-接続確認は access token と期待 bot user ID の同一 revision snapshotを使う read-only な一回の外部照会です。外部通信中は DB lock を保持せず、戻り時に revision が変化していれば結果を採用しません。token、secret、生の LINE 応答を永続化または公開せず、安全な状態分類だけを返します。
-
-### Webhook
-
-チャネル別の不透明な UUID から有効な資格情報を選び、生の request body に対する HMAC-SHA256 署名検証を JSON 解析より先に行います。署名後も `destination` と payload 上限を検証し、検証前後の失敗を安全な公開エラーへ縮約します。
-
-`webhookEventId` はイベント台帳の一意キーとして重複を排除し、検証済みの immutable envelope だけを静的 handler registry へ渡します。受付は軽量な同期処理とし、未対応イベントも台帳へ明示的に記録します。将来重い処理が必要になった場合はレスポンス返却から分離します。
-
-follow／unfollow handler は、active owner、provider、LINE subject、チャネルが完全一致する既存配信先だけを状態 projection の対象にします。未連携、不正、group／room source から identity や配信先を作成せず、安全な非更新結果として監査します。
-
-友だち状態、最終イベントの順序 cursor、PII を含まない同期監査は、行ロックを使った同一 transaction で確定します。登録時刻を baseline とし、`(occurred_at_ms, webhookEventId の ASCII 順)` を比較して、遅延、重複、同時刻、同状態のイベントを到着順に依存しない単一状態へ収束させます。message／postback、reply、配信は別 handler の責任です。
-
-message／postback handler は、完全一致の静的 command／action registry と既存の owner・provider・recipient 照合を通過した入力だけを処理します。現在の command は `/ping` から固定 `pong` 一件への reply に限定し、production の postback action registry は明示登録がない限り空です。未知、不正、未連携、group／room source は identity や recipient を作らず、外部作用のない結果として扱います。
-
-Webhook request は View 入口から単一の monotonic deadline を共有し、handler を local と deadline-managed external の実行プロファイルへ分けます。LINE reply は同一チャネルの資格情報と一回限りの reply token を使い、自動再試行せず、期限不足なら開始しません。accepted、rejected、unknown を区別し、受信内容、token、LINE user ID、access token を保存しない interaction 監査へ収束させます。
-
-### LINE リッチメニュー資源
-
-リッチメニュー画像は、版付きテンプレート、固定 geometry、同梱日本語フォントから決定的に生成します。入力文字の glyph、寸法、比率、形式、1 MB 上限を LINE への外部作用前に検証し、画像内容は encoder の偶然に依存しない canonical pixel digest で結び付けます。フォントの版、ライセンス、digest と画像生成依存は repository に固定し、起動時とテストで差し替えや欠落を検出します。
-
-LINE の rich-menu mutation には retry key がないため、タイムアウト、5xx、429、解釈不能な応答を自動再試行しません。operation、管理資源、段階遷移、ownership marker を永続化し、list／get／default／画像 download の保守的な観測から既存操作へ収束させます。`unknown` や `cleanup_required` は成功・失敗へ推測せず、明示的な recheck または cleanup まで新規変更を禁止します。保存済み ID または強い所有権証明がない外部資源は削除しません。
-
-外部通信中はデータベース lock を保持せず、戻り時に owner、provider、チャネル revision、operation stage を再検証します。段階導入は `read_only`、`recovery_only`、`enabled` を区別し、下流の reference probe、履歴 purge、承認済み統合 marker が揃わない限り mutation を fail-closed で拒否します。
-
-チャネル無効化は、チャネルごとに一意な intent と operation ID を永続化し、LINE 上の実状態確認、必要な適用解除、明示的な再確認、完了へ段階的に収束させます。同じ操作の再実行は保存済み状態を返し、pending 中は同じ無効化に承認された回復・後片付け以外のチャネル更新とリッチメニュー変更を transaction 内の fence で拒否します。
-
-無効化前の評価と解除はリッチメニュー app の headless typed port を介し、所有権を証明できるチャネル既定資源だけを対象にします。外部既定、結果不明、後片付け待ち、revision 競合ではチャネルを無効化せず、確認待ちとして実状態の再取得を要求します。再有効化も owner、provider、revision を再検証し、必要な場合は資格情報ペアの修復と同じ操作で行います。mutation の有効化には reference probe、履歴 purge、無効化ライフサイクル、統合 marker の全条件を要求します。
-
----
-_更新日: 2026-08-30。React Router、Tailwind CSS、route 単位の画面寿命と共通 UI 品質を反映。技術判断と標準を記録し、依存パッケージ一覧にはしない。_
+_移行日: 2026-09-27。サービス固有規則とLINE契約を局所・条件付き参照へ移動。_
