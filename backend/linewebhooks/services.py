@@ -9,9 +9,9 @@ from django.utils import timezone
 from linechannels.types import WebhookChannelAvailable
 
 from .types import (
-    HandlerSucceeded,
     HandlerExecutionContext,
     HandlerRegistration,
+    HandlerSucceeded,
     IngressAccepted,
     IngressRejected,
     IngressResult,
@@ -25,7 +25,6 @@ from .types import (
     VerifiedWebhookPayload,
     WebhookAuditEntry,
 )
-
 
 _DEADLINE_SECONDS = 2.0
 _LOCAL_HANDLER_RESERVE_SECONDS = 0.1
@@ -162,7 +161,7 @@ class WebhookIngressService:
     def _canonical_uuid4(value: str) -> UUID | None:
         try:
             parsed = UUID(value)
-        except (AttributeError, TypeError, ValueError):
+        except AttributeError, TypeError, ValueError:
             return None
         if parsed.version != 4 or str(parsed) != value:
             return None
@@ -241,14 +240,10 @@ class WebhookIngressService:
             if not dispatch_closed:
                 required_reserve = (
                     pending_dispatch_count * _LOCAL_HANDLER_RESERVE_SECONDS
-                    + pending_dispatch_count
-                    * _RECEIPT_FINALIZE_RESERVE_SECONDS
+                    + pending_dispatch_count * _RECEIPT_FINALIZE_RESERVE_SECONDS
                     + _HTTP_RESPONSE_RESERVE_SECONDS
                 )
-                dispatch_closed = (
-                    self._monotonic_clock() + required_reserve
-                    > response_deadline
-                )
+                dispatch_closed = self._monotonic_clock() + required_reserve > response_deadline
             if dispatch_closed:
                 finalization = self._receipt_repository.mark_failed(  # type: ignore[attr-defined]
                     decision.receipt_id,
@@ -273,8 +268,7 @@ class WebhookIngressService:
             if registration.execution_profile == "deadline_managed_external":
                 external_cutoff = response_deadline - (
                     pending_dispatch_count * _LOCAL_HANDLER_RESERVE_SECONDS
-                    + pending_dispatch_count
-                    * _RECEIPT_FINALIZE_RESERVE_SECONDS
+                    + pending_dispatch_count * _RECEIPT_FINALIZE_RESERVE_SECONDS
                     + _HTTP_RESPONSE_RESERVE_SECONDS
                 )
             context = HandlerExecutionContext(

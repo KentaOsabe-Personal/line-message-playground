@@ -1,5 +1,5 @@
-import json
 import asyncio
+import json
 from unittest.mock import patch
 
 import httpx
@@ -50,9 +50,7 @@ class JevGatewayTests(SimpleTestCase):
         assert isinstance(result, JevTransportSuccess)
         self.assertEqual(result.elapsed_ms, 125.0)
         self.assertEqual(len(requests), 1)
-        self.assertEqual(
-            str(requests[0].url), "https://api.typesafe.ai/v1/systemone"
-        )
+        self.assertEqual(str(requests[0].url), "https://api.typesafe.ai/v1/systemone")
         self.assertEqual(requests[0].method, "POST")
         self.assertEqual(requests[0].headers["authorization"], "Bearer secret-key")
         self.assertEqual(json.loads(requests[0].content), {"model": "jev-1.13.0"})
@@ -68,9 +66,7 @@ class JevGatewayTests(SimpleTestCase):
         )
         for response in responses:
             with self.subTest(response=response):
-                client = httpx.AsyncClient(
-                    transport=httpx.MockTransport(lambda request: response)
-                )
+                client = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: response))
                 gateway = JevGateway(SecretValue("secret-key"), client=client)
 
                 result = async_to_sync(gateway.evaluate)({"model": "jev-1.13.0"})
@@ -144,9 +140,7 @@ class JevGatewayTests(SimpleTestCase):
             clients.append(client)
             return client
 
-        with patch(
-            "textjudgmentlab.jev_gateway.httpx.AsyncClient", side_effect=client_factory
-        ):
+        with patch("textjudgmentlab.jev_gateway.httpx.AsyncClient", side_effect=client_factory):
             gateway = JevGateway(SecretValue("secret-key"))
             first = async_to_sync(gateway.evaluate)({"model": "jev-1.13.0"})
             second = async_to_sync(gateway.evaluate)({"model": "jev-1.13.0"})

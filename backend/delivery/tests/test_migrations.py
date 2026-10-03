@@ -116,10 +116,7 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         self.executor.migrate(self.migrate_to)
         apps = self.executor.loader.project_state(self.migrate_to).apps
         attempt_model = apps.get_model("delivery", "DeliveryAttempt")
-        field_names = {
-            field.name
-            for field in attempt_model._meta.get_fields()
-        }
+        field_names = {field.name for field in attempt_model._meta.get_fields()}
         with connection.cursor() as cursor:
             database_columns = {
                 column.name
@@ -151,9 +148,7 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         self.assertEqual(attempt_model.objects.count(), len(self.legacy_rows))
         for expected in self.legacy_rows:
             with self.subTest(status=expected["status"]):
-                attempt = attempt_model.objects.get(
-                    operation_id=expected["operation_id"]
-                )
+                attempt = attempt_model.objects.get(operation_id=expected["operation_id"])
                 for field_name in (
                     "operation_id",
                     "subject",
@@ -205,13 +200,9 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         attempt_model = apps.get_model("delivery", "DeliveryAttempt")
 
         self.assertEqual(attempt_model.objects.count(), len(self.legacy_rows))
+        self.assertFalse(attempt_model.objects.exclude(owner_principal_slot=1).exists())
         self.assertFalse(
-            attempt_model.objects.exclude(owner_principal_slot=1).exists()
-        )
-        self.assertFalse(
-            attempt_model.objects.exclude(
-                owner_identity_public_id__isnull=True
-            ).exists()
+            attempt_model.objects.exclude(owner_identity_public_id__isnull=True).exists()
         )
 
     # テストケース: linked rowがないforward済みschemaを0001へrollbackする。
@@ -224,10 +215,7 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         self.executor.migrate(self.migrate_from)
         apps = self.executor.loader.project_state(self.migrate_from).apps
         attempt_model = apps.get_model("delivery", "DeliveryAttempt")
-        field_names = {
-            field.name
-            for field in attempt_model._meta.get_fields()
-        }
+        field_names = {field.name for field in attempt_model._meta.get_fields()}
 
         self.assertEqual(attempt_model.objects.count(), len(self.legacy_rows))
         self.assertIn("content_fingerprint", field_names)
@@ -236,9 +224,7 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         self.assertNotIn("active_request_fingerprint", field_names)
         for expected in self.legacy_rows:
             with self.subTest(status=expected["status"]):
-                attempt = attempt_model.objects.get(
-                    operation_id=expected["operation_id"]
-                )
+                attempt = attempt_model.objects.get(operation_id=expected["operation_id"])
                 for field_name in (
                     "operation_id",
                     "subject",
@@ -299,9 +285,7 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
         ):
             self.executor.migrate(self.migrate_from)
 
-        self.assertTrue(
-            attempt_model.objects.filter(target_mode="linked_recipient").exists()
-        )
+        self.assertTrue(attempt_model.objects.filter(target_mode="linked_recipient").exists())
 
     # テストケース: 0001からforward、rollback、再forwardを同じfixed配信群へ順に適用する。
     # 期待値: 各往復後も件数と全legacy監査値が同値で、owner scopeのbackfillが再現する。
@@ -322,9 +306,7 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
                     migration=migration_target[0][1],
                     status=expected["status"],
                 ):
-                    attempt = attempt_model.objects.get(
-                        operation_id=expected["operation_id"]
-                    )
+                    attempt = attempt_model.objects.get(operation_id=expected["operation_id"])
                     for field_name in (
                         "operation_id",
                         "subject",
@@ -484,9 +466,7 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
                     operation_id=uuid.uuid4(),
                     request_fingerprint=uuid.uuid4().hex * 2,
                 )
-                values["active_request_fingerprint"] = values[
-                    "request_fingerprint"
-                ]
+                values["active_request_fingerprint"] = values["request_fingerprint"]
                 values[field_name] = None
                 with self.assertRaises(IntegrityError), transaction.atomic():
                     attempt_model.objects.create(**values)
@@ -573,10 +553,7 @@ class LinkedRecipientDeliveryMigrationTests(TransactionTestCase):
                 values = self.latest_attempt_values(
                     operation_id=uuid.uuid4(),
                     request_fingerprint=fingerprint,
-                    **(
-                        {"active_request_fingerprint": fingerprint}
-                        | overrides
-                    ),
+                    **({"active_request_fingerprint": fingerprint} | overrides),
                 )
                 with self.assertRaises(IntegrityError), transaction.atomic():
                     attempt_model.objects.create(**values)

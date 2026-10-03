@@ -9,6 +9,8 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from linechannels.repositories import PersistenceError
+
 from .authentication import OWNER_SESSION_KEY, OwnerPrincipal, OwnerSessionAuthentication
 from .container import (
     build_recipient_service,
@@ -39,7 +41,6 @@ from .session_services import (
     EstablishSessionRejected,
     UnlinkingSessionStatus,
 )
-from linechannels.repositories import PersistenceError
 from .unlink_services import (
     UnlinkCompleted,
     UnlinkPendingLocalRetry,
@@ -54,7 +55,7 @@ def _session_id_from_cookie(request) -> UUID | None:
         return None
     try:
         parsed = UUID(value)
-    except (ValueError, AttributeError, TypeError):
+    except ValueError, AttributeError, TypeError:
         return None
     return parsed if str(parsed) == value else None
 
@@ -81,14 +82,14 @@ def _status_response(status):
 def _storage_safe(operation):
     try:
         return operation()
-    except (AccountPersistenceError, ImproperlyConfigured):
+    except AccountPersistenceError, ImproperlyConfigured:
         raise SafeAPIError("storage_unavailable") from None
 
 
 def _recipient_safe(operation):
     try:
         return operation()
-    except (AccountPersistenceError, PersistenceError, ImproperlyConfigured):
+    except AccountPersistenceError, PersistenceError, ImproperlyConfigured:
         raise SafeAPIError("storage_unavailable") from None
     except AccountStateError as error:
         mapping = {
@@ -104,7 +105,7 @@ def _recipient_safe(operation):
 def _unlink_safe(operation):
     try:
         return operation()
-    except (AccountPersistenceError, PersistenceError, ImproperlyConfigured):
+    except AccountPersistenceError, PersistenceError, ImproperlyConfigured:
         raise SafeAPIError("storage_unavailable") from None
 
 
@@ -116,9 +117,7 @@ def _channel_link_data(item):
         "linkState": item.link_state,
         "friendshipState": item.friendship_state,
         "deliveryAvailable": item.delivery_available,
-        "recipientId": (
-            None if item.recipient_id is None else str(item.recipient_id)
-        ),
+        "recipientId": (None if item.recipient_id is None else str(item.recipient_id)),
     }
 
 
@@ -161,9 +160,7 @@ class SessionAPIView(ExactOriginCsrfMixin, APIView):
     def delete(self, request):
         principal = request.user
         assert isinstance(principal, OwnerPrincipal)
-        _storage_safe(
-            lambda: build_session_service().logout(principal.owner_session_id)
-        )
+        _storage_safe(lambda: build_session_service().logout(principal.owner_session_id))
         request.session.flush()
         return Response({"state": "anonymous"})
 
@@ -194,9 +191,7 @@ class LineLoginAPIView(ExactOriginCsrfMixin, APIView):
 
         if result.state == "unlinking":
             status = _storage_safe(
-                lambda: build_session_service().get_status(
-                    result.session.public_id, timezone.now()
-                )
+                lambda: build_session_service().get_status(result.session.public_id, timezone.now())
             )
             return _status_response(status)
         return Response(
@@ -217,9 +212,7 @@ class ChannelListAPIView(OwnerProtectedAPIView):
         principal = request.user
         assert isinstance(principal, OwnerPrincipal)
         items = _recipient_safe(
-            lambda: build_recipient_service().list_channels(
-                principal.identity_public_id
-            )
+            lambda: build_recipient_service().list_channels(principal.identity_public_id)
         )
         return Response({"items": [_channel_link_data(item) for item in items]})
 
@@ -266,9 +259,7 @@ class RecipientDetailAPIView(OwnerProtectedAPIView):
         assert isinstance(principal, OwnerPrincipal)
         _recipient_result(
             _recipient_safe(
-                lambda: build_recipient_service().unlink(
-                    principal.identity_public_id, recipient_id
-                )
+                lambda: build_recipient_service().unlink(principal.identity_public_id, recipient_id)
             )
         )
         return Response(status=204)
@@ -323,9 +314,7 @@ class UnlinkAPIView(ExactOriginCsrfMixin, APIView):
         if isinstance(result, UnlinkCompleted):
             request.session.flush()
             return Response({"state": "completed"})
-        assert isinstance(
-            result, (UnlinkPendingReauthentication, UnlinkPendingLocalRetry)
-        )
+        assert isinstance(result, (UnlinkPendingReauthentication, UnlinkPendingLocalRetry))
         return Response(
             {
                 "state": "pending",

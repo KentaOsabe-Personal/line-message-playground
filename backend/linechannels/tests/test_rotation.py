@@ -1,7 +1,6 @@
 import uuid
 from contextlib import contextmanager
 
-from django.db import transaction
 from django.test import TransactionTestCase
 
 from linechannels.models import LineChannel
@@ -35,17 +34,13 @@ class CredentialRotationServiceTests(TransactionTestCase):
             (self.first_id,), {self.first_id: self.pair}
         )
         processor = processor or FakeProcessor()
-        service = DefaultCredentialRotationService(
-            cipher, repository, lock, processor
-        )
+        service = DefaultCredentialRotationService(cipher, repository, lock, processor)
         return service, cipher, repository, lock, processor
 
     # テストケース: 旧鍵がない単一鍵構成でrotationを要求する
     # 期待値: repository・DB transaction・advisory lockへ触れず変更ゼロのconfiguration_requiredを返す
     def test_old_key_missing_returns_configuration_required_before_dependencies(self):
-        service, cipher, repository, lock, processor = self.service(
-            readiness="old_key_missing"
-        )
+        service, cipher, repository, lock, processor = self.service(readiness="old_key_missing")
 
         summary = service.rotate_all()
 
@@ -116,13 +111,9 @@ class CredentialRotationServiceTests(TransactionTestCase):
             ),
         )
         processor = FakeProcessor(
-            verify_results={
-                self.second_id: PrimaryVerificationFailed("credential_unreadable")
-            }
+            verify_results={self.second_id: PrimaryVerificationFailed("credential_unreadable")}
         )
-        service, _, _, _, _ = self.service(
-            repository=repository, processor=processor
-        )
+        service, _, _, _, _ = self.service(repository=repository, processor=processor)
 
         summary = service.rotate_all()
 
@@ -143,18 +134,14 @@ class CredentialRotationServiceTests(TransactionTestCase):
             get_errors={third_id: PersistenceError("retryable")},
         )
         processor = FakeProcessor(
-            process_results={
-                self.first_id: RotationItemFailed("credential_unreadable")
-            },
+            process_results={self.first_id: RotationItemFailed("credential_unreadable")},
             verify_results={
                 self.first_id: PrimaryVerificationFailed("credential_unreadable"),
                 self.second_id: PrimaryVerificationFailed("credential_unreadable"),
                 third_id: PrimaryVerificationFailed("credential_unreadable"),
             },
         )
-        service, _, _, _, _ = self.service(
-            repository=repository, processor=processor
-        )
+        service, _, _, _, _ = self.service(repository=repository, processor=processor)
 
         summary = service.rotate_all()
 
@@ -185,15 +172,9 @@ class CredentialRotationServiceTests(TransactionTestCase):
     # テストケース: pair更新中にKeyboardInterruptが発生する
     # 期待値: 処理中1行のtransactionだけをrollbackし、batch lockを明示解放して割込みを伝播する
     def test_interrupt_rolls_back_current_row_and_releases_batch_lock(self):
-        repository = InterruptingRotationRepository(
-            (self.first_id,), {self.first_id: self.pair}
-        )
-        processor = FakeProcessor(
-            process_results={self.first_id: RotationItemRotated(self.pair)}
-        )
-        service, _, _, lock, _ = self.service(
-            repository=repository, processor=processor
-        )
+        repository = InterruptingRotationRepository((self.first_id,), {self.first_id: self.pair})
+        processor = FakeProcessor(process_results={self.first_id: RotationItemRotated(self.pair)})
+        service, _, _, lock, _ = self.service(repository=repository, processor=processor)
 
         with self.assertRaises(KeyboardInterrupt):
             service.rotate_all()

@@ -11,7 +11,6 @@ from uuid import UUID, uuid4
 
 from django.db import connections
 from django.test import TransactionTestCase
-from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
 from delivery.models import DeliveryAttempt
 from delivery.receipt import ReceiptHandler
@@ -20,6 +19,7 @@ from lineaccounts.models import DeliveryRecipient, LineIdentity, OwnerAccount
 from linechannels import runtime
 from linechannels.crypto import FernetCredentialCipher
 from linechannels.models import LineChannel, LineChannelCredential
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 from linechannels.types import (
     AccessToken,
     ChannelSecret,
@@ -30,7 +30,6 @@ from linewebhooks.audit import SafeWebhookAuditLogger
 from linewebhooks.container import build_webhook_ingress_service
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.views import WebhookAPIView
-
 
 _PROVIDER_ID = "0012345678"
 _BOT_USER_ID = "U" + "1" * 32
@@ -141,8 +140,8 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
             patch(
                 "linewebhooks.container.build_receipt_handler",
                 side_effect=lambda **kwargs: build_spy(
-                    attempt_repository=DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE,
-                        clock=kwargs["clock"]
+                    attempt_repository=DjangoAttemptRepository(
+                        reference_fence=LOCKED_REFERENCE_FENCE, clock=kwargs["clock"]
                     ),
                     clock=kwargs["clock"],
                 ),
@@ -169,9 +168,7 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
         recipient_public_id: UUID | None = None,
     ) -> DeliveryAttempt:
         operation_id = uuid4()
-        request_fingerprint = hashlib.sha256(
-            operation_id.bytes
-        ).hexdigest()
+        request_fingerprint = hashlib.sha256(operation_id.bytes).hexdigest()
         terminal = status != DeliveryAttempt.Status.PROCESSING
         succeeded = status == DeliveryAttempt.Status.SUCCEEDED
         unsuccessful = status in (
@@ -184,24 +181,16 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
             body="本文",
             formatted_text="【件名】\n\n本文",
             request_fingerprint=request_fingerprint,
-            active_request_fingerprint=(
-                None if terminal else request_fingerprint
-            ),
+            active_request_fingerprint=(None if terminal else request_fingerprint),
             target_mode=DeliveryAttempt.TargetMode.LINKED_RECIPIENT,
             owner_principal_slot=1,
             owner_identity_public_id=self.identity.public_id,
-            channel_public_id=(
-                channel_public_id or self.channel.public_id
-            ),
+            channel_public_id=(channel_public_id or self.channel.public_id),
             channel_label_snapshot="Receipt integration",
-            recipient_public_id=(
-                recipient_public_id or self.recipient.public_id
-            ),
+            recipient_public_id=(recipient_public_id or self.recipient.public_id),
             channel_active_snapshot=True,
             recipient_enabled_snapshot=True,
-            friendship_state_snapshot=(
-                DeliveryAttempt.FriendshipState.FRIEND
-            ),
+            friendship_state_snapshot=(DeliveryAttempt.FriendshipState.FRIEND),
             status=status,
             failure_type=(
                 DeliveryAttempt.FailureType.INVALID_REQUEST
@@ -221,14 +210,10 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
             completed_at=_NOW if terminal else None,
             receipt_requested=receipt_requested,
             receipt_expires_at=(
-                expires_at or _NOW + timedelta(hours=1)
-                if receipt_requested
-                else None
+                expires_at or _NOW + timedelta(hours=1) if receipt_requested else None
             ),
             receipt_token_digest=(
-                hashlib.sha256(capability.encode()).hexdigest()
-                if receipt_requested
-                else None
+                hashlib.sha256(capability.encode()).hexdigest() if receipt_requested else None
             ),
         )
 
@@ -324,9 +309,7 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
             with self.subTest(status=status, enabled=enabled, friendship=friendship):
                 self.recipient.enabled = enabled
                 self.recipient.friendship_state = friendship
-                self.recipient.save(
-                    update_fields=("enabled", "friendship_state")
-                )
+                self.recipient.save(update_fields=("enabled", "friendship_state"))
                 capability = f"valid-receipt-capability-{index}"
                 attempt = self._create_attempt(capability, status=status)
                 event_id = f"01ARZ3NDEKTSV4RRFFQ69G{index:04d}"
@@ -345,9 +328,7 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
                     attempt.line_accepted_request_id,
                     "line-accepted-request-id",
                 )
-                audit = InteractionAudit.objects.get(
-                    webhook_event_id=event_id
-                )
+                audit = InteractionAudit.objects.get(webhook_event_id=event_id)
                 self.assertEqual(audit.interaction_outcome, "action_succeeded")
                 self.assertEqual(audit.reply_outcome, "not_started")
 
@@ -434,9 +415,7 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
                     ),
                     before,
                 )
-                audit = InteractionAudit.objects.get(
-                    webhook_event_id=event_id
-                )
+                audit = InteractionAudit.objects.get(webhook_event_id=event_id)
                 self.assertEqual(audit.interaction_outcome, "action_rejected")
                 self.assertEqual(audit.reply_outcome, "not_started")
 
@@ -448,9 +427,7 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
         self,
     ) -> None:
         owner_unlinked_capability = "owner-unlinked-capability"
-        owner_unlinked_attempt = self._create_attempt(
-            owner_unlinked_capability
-        )
+        owner_unlinked_attempt = self._create_attempt(owner_unlinked_capability)
         owner = OwnerAccount.objects.get(slot=1)
         owner.state = OwnerAccount.State.DEAUTHORIZATION_PENDING
         owner.unlink_generation = uuid4()
@@ -467,9 +444,7 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
         self.assertEqual(owner_response.status_code, 200)
         self.assertIsNone(owner_unlinked_attempt.receipt_confirmed_at)
         self.assertIsNone(owner_unlinked_attempt.receipt_webhook_event_id)
-        owner_audit = InteractionAudit.objects.get(
-            webhook_event_id=owner_event_id
-        )
+        owner_audit = InteractionAudit.objects.get(webhook_event_id=owner_event_id)
         self.assertEqual(owner_audit.interaction_outcome, "unlinked")
         self.assertEqual(owner_audit.reply_outcome, "not_started")
 
@@ -491,14 +466,8 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
         deleted_attempt.refresh_from_db()
         self.assertIsNone(deleted_attempt.receipt_confirmed_at)
         self.assertIsNone(deleted_attempt.receipt_webhook_event_id)
-        self.assertFalse(
-            DeliveryRecipient.objects.filter(
-                public_id=recipient_public_id
-            ).exists()
-        )
-        deleted_audit = InteractionAudit.objects.get(
-            webhook_event_id=deleted_event_id
-        )
+        self.assertFalse(DeliveryRecipient.objects.filter(public_id=recipient_public_id).exists())
+        deleted_audit = InteractionAudit.objects.get(webhook_event_id=deleted_event_id)
         self.assertEqual(deleted_audit.interaction_outcome, "unlinked")
         self.assertEqual(deleted_audit.reply_outcome, "not_started")
         self.assertEqual(gateway.calls, [])
@@ -524,15 +493,11 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
         self.assertEqual(attempt.receipt_confirmed_at, _NOW)
         self.assertEqual(attempt.receipt_webhook_event_id, event_id)
         self.assertEqual(
-            InteractionAudit.objects.filter(
-                webhook_event_id=event_id
-            ).count(),
+            InteractionAudit.objects.filter(webhook_event_id=event_id).count(),
             1,
         )
         self.assertEqual(
-            WebhookEventReceipt.objects.filter(
-                webhook_event_id=event_id
-            ).count(),
+            WebhookEventReceipt.objects.filter(webhook_event_id=event_id).count(),
             1,
         )
         self.assertIsInstance(
@@ -559,8 +524,7 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
             "01ARZ3NDEKTSV4RRFFQ69G0032",
         )
         signed_events = [
-            self._signed([self._event(event_id, capability)])
-            for event_id in event_ids
+            self._signed([self._event(event_id, capability)]) for event_id in event_ids
         ]
         barrier = threading.Barrier(2)
 
@@ -577,10 +541,7 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
                 connections.close_all()
 
         with ThreadPoolExecutor(max_workers=2) as executor:
-            futures = [
-                executor.submit(ingest, raw, signature)
-                for raw, signature in signed_events
-            ]
+            futures = [executor.submit(ingest, raw, signature) for raw, signature in signed_events]
             [future.result(timeout=10) for future in futures]
 
         attempt.refresh_from_db()
@@ -620,9 +581,7 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
             first_confirmation,
         )
         self.assertEqual(
-            InteractionAudit.objects.get(
-                webhook_event_id=third_event_id
-            ).interaction_outcome,
+            InteractionAudit.objects.get(webhook_event_id=third_event_id).interaction_outcome,
             "action_no_change",
         )
         self.assertEqual(len(self.receipt_handler_spy.commands), 3)
@@ -650,9 +609,7 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
 
         self.assertEqual(response.status_code, 200)
         audit = InteractionAudit.objects.get(webhook_event_id=event_id)
-        webhook_receipt = WebhookEventReceipt.objects.get(
-            webhook_event_id=event_id
-        )
+        webhook_receipt = WebhookEventReceipt.objects.get(webhook_event_id=event_id)
         surfaces = (
             response.content,
             list(DeliveryAttempt.objects.values()),
@@ -660,10 +617,7 @@ class ReceiptPostbackIntegrationTests(TransactionTestCase):
             list(WebhookEventReceipt.objects.values()),
             repr(audit),
             repr(webhook_receipt),
-            [
-                repr(command)
-                for command in self.receipt_handler_spy.commands
-            ],
+            [repr(command) for command in self.receipt_handler_spy.commands],
             [record.__dict__ for record in capture.records],
             repr(gateway.calls),
         )

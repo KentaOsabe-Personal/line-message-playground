@@ -213,9 +213,9 @@ class InteractionServiceTests(SimpleTestCase):
     # テストケース: 旧record-only audit repositoryをcommandへ渡す
     # 期待値: mandatory予約contract欠落をfail closedしcredentialとreplyを開始しない
     def test_record_only_repository_cannot_bypass_external_reservation(self):
-        result = self.service(
-            audit_repository=_RecordOnlyAuditRepository()
-        ).handle(interaction_event(), self.context)
+        result = self.service(audit_repository=_RecordOnlyAuditRepository()).handle(
+            interaction_event(), self.context
+        )
 
         self.assertIsInstance(result, HandlerFailed)
         self.assertEqual(self.credentials.calls, 0)
@@ -282,9 +282,7 @@ class InteractionServiceTests(SimpleTestCase):
                 self.assertEqual(handler.commands[0].action_name, "confirm")
                 self.assertEqual(self.audit.records[0].interaction_outcome, expected)
                 self.assertEqual(self.audit.records[0].operation_kind, "action")
-                self.assertEqual(
-                    self.audit.records[0].operation_identifier, "confirm"
-                )
+                self.assertEqual(self.audit.records[0].operation_identifier, "confirm")
                 self.assertEqual(len(self.gateway.calls), 0)
                 self.assertEqual(len(self.audit.records), 1)
 
@@ -300,9 +298,7 @@ class InteractionServiceTests(SimpleTestCase):
                 )
                 self.assertIsInstance(result, HandlerFailed)
                 self.assertEqual(len(handler.commands), 1)
-                self.assertEqual(
-                    self.audit.records[0].interaction_outcome, "handler_failed"
-                )
+                self.assertEqual(self.audit.records[0].interaction_outcome, "handler_failed")
                 self.assertEqual(len(self.gateway.calls), 0)
                 self.assertEqual(len(self.audit.records), 1)
 
@@ -443,9 +439,9 @@ class InteractionServiceTests(SimpleTestCase):
     # テストケース: command解決後のcredential例外
     # 期待値: commandのsafe identifierを残してprocessing_failedを一回監査する
     def test_post_resolution_credential_exception_keeps_safe_identifier(self):
-        result = self.service(
-            credential_repository=_RaisingDependency()
-        ).handle(interaction_event(), self.context)
+        result = self.service(credential_repository=_RaisingDependency()).handle(
+            interaction_event(), self.context
+        )
 
         self.assertIsInstance(result, HandlerFailed)
         self.assertEqual(len(self.audit.records), 1)
@@ -476,9 +472,7 @@ class InteractionServiceTests(SimpleTestCase):
     # テストケース: 未登録postback action
     # 期待値: handlerとreplyを呼ばずunknownをsafe identifierなしで一回監査する
     def test_unknown_postback_is_a_safe_noop(self):
-        result = self.service().handle(
-            interaction_event(event_type="postback"), self.context
-        )
+        result = self.service().handle(interaction_event(event_type="postback"), self.context)
 
         self.assertIsInstance(result, HandlerSucceeded)
         self.assertEqual(len(self.gateway.calls), 0)

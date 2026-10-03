@@ -8,13 +8,13 @@ from uuid import UUID
 from django.db import DatabaseError, transaction
 from django.utils import timezone
 
-from linechannels.reference_fence import ChannelReferenceFence, DjangoChannelReferenceFence
 from lineaccounts.admin_authorization import OwnerOperationContext
+from linechannels.reference_fence import ChannelReferenceFence, DjangoChannelReferenceFence
 
 from .models import ManagedRichMenu, RichMenuChannelState, RichMenuOperation
 from .repository import disable_assessment_proof
 from .services import OperationResult, ServiceFailed, StateSucceeded
-from .types import ObservationKind, OperationCommand, OperationKind, OperationStatus
+from .types import ObservationKind, OperationCommand, OperationKind
 
 
 class HeadlessContractProgrammingError(RuntimeError):
@@ -47,9 +47,8 @@ class HeadlessCommand:
             raise ValueError("invalid owner context")
         if not isinstance(self.channel_public_id, UUID):
             raise ValueError("invalid channel public id")
-        if (
-            not isinstance(self.expected_channel_revision, datetime)
-            or timezone.is_naive(self.expected_channel_revision)
+        if not isinstance(self.expected_channel_revision, datetime) or timezone.is_naive(
+            self.expected_channel_revision
         ):
             raise ValueError("invalid channel revision")
         if self.operation is not None:
@@ -57,10 +56,7 @@ class HeadlessCommand:
                 raise ValueError("invalid operation")
             if self.operation.channel_public_id != self.channel_public_id:
                 raise ValueError("operation channel mismatch")
-            if (
-                self.operation.expected_channel_revision
-                != self.expected_channel_revision
-            ):
+            if self.operation.expected_channel_revision != self.expected_channel_revision:
                 raise ValueError("operation revision mismatch")
 
 
@@ -103,10 +99,7 @@ class HeadlessUnlinkCommand(HeadlessStateCommand):
         super(HeadlessUnlinkCommand, self).__post_init__()
         if not isinstance(self.deactivation_operation_id, UUID):
             raise ValueError("invalid deactivation operation")
-        if (
-            not isinstance(self.assessment_proof, str)
-            or len(self.assessment_proof) != 64
-        ):
+        if not isinstance(self.assessment_proof, str) or len(self.assessment_proof) != 64:
             raise ValueError("invalid assessment proof")
 
 
@@ -145,9 +138,7 @@ class ReassessDisableState(HeadlessStateCommand):
             )
         ):
             raise ValueError("invalid disable reassessment")
-        if self.reason not in {
-            "external_default", "cleanup_resolved", "revision_changed"
-        }:
+        if self.reason not in {"external_default", "cleanup_resolved", "revision_changed"}:
             raise ValueError("invalid disable reassessment reason")
 
 
@@ -164,8 +155,12 @@ class DisableAssessment:
 
     def __post_init__(self) -> None:
         if self.status not in {
-            "clear_to_disable", "unlink_required", "external_default_blocked",
-            "recheck_required", "cleanup_required", "unavailable",
+            "clear_to_disable",
+            "unlink_required",
+            "external_default_blocked",
+            "recheck_required",
+            "cleanup_required",
+            "unavailable",
         }:
             raise ValueError("invalid disable assessment")
         relation = (
@@ -207,9 +202,7 @@ class RichMenuLifecyclePort(Protocol):
 
     def start_disable_unlink(self, command: HeadlessUnlinkCommand) -> OperationResult: ...
 
-    def recover_disable(
-        self, command: HeadlessDisableRecoveryCommand
-    ) -> DisableRecoveryResult: ...
+    def recover_disable(self, command: HeadlessDisableRecoveryCommand) -> DisableRecoveryResult: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,9 +214,7 @@ class DisableRecoveryLookup:
 class DisableRecoveryStore(Protocol):
     """ChannelDeactivationRepository所有のcurrent projectionへのadapter。"""
 
-    def lookup(
-        self, command: HeadlessDisableRecoveryCommand
-    ) -> DisableRecoveryLookup: ...
+    def lookup(self, command: HeadlessDisableRecoveryCommand) -> DisableRecoveryLookup: ...
 
     def save(
         self,
@@ -300,9 +291,7 @@ class DefaultRichMenuLifecyclePort:
             and target is not None
             and observation.managed_resource_id == target.public_id
         ):
-            proof_builder = getattr(
-                type(self._service), "build_disable_assessment_proof", None
-            )
+            proof_builder = getattr(type(self._service), "build_disable_assessment_proof", None)
             if callable(proof_builder):
                 proof = proof_builder(
                     self._service,
@@ -327,9 +316,7 @@ class DefaultRichMenuLifecyclePort:
                 assessment_proof=proof,
                 target_resource_id=target.public_id,
             )
-        return DisableAssessment(
-            "external_default_blocked", reason="external_default"
-        )
+        return DisableAssessment("external_default_blocked", reason="external_default")
 
     def start_disable_unlink(self, command: HeadlessUnlinkCommand) -> OperationResult:
         if not isinstance(command, HeadlessUnlinkCommand):
@@ -339,9 +326,7 @@ class DefaultRichMenuLifecyclePort:
             return ServiceFailed(self._storage_unavailable_code())
         return starter(command)
 
-    def recover_disable(
-        self, command: HeadlessDisableRecoveryCommand
-    ) -> DisableRecoveryResult:
+    def recover_disable(self, command: HeadlessDisableRecoveryCommand) -> DisableRecoveryResult:
         if not isinstance(command, (ReconcileDisableSubject, ReassessDisableState)):
             raise HeadlessContractProgrammingError("invalid_disable_recovery_command")
         if self._recovery_store is None:
@@ -478,9 +463,7 @@ class DjangoHeadlessReferenceContracts:
         if not state.exists():
             return False
         return (
-            state.filter(
-                operations__status__in=self._BLOCKING_OPERATION_STATUSES
-            ).exists()
+            state.filter(operations__status__in=self._BLOCKING_OPERATION_STATUSES).exists()
             or state.filter(
                 managed_resources__lifecycle__in=self._BLOCKING_RESOURCE_LIFECYCLES
             ).exists()
@@ -542,15 +525,23 @@ class DjangoHeadlessReferenceContracts:
     def _locked_state_is_referenced(self, state: RichMenuChannelState) -> bool:
         if state.blocking_operation_id is not None or state.active_operation_id is not None:
             return True
-        if RichMenuOperation.objects.using(self.using).filter(
-            channel_state=state,
-            status__in=self._BLOCKING_OPERATION_STATUSES,
-        ).exists():
+        if (
+            RichMenuOperation.objects.using(self.using)
+            .filter(
+                channel_state=state,
+                status__in=self._BLOCKING_OPERATION_STATUSES,
+            )
+            .exists()
+        ):
             return True
-        return ManagedRichMenu.objects.using(self.using).filter(
-            channel_state=state,
-            lifecycle__in=self._BLOCKING_RESOURCE_LIFECYCLES,
-        ).exists()
+        return (
+            ManagedRichMenu.objects.using(self.using)
+            .filter(
+                channel_state=state,
+                lifecycle__in=self._BLOCKING_RESOURCE_LIFECYCLES,
+            )
+            .exists()
+        )
 
     def _delete_operations(self, state: RichMenuChannelState) -> None:
         operations = RichMenuOperation.objects.using(self.using).filter(channel_state=state)

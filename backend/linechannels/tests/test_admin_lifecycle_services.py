@@ -12,8 +12,8 @@ from linechannels.admin_lifecycle_types import (
     CompletedDeactivation,
     DeactivationView,
     LockedDeactivation,
-    RecheckDeactivation,
     ReactivateChannel,
+    RecheckDeactivation,
     ReservedDeactivation,
     SavedDeactivation,
     StartDeactivation,
@@ -71,9 +71,7 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
     # 期待値: 外部評価中にDB lockを保持せず、チャネルと同一intentを原子的に完了する。
     def test_start_clear_completes_without_holding_database_lock(self):
         reserved = self.view()
-        completed = self.view(
-            channel_active=False, status="completed", completed_at=timezone.now()
-        )
+        completed = self.view(channel_active=False, status="completed", completed_at=timezone.now())
         self.repository.reserve.return_value = ReservedDeactivation(reserved)
 
         def assess(_command):
@@ -94,9 +92,7 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
     # 期待値: 同じdeactivation IDでunlinkし、成功後の再評価から無効化を完了する。
     def test_start_unlink_uses_same_intent_and_reassesses_before_completion(self):
         reserved = self.view()
-        completed = self.view(
-            channel_active=False, status="completed", completed_at=timezone.now()
-        )
+        completed = self.view(channel_active=False, status="completed", completed_at=timezone.now())
         self.repository.reserve.return_value = ReservedDeactivation(reserved)
         self.lifecycle.assess_disable.side_effect = (
             DisableAssessment(
@@ -147,9 +143,7 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
                 self.repository.reset_mock()
                 self.lifecycle.reset_mock()
                 reserved = self.view()
-                blocked = self.view(
-                    status="confirmation_required", safe_reason=reason
-                )
+                blocked = self.view(status="confirmation_required", safe_reason=reason)
                 self.repository.reserve.return_value = ReservedDeactivation(reserved)
                 self.lifecycle.assess_disable.return_value = assessment
                 self.repository.save_result.return_value = SavedDeactivation(blocked)
@@ -167,9 +161,7 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
     # 期待値: 存在しないsubjectを保存せず、再確認では外部作用のない最新評価を選ぶ。
     def test_unlink_rejection_saves_no_subject_and_reassesses_on_recheck(self):
         reserved = self.view()
-        blocked = self.view(
-            status="confirmation_required", safe_reason="stale_channel"
-        )
+        blocked = self.view(status="confirmation_required", safe_reason="stale_channel")
         self.repository.reserve.return_value = ReservedDeactivation(reserved)
         self.lifecycle.assess_disable.return_value = DisableAssessment(
             "unlink_required",
@@ -209,18 +201,14 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
         self.lifecycle.recover_disable.return_value = DisableRecoveryResult(
             recovery_id, None, DisableAssessment("clear_to_disable")
         )
-        completed = self.view(
-            channel_active=False, status="completed", completed_at=timezone.now()
-        )
+        completed = self.view(channel_active=False, status="completed", completed_at=timezone.now())
         self.repository.complete_inactive.return_value = CompletedDeactivation(
             completed, completed.channel_revision
         )
 
         result = self.coordinator.recheck(
             self.owner,
-            RecheckDeactivation(
-                self.channel_id, self.operation_id, recovery_id, self.revision
-            ),
+            RecheckDeactivation(self.channel_id, self.operation_id, recovery_id, self.revision),
         )
 
         recovery = self.lifecycle.recover_disable.call_args.args[0]
@@ -241,9 +229,7 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
 
         result = self.coordinator.recheck(
             self.owner,
-            RecheckDeactivation(
-                self.channel_id, self.operation_id, recovery_id, self.revision
-            ),
+            RecheckDeactivation(self.channel_id, self.operation_id, recovery_id, self.revision),
         )
 
         self.assertEqual(result.view, replay)
@@ -267,18 +253,14 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
         self.lifecycle.recover_disable.return_value = DisableRecoveryResult(
             recovery_id, None, DisableAssessment("clear_to_disable")
         )
-        completed = self.view(
-            channel_active=False, status="completed", completed_at=timezone.now()
-        )
+        completed = self.view(channel_active=False, status="completed", completed_at=timezone.now())
         self.repository.complete_inactive.return_value = CompletedDeactivation(
             completed, completed.channel_revision
         )
 
         result = self.coordinator.recheck(
             self.owner,
-            RecheckDeactivation(
-                self.channel_id, self.operation_id, recovery_id, self.revision
-            ),
+            RecheckDeactivation(self.channel_id, self.operation_id, recovery_id, self.revision),
         )
 
         self.lifecycle.recover_disable.assert_called_once()
@@ -289,9 +271,7 @@ class ChannelDeactivationCoordinatorTests(TransactionTestCase):
     def test_reactivate_changes_only_channel_and_requires_fresh_reads(self):
         self.foundation.update.return_value = SimpleNamespace(
             status="succeeded",
-            channel=SimpleNamespace(
-                public_id=self.channel_id, updated_at=timezone.now()
-            ),
+            channel=SimpleNamespace(public_id=self.channel_id, updated_at=timezone.now()),
         )
 
         result = self.coordinator.reactivate(

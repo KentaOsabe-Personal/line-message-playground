@@ -5,10 +5,17 @@ from types import MappingProxyType
 from typing import Literal, Mapping
 
 from .types import (
-    JudgmentRequest, QuestionId, Topic, JudgmentStateSnapshot, JudgmentId, ChoiceId,
-    SentQuestion, SentChoiceQuestion, SentScoreQuestion, SentNoulQuestion,
+    ChoiceId,
+    JudgmentId,
+    JudgmentRequest,
+    JudgmentStateSnapshot,
+    QuestionId,
+    SentChoiceQuestion,
+    SentNoulQuestion,
+    SentQuestion,
+    SentScoreQuestion,
+    Topic,
 )
-
 
 QUESTION_IDS: tuple[JudgmentId, ...] = (
     "topic",
@@ -87,11 +94,15 @@ _QUESTION_TEXTS = {
 
 def _question_text(request: JudgmentRequest) -> str:
     if request.context.question is QuestionId.SCOPE:
-        return ("通知が届かない範囲を教えてください。"
-                if request.context.confirmed.topic is Topic.MISSING_NOTIFICATION
-                else "通知を設定したい範囲を教えてください。")
-    if (request.context.question is QuestionId.RESULT
-            and request.context.confirmed.topic is Topic.NOTIFICATION_SETTINGS):
+        return (
+            "通知が届かない範囲を教えてください。"
+            if request.context.confirmed.topic is Topic.MISSING_NOTIFICATION
+            else "通知を設定したい範囲を教えてください。"
+        )
+    if (
+        request.context.question is QuestionId.RESULT
+        and request.context.confirmed.topic is Topic.NOTIFICATION_SETTINGS
+    ):
         return "設定を試した結果を教えてください。"
     return _QUESTION_TEXTS[request.context.question]
 
@@ -136,8 +147,11 @@ class BuiltJudgmentInput:
         object.__setattr__(self, "questions", MappingProxyType(dict(self.questions)))
 
     def to_payload(self) -> dict[str, object]:
-        return {"model": self.model, "state": state_payload(self.state),
-                "questions": questions_payload(self.questions)}
+        return {
+            "model": self.model,
+            "state": state_payload(self.state),
+            "questions": questions_payload(self.questions),
+        }
 
 
 def build_judgment_input(request: JudgmentRequest, *, model: str) -> BuiltJudgmentInput:
@@ -155,9 +169,12 @@ def build_judgment_input(request: JudgmentRequest, *, model: str) -> BuiltJudgme
     return BuiltJudgmentInput(
         model=model,
         state=JudgmentStateSnapshot(
-            current_text=request.text, question_id=request.context.question,
-            question_text=_question_text(request), confirmed=request.context.confirmed,
-            impact=request.context.impact, recent_user_texts=request.context.recent_user_texts,
+            current_text=request.text,
+            question_id=request.context.question,
+            question_text=_question_text(request),
+            confirmed=request.context.confirmed,
+            impact=request.context.impact,
+            recent_user_texts=request.context.recent_user_texts,
         ),
         questions=questions,
     )

@@ -33,9 +33,8 @@ class RichMenuGatewayContext(_SerializationDisabled):
     def __post_init__(self) -> None:
         if not isinstance(self.channel_public_id, UUID):
             raise ValueError("invalid channel public id")
-        if (
-            not isinstance(self.channel_revision, datetime)
-            or timezone.is_naive(self.channel_revision)
+        if not isinstance(self.channel_revision, datetime) or timezone.is_naive(
+            self.channel_revision
         ):
             raise ValueError("invalid channel revision")
         if not isinstance(self.access_token, AccessToken):
@@ -117,8 +116,10 @@ class RichMenuObject(_SerializationDisabled):
             raise ValueError("invalid rich menu chat bar text")
         if type(self.selected) is not bool:
             raise ValueError("invalid rich menu selection")
-        if not isinstance(self.areas, tuple) or not self.areas or not all(
-            isinstance(area, RichMenuArea) for area in self.areas
+        if (
+            not isinstance(self.areas, tuple)
+            or not self.areas
+            or not all(isinstance(area, RichMenuArea) for area in self.areas)
         ):
             raise ValueError("invalid rich menu areas")
 
@@ -314,9 +315,7 @@ class ImageObserved(_SerializationDisabled):
         if type(self.width) is not int or type(self.height) is not int:
             raise ValueError("invalid image dimensions")
         if not (
-            800 <= self.width <= 2500
-            and self.height >= 250
-            and self.width / self.height >= 1.45
+            800 <= self.width <= 2500 and self.height >= 250 and self.width / self.height >= 1.45
         ):
             raise ValueError("invalid image dimensions")
         if type(self.byte_size) is not int or self.byte_size <= 0:
@@ -368,7 +367,9 @@ ImageObservation = ImageObserved | ImageAbsent | ImageObservationUnknown | Gatew
 
 
 class RichMenuGateway(Protocol):
-    def validate(self, context: RichMenuGatewayContext, request: RichMenuObject) -> MutationResult: ...
+    def validate(
+        self, context: RichMenuGatewayContext, request: RichMenuObject
+    ) -> MutationResult: ...
 
     def create(self, context: RichMenuGatewayContext, request: RichMenuObject) -> CreateResult: ...
 
@@ -376,13 +377,13 @@ class RichMenuGateway(Protocol):
         self, context: RichMenuGatewayContext, rich_menu_id: str, image: RenderedImage
     ) -> MutationResult: ...
 
-    def download(
-        self, context: RichMenuGatewayContext, rich_menu_id: str
-    ) -> ImageObservation: ...
+    def download(self, context: RichMenuGatewayContext, rich_menu_id: str) -> ImageObservation: ...
 
     def list_resources(self, context: RichMenuGatewayContext) -> ResourceListObservation: ...
 
-    def get_resource(self, context: RichMenuGatewayContext, rich_menu_id: str) -> ResourceObservation: ...
+    def get_resource(
+        self, context: RichMenuGatewayContext, rich_menu_id: str
+    ) -> ResourceObservation: ...
 
     def set_default(self, context: RichMenuGatewayContext, rich_menu_id: str) -> MutationResult: ...
 
@@ -485,7 +486,9 @@ class DefaultRichMenuGateway:
             handler=handle,
         )
 
-    def upload(self, context: RichMenuGatewayContext, rich_menu_id: str, image: RenderedImage) -> MutationResult:
+    def upload(
+        self, context: RichMenuGatewayContext, rich_menu_id: str, image: RenderedImage
+    ) -> MutationResult:
         if not _valid_line_id(rich_menu_id):
             return GatewayRejected("invalid_input")
         if not isinstance(image, RenderedImage) or not _valid_upload_image(image):
@@ -536,7 +539,9 @@ class DefaultRichMenuGateway:
 
         return self._run_json(context, "get_rich_menu_list", handler=handle)
 
-    def get_resource(self, context: RichMenuGatewayContext, rich_menu_id: str) -> ResourceObservation:
+    def get_resource(
+        self, context: RichMenuGatewayContext, rich_menu_id: str
+    ) -> ResourceObservation:
         if not _valid_line_id(rich_menu_id):
             return ResourceObservationUnknown("response_unknown")
 
@@ -710,12 +715,20 @@ def _sdk_request(request: RichMenuObject):
     try:
         from linebot.v3.messaging import (
             RichMenuArea as SdkRichMenuArea,
+        )
+        from linebot.v3.messaging import (
             RichMenuBounds as SdkRichMenuBounds,
+        )
+        from linebot.v3.messaging import (
             RichMenuRequest as SdkRichMenuRequest,
+        )
+        from linebot.v3.messaging import (
             RichMenuSize as SdkRichMenuSize,
+        )
+        from linebot.v3.messaging import (
             URIAction,
         )
-    except (ImportError, AttributeError):
+    except ImportError, AttributeError:
         return request.to_payload()
     return SdkRichMenuRequest(
         size=SdkRichMenuSize(width=request.width, height=request.height),
@@ -795,7 +808,8 @@ def _decode_image(binary: bytes) -> ImageObservation:
         return ImageObservationUnknown("response_unknown")
     try:
         from io import BytesIO
-        from PIL import Image, UnidentifiedImageError
+
+        from PIL import Image
     except ImportError:
         return ImageObservationUnknown("response_unknown")
     try:
@@ -808,11 +822,7 @@ def _decode_image(binary: bytes) -> ImageObservation:
             else:
                 return ImageObservationUnknown("response_unknown")
             width, height = image.size
-            if not (
-                800 <= width <= 2500
-                and height >= 250
-                and width / height >= 1.45
-            ):
+            if not (800 <= width <= 2500 and height >= 250 and width / height >= 1.45):
                 return ImageObservationUnknown("response_unknown")
             rgba = image.convert("RGBA").tobytes()
     except Exception:

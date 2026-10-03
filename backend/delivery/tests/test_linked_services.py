@@ -1,15 +1,12 @@
 import hashlib
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
 from uuid import uuid4
 
 from django.db import connection
 from django.test import SimpleTestCase, TestCase, TransactionTestCase
-from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
 from delivery.models import DeliveryAttempt
-from delivery.receipt import ReceiptCapabilityFactory
 from delivery.repositories import (
     DjangoAttemptRepository,
     build_request_fingerprint,
@@ -23,13 +20,13 @@ from delivery.types import (
     ConfirmationSnapshot,
     DeliverySnapshot,
     ExistingAttempt,
+    LinePushAccepted,
+    LinePushRejected,
+    LinePushUnknown,
     LinkedPushExecuted,
     LinkedPushPrevented,
     LinkedPushStored,
     LinkedTargetSnapshot,
-    LinePushAccepted,
-    LinePushRejected,
-    LinePushUnknown,
     LiveDeliveryTarget,
     MessageSnapshot,
     OwnerIdentitySnapshot,
@@ -43,13 +40,13 @@ from delivery.types import (
 )
 from lineaccounts.types import LineSubject
 from linechannels.repositories import CredentialRepository
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 from linechannels.types import (
     AccessToken,
     ChannelSecret,
     CredentialAvailable,
     CredentialUnavailable,
 )
-
 
 NOW = datetime(2026, 7, 26, 1, 2, 3, tzinfo=UTC)
 DIGEST_A = "a" * 64
@@ -291,9 +288,7 @@ class LinkedDeliveryAcceptTests(SimpleTestCase):
                 service = DeliveryService(
                     target_directory=FakeDirectory(unavailable),
                     attempt_repository=repository,
-                    receipt_capability_factory=FakeReceiptFactory(
-                        self.candidate
-                    ),
+                    receipt_capability_factory=FakeReceiptFactory(self.candidate),
                 )
 
                 result = service.accept_confirmed(self._command())
@@ -334,9 +329,7 @@ class LinkedDeliveryAcceptTests(SimpleTestCase):
         self.assertIsNone(result.push_preparation.receipt_capability)
 
     def test_accept_stage_has_no_fixed_gateway_dependency_or_call(self):
-        repository = FakeAttemptRepository(
-            ExistingAttempt(self._snapshot(self.operation_id))
-        )
+        repository = FakeAttemptRepository(ExistingAttempt(self._snapshot(self.operation_id)))
         service = self._service(repository)
 
         result = service.accept_confirmed(self._command())
@@ -370,12 +363,8 @@ class LinkedDeliveryAcceptTests(SimpleTestCase):
             line_request_id=None,
             line_accepted_request_id=None,
             failure=None,
-            receipt_status=(
-                "pending" if receipt_requested else "not_requested"
-            ),
-            receipt_expires_at=(
-                self.expiry if receipt_requested else None
-            ),
+            receipt_status=("pending" if receipt_requested else "not_requested"),
+            receipt_expires_at=(self.expiry if receipt_requested else None),
             receipt_confirmed_at=None,
             receipt_webhook_event_id=None,
         )
@@ -411,9 +400,7 @@ class LinkedDeliveryPushTests(LinkedDeliveryAcceptTests):
         directory = FakeDirectory(self.live_target)
         gateway_result = LinePushAccepted("request-id", None)
         gateway = FakePushGateway(gateway_result)
-        repository = FakeFinalizingAttemptRepository(
-            AttemptAccepted(9, self.snapshot)
-        )
+        repository = FakeFinalizingAttemptRepository(AttemptAccepted(9, self.snapshot))
         service = self._push_service(
             directory=directory,
             credentials=credentials,
@@ -446,14 +433,10 @@ class LinkedDeliveryPushTests(LinkedDeliveryAcceptTests):
         self.assertNotIn("raw-capability-secret", repr(result))
 
     def test_credential_unavailable_finalizes_without_fallback_or_push(self):
-        credentials = FakeCredentialRepository(
-            CredentialUnavailable("credential_unreadable")
-        )
+        credentials = FakeCredentialRepository(CredentialUnavailable("credential_unreadable"))
         directory = FakeDirectory(self.live_target)
         gateway = FakePushGateway(LinePushAccepted(None, None))
-        repository = FakeFinalizingAttemptRepository(
-            AttemptAccepted(9, self.snapshot)
-        )
+        repository = FakeFinalizingAttemptRepository(AttemptAccepted(9, self.snapshot))
 
         result = self._push_service(
             directory=directory,
@@ -487,9 +470,7 @@ class LinkedDeliveryPushTests(LinkedDeliveryAcceptTests):
             CredentialAvailable(AccessToken("selected-token-canary"))
         )
         gateway = FakePushGateway(LinePushAccepted(None, None))
-        repository = FakeFinalizingAttemptRepository(
-            AttemptAccepted(9, self.snapshot)
-        )
+        repository = FakeFinalizingAttemptRepository(AttemptAccepted(9, self.snapshot))
 
         result = self._push_service(
             directory=directory,
@@ -541,9 +522,7 @@ class LinkedDeliveryPushTests(LinkedDeliveryAcceptTests):
         for invalid_result in invalid_results:
             with self.subTest(result=type(invalid_result).__name__):
                 gateway = FakePushGateway(LinePushAccepted(None, None))
-                repository = FakeFinalizingAttemptRepository(
-                    AttemptAccepted(9, self.snapshot)
-                )
+                repository = FakeFinalizingAttemptRepository(AttemptAccepted(9, self.snapshot))
 
                 with self.assertRaisesMessage(
                     ValueError,
@@ -690,9 +669,7 @@ class LinkedDeliveryPushTests(LinkedDeliveryAcceptTests):
         for current_target in invalid_targets:
             with self.subTest(target=repr(current_target)):
                 gateway = FakePushGateway(LinePushAccepted(None, None))
-                repository = FakeFinalizingAttemptRepository(
-                    AttemptAccepted(9, self.snapshot)
-                )
+                repository = FakeFinalizingAttemptRepository(AttemptAccepted(9, self.snapshot))
 
                 result = self._push_service(
                     directory=FakeDirectory(current_target),
@@ -727,10 +704,7 @@ class LinkedDeliveryPushTests(LinkedDeliveryAcceptTests):
             clock=lambda: NOW,
             target_directory=directory,
             attempt_repository=(
-                repository
-                or FakeFinalizingAttemptRepository(
-                    AttemptAccepted(9, self.snapshot)
-                )
+                repository or FakeFinalizingAttemptRepository(AttemptAccepted(9, self.snapshot))
             ),
             credential_repository=credentials,
             channel_push_gateway=gateway,
@@ -784,9 +758,7 @@ class LinkedDeliveryFinalizationTests(LinkedDeliveryAcceptTests):
                     attempt_repository=repository,
                 )
 
-                result = service.finalize_linked_push(
-                    LinkedPushExecuted(9, gateway_result)
-                )
+                result = service.finalize_linked_push(LinkedPushExecuted(9, gateway_result))
 
                 self.assertIsInstance(result, LinkedPushStored)
                 self.assertIs(result.snapshot, stored)
@@ -930,9 +902,7 @@ class LinkedDeliveryOwnerStatusTests(LinkedDeliveryAcceptTests):
         )
         service = DeliveryService(attempt_repository=repository)
 
-        self.assertIsNone(
-            service.check_linked_status(999, self.operation_id)
-        )
+        self.assertIsNone(service.check_linked_status(999, self.operation_id))
         self.assertEqual(
             repository.status_lookups,
             [(999, self.operation_id)],
@@ -958,7 +928,9 @@ class LinkedDeliveryStoredResultIntegrationTests(TestCase):
             formatted_text="件名\n\n本文",
             fingerprint=DIGEST_B,
         )
-        self.repository = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: self.now)
+        self.repository = DjangoAttemptRepository(
+            reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: self.now
+        )
         self.service = DeliveryService(
             clock=lambda: self.now,
             attempt_repository=self.repository,
@@ -1033,11 +1005,7 @@ class LinkedDeliveryStoredResultIntegrationTests(TestCase):
 
     def _command(self, *, receipt):
         operation_id = uuid4()
-        commitment = (
-            ReceiptCommitment(DIGEST_A, NOW + timedelta(hours=1))
-            if receipt
-            else None
-        )
+        commitment = ReceiptCommitment(DIGEST_A, NOW + timedelta(hours=1)) if receipt else None
         return AcceptedDeliveryCommand(
             operation_id=operation_id,
             owner=self.owner,
@@ -1090,7 +1058,9 @@ class LinkedDeliverySinglePushIntegrationTests(TransactionTestCase):
             fingerprint=DIGEST_B,
         )
         self.expiry = NOW + timedelta(hours=1)
-        self.repository = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: self.now)
+        self.repository = DjangoAttemptRepository(
+            reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: self.now
+        )
 
     def test_new_attempt_uses_only_selected_secrets_once_and_persists_safe_result(
         self,
@@ -1118,22 +1088,16 @@ class LinkedDeliverySinglePushIntegrationTests(TransactionTestCase):
         for receipt_requested, gateway_result, status, failure in cases:
             with self.subTest(status=status, receipt=receipt_requested):
                 operation_id = uuid4()
-                raw_capability = (
-                    f"receipt-{status}-integration-canary"
-                )
+                raw_capability = f"receipt-{status}-integration-canary"
                 candidate = ReceiptCapabilityCandidate(
                     capability=ReceiptCapability(raw_capability),
                     commitment=ReceiptCommitment(
-                        hashlib.sha256(
-                            raw_capability.encode("utf-8")
-                        ).hexdigest(),
+                        hashlib.sha256(raw_capability.encode("utf-8")).hexdigest(),
                         self.expiry,
                     ),
                 )
                 credentials = FakeCredentialRepository(
-                    CredentialAvailable(
-                        AccessToken("selected-token-integration-canary")
-                    )
+                    CredentialAvailable(AccessToken("selected-token-integration-canary"))
                 )
                 gateway = FakePushGateway(gateway_result)
                 service = self._service(
@@ -1174,13 +1138,9 @@ class LinkedDeliverySinglePushIntegrationTests(TransactionTestCase):
                 self.assertEqual(stored.snapshot.status, status)
                 self.assertEqual(stored.snapshot.failure, failure)
 
-                row = DeliveryAttempt.objects.get(
-                    operation_id=operation_id
-                )
+                row = DeliveryAttempt.objects.get(operation_id=operation_id)
                 persisted = repr(row.__dict__)
-                rendered = " ".join(
-                    (repr(accepted), repr(executed), repr(stored), persisted)
-                )
+                rendered = " ".join((repr(accepted), repr(executed), repr(stored), persisted))
                 for canary in (
                     "selected-token-integration-canary",
                     "selected-subject-integration-canary",
@@ -1202,9 +1162,7 @@ class LinkedDeliverySinglePushIntegrationTests(TransactionTestCase):
         service = self._service(
             directory=FakeDirectory(self.live_target),
             credentials=FakeCredentialRepository(
-                CredentialAvailable(
-                    AccessToken("selected-token-integration-canary")
-                )
+                CredentialAvailable(AccessToken("selected-token-integration-canary"))
             ),
             gateway=gateway,
             candidate=winner,
@@ -1222,9 +1180,7 @@ class LinkedDeliverySinglePushIntegrationTests(TransactionTestCase):
             credentials=object(),
             gateway=gateway,
             candidate=self._candidate("active-loser"),
-        ).accept_confirmed(
-            self._submit(uuid4(), receipt_requested=True)
-        )
+        ).accept_confirmed(self._submit(uuid4(), receipt_requested=True))
         conflicting = self._service(
             directory=FakeDirectory(self.live_target),
             credentials=object(),
@@ -1274,26 +1230,20 @@ class LinkedDeliverySinglePushIntegrationTests(TransactionTestCase):
         cases = (
             (
                 FakeDirectory(self.live_target),
-                FakeCredentialRepository(
-                    CredentialUnavailable("credential_unreadable")
-                ),
+                FakeCredentialRepository(CredentialUnavailable("credential_unreadable")),
                 "configuration",
             ),
             (
                 SequencedDirectory(self.live_target, changed_target),
                 FakeCredentialRepository(
-                    CredentialAvailable(
-                        AccessToken("selected-token-integration-canary")
-                    )
+                    CredentialAvailable(AccessToken("selected-token-integration-canary"))
                 ),
                 "target_changed",
             ),
         )
         for directory, credentials, expected_failure in cases:
             with self.subTest(failure=expected_failure):
-                gateway = FakePushGateway(
-                    LinePushAccepted("must-not-be-used", None)
-                )
+                gateway = FakePushGateway(LinePushAccepted("must-not-be-used", None))
                 service = self._service(
                     directory=directory,
                     credentials=credentials,
@@ -1302,9 +1252,7 @@ class LinkedDeliverySinglePushIntegrationTests(TransactionTestCase):
                         f"{expected_failure}-receipt-canary",
                     ),
                 )
-                accepted = service.accept_confirmed(
-                    self._submit(uuid4(), receipt_requested=True)
-                )
+                accepted = service.accept_confirmed(self._submit(uuid4(), receipt_requested=True))
 
                 prevented = service.push_accepted(accepted)
 
@@ -1315,9 +1263,7 @@ class LinkedDeliverySinglePushIntegrationTests(TransactionTestCase):
                 )
                 self.assertEqual(gateway.commands, [])
                 self.assertEqual(
-                    DeliveryAttempt.objects.get(
-                        operation_id=accepted.snapshot.operation_id
-                    ).status,
+                    DeliveryAttempt.objects.get(operation_id=accepted.snapshot.operation_id).status,
                     "failed",
                 )
 
@@ -1326,9 +1272,7 @@ class LinkedDeliverySinglePushIntegrationTests(TransactionTestCase):
         service = self._service(
             directory=FakeDirectory(self.live_target),
             credentials=FakeCredentialRepository(
-                CredentialAvailable(
-                    AccessToken("selected-token-integration-canary")
-                )
+                CredentialAvailable(AccessToken("selected-token-integration-canary"))
             ),
             gateway=gateway,
             candidate=self._candidate(
@@ -1336,9 +1280,7 @@ class LinkedDeliverySinglePushIntegrationTests(TransactionTestCase):
             ),
         )
         operation_id = uuid4()
-        accepted = service.accept_confirmed(
-            self._submit(operation_id, receipt_requested=True)
-        )
+        accepted = service.accept_confirmed(self._submit(operation_id, receipt_requested=True))
         executed = service.push_accepted(accepted)
         first = service.finalize_linked_push(executed)
 
@@ -1399,9 +1341,7 @@ class LinkedDeliverySinglePushIntegrationTests(TransactionTestCase):
                 target_revision=self.live_target.revision,
                 message_fingerprint=selected_message.fingerprint,
                 receipt_requested=receipt_requested,
-                receipt_expires_at=(
-                    self.expiry if receipt_requested else None
-                ),
+                receipt_expires_at=(self.expiry if receipt_requested else None),
             ),
             message=selected_message,
         )

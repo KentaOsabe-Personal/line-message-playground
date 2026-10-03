@@ -4,10 +4,10 @@ from uuid import UUID, uuid4
 from django.db import DatabaseError
 from django.test import TestCase
 
-from linewebhooks.models import WebhookEventReceipt
-from linewebhooks.repositories import DjangoEventReceiptRepository
 from linechannels.reference_fence import ReferenceFenceResult
 from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
+from linewebhooks.models import WebhookEventReceipt
+from linewebhooks.repositories import DjangoEventReceiptRepository
 from linewebhooks.types import (
     ReceiptCandidate,
     ReceiptChannelUnavailable,
@@ -52,9 +52,7 @@ class DjangoEventReceiptRepositoryAcceptanceTests(TestCase):
             repository = DjangoEventReceiptRepository(reference_fence=fence)
 
             with self.subTest(status=status):
-                result = repository.accept_batch(
-                    (self._candidate("01ARZ3NDEKTSV4RRFFQ69G5FAV"),)
-                )
+                result = repository.accept_batch((self._candidate("01ARZ3NDEKTSV4RRFFQ69G5FAV"),))
 
             self.assertIsInstance(result, expected_type)
             self.assertEqual(WebhookEventReceipt.objects.count(), 0)
@@ -183,9 +181,7 @@ class DjangoEventReceiptRepositoryFinalizationTests(TestCase):
     # テストケース: 二件の processing receipt を handler 成功と失敗で確定する
     # 期待値: processed または handler_failed 付き failed へ一度だけ遷移し metadata は不変となる
     def test_finalizes_processing_receipts_and_preserves_metadata(self) -> None:
-        processed = self._accept(
-            self._candidate("01ARZ3NDEKTSV4RRFFQ69G5FAV")
-        )
+        processed = self._accept(self._candidate("01ARZ3NDEKTSV4RRFFQ69G5FAV"))
         failed = self._accept(
             self._candidate(
                 "01ARZ3NDEKTSV4RRFFQ69G5FAW",
@@ -250,12 +246,8 @@ class DjangoEventReceiptRepositoryFinalizationTests(TestCase):
     # テストケース: terminal と unsupported receipt を再確定し、failed event を重複受付する
     # 期待値: 条件付き更新は unchanged となり、duplicate に新規 dispatch 権を返さない
     def test_terminal_receipts_are_monotonic_and_duplicates_stay_existing(self) -> None:
-        processed = self._accept(
-            self._candidate("01ARZ3NDEKTSV4RRFFQ69G5FAV")
-        )
-        failed = self._accept(
-            self._candidate("01ARZ3NDEKTSV4RRFFQ69G5FAW")
-        )
+        processed = self._accept(self._candidate("01ARZ3NDEKTSV4RRFFQ69G5FAV"))
+        failed = self._accept(self._candidate("01ARZ3NDEKTSV4RRFFQ69G5FAW"))
         unsupported = self._accept(
             self._candidate(
                 "01ARZ3NDEKTSV4RRFFQ69G5FAX",
@@ -263,9 +255,7 @@ class DjangoEventReceiptRepositoryFinalizationTests(TestCase):
             )
         )
         self.assertEqual(self.repository.mark_processed(processed.pk), "updated")
-        self.assertEqual(
-            self.repository.mark_failed(failed.pk, "handler_failed"), "updated"
-        )
+        self.assertEqual(self.repository.mark_failed(failed.pk, "handler_failed"), "updated")
 
         self.assertEqual(
             self.repository.mark_failed(processed.pk, "handler_failed"),
@@ -290,9 +280,7 @@ class DjangoEventReceiptRepositoryFinalizationTests(TestCase):
     # テストケース: processing receipt の確定保存で DB 障害が発生する
     # 期待値: failed 結果を返して processing 状態と初回 metadata を維持する
     def test_finalization_storage_failure_leaves_receipt_processing(self) -> None:
-        receipt = self._accept(
-            self._candidate("01ARZ3NDEKTSV4RRFFQ69G5FAV")
-        )
+        receipt = self._accept(self._candidate("01ARZ3NDEKTSV4RRFFQ69G5FAV"))
 
         with patch.object(
             self.repository,

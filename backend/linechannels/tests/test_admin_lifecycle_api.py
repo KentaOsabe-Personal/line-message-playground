@@ -7,14 +7,13 @@ from rest_framework.test import APIClient, APITestCase
 
 from lineaccounts.authentication import OwnerPrincipal
 from linechannels.admin_lifecycle_types import (
-    DeactivationSummary,
     DeactivationFailed,
     DeactivationSucceeded,
+    DeactivationSummary,
     DeactivationView,
 )
 from linechannels.admin_presenters import AdminPresenter
 from linechannels.admin_types import AdminChannelView
-
 
 NOW = datetime(2026, 8, 3, 3, 4, 5, tzinfo=timezone.utc)
 CHANNEL_ID = UUID("12345678-1234-4234-8234-123456789abc")
@@ -50,9 +49,18 @@ class DeactivationPresenterTests(SimpleTestCase):
         self.assertEqual(
             set(dto),
             {
-                "channelId", "channelActive", "channelUpdatedAt", "operationId",
-                "status", "reason", "subjectOperationId", "recoveryOperationId",
-                "nextAction", "acceptedAt", "updatedAt", "completedAt",
+                "channelId",
+                "channelActive",
+                "channelUpdatedAt",
+                "operationId",
+                "status",
+                "reason",
+                "subjectOperationId",
+                "recoveryOperationId",
+                "nextAction",
+                "acceptedAt",
+                "updatedAt",
+                "completedAt",
             },
         )
         self.assertEqual(dto["nextAction"], "resolve_external_default_then_recheck")
@@ -104,9 +112,7 @@ class DeactivationAPITests(APITestCase):
         self.addCleanup(self.patcher.stop)
 
     def post(self, path, body):
-        return self.client.post(
-            path, body, format="json", HTTP_ORIGIN=self.origin
-        )
+        return self.client.post(path, body, format="json", HTTP_ORIGIN=self.origin)
 
     # テストケース: owner endpointからstate取得、start、recheckを同じintentへ行う。
     # 期待値: owner・provider・revision fenceを通り、同じsafe intentを返す。

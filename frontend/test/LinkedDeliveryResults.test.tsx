@@ -7,7 +7,9 @@ import type { LinkedDeliveryStatus, LinkedPreviewResponse } from '../src/deliver
 import DeliveryForm from '../src/DeliveryForm'
 import { createOwnerSessionStorage } from '../src/ownerSessionStorage'
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 const channelId = '11111111-1111-4111-8111-111111111111'
 const recipientId = '22222222-2222-4222-8222-222222222222'
@@ -57,33 +59,36 @@ const status = (
       completedAt: common.completedAt!,
       error: {
         code: deliveryStatus === 'failed' ? 'line_unavailable' : 'timeout_unknown',
-        summary: deliveryStatus === 'failed'
-          ? 'LINEへの送信を完了できませんでした。'
-          : 'LINEの受付結果を確認できませんでした。',
+        summary:
+          deliveryStatus === 'failed'
+            ? 'LINEへの送信を完了できませんでした。'
+            : 'LINEの受付結果を確認できませんでした。',
       },
     }
   }
   return { ...common, status: deliveryStatus }
 }
 
-const clientWith = (
-  overrides: Partial<LinkedDeliveryApiClient> = {},
-): LinkedDeliveryApiClient => ({
-  listChannels: vi.fn().mockResolvedValue([{
-    channelId,
-    label: '通知チャネル',
-    active: true,
-    deliveryAvailable: true,
-    unavailableReason: null,
-  }]),
-  listRecipients: vi.fn().mockResolvedValue([{
-    recipientId,
-    displayName: '受信者A',
-    enabled: true,
-    friendshipState: 'friend',
-    deliveryAvailable: true,
-    unavailableReason: null,
-  }]),
+const clientWith = (overrides: Partial<LinkedDeliveryApiClient> = {}): LinkedDeliveryApiClient => ({
+  listChannels: vi.fn().mockResolvedValue([
+    {
+      channelId,
+      label: '通知チャネル',
+      active: true,
+      deliveryAvailable: true,
+      unavailableReason: null,
+    },
+  ]),
+  listRecipients: vi.fn().mockResolvedValue([
+    {
+      recipientId,
+      displayName: '受信者A',
+      enabled: true,
+      friendshipState: 'friend',
+      deliveryAvailable: true,
+      unavailableReason: null,
+    },
+  ]),
   preview: vi.fn().mockResolvedValue(preview),
   send: vi.fn(),
   checkStatus: vi.fn(),
@@ -93,12 +98,18 @@ const clientWith = (
 const memoryStorage = (): Storage => {
   const values = new Map<string, string>()
   return {
-    get length() { return values.size },
+    get length() {
+      return values.size
+    },
     clear: () => values.clear(),
     getItem: (key) => values.get(key) ?? null,
     key: (index) => [...values.keys()][index] ?? null,
-    removeItem: (key) => { values.delete(key) },
-    setItem: (key, value) => { values.set(key, value) },
+    removeItem: (key) => {
+      values.delete(key)
+    },
+    setItem: (key, value) => {
+      values.set(key, value)
+    },
   }
 }
 
@@ -106,33 +117,35 @@ let container: HTMLDivElement
 let root: Root
 
 const click = async (label: string) => {
-  const button = [...container.querySelectorAll('button')]
-    .find((candidate) => candidate.textContent === label)
+  const button = [...container.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent === label,
+  )
   if (button === undefined) throw new Error(`button not found: ${label}`)
   await act(async () => button.click())
 }
 
 const select = async (name: string, value: string) => {
-  const input = container.querySelector(`input[name="${name}"][value="${value}"]`) as HTMLInputElement
+  const input = container.querySelector(
+    `input[name="${name}"][value="${value}"]`,
+  ) as HTMLInputElement
   await act(async () => input.click())
 }
 
 const enter = async (name: string, value: string) => {
-  const element = container.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLTextAreaElement
-  const prototype = element instanceof HTMLTextAreaElement
-    ? HTMLTextAreaElement.prototype
-    : HTMLInputElement.prototype
+  const element = container.querySelector(`[name="${name}"]`) as
+    HTMLInputElement | HTMLTextAreaElement
+  const prototype =
+    element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype
   Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(element, value)
   await act(async () => element.dispatchEvent(new Event('input', { bubbles: true })))
 }
 
 const preparePreview = async (client: LinkedDeliveryApiClient) => {
-  await act(async () => root.render(
-    <DeliveryForm
-      linkedClient={client}
-      createOperationId={() => operationId}
-    />,
-  ))
+  await act(async () =>
+    root.render(<DeliveryForm linkedClient={client} createOperationId={() => operationId} />),
+  )
   await select('channelId', channelId)
   await select('recipientId', recipientId)
   await enter('subject', '障害通知')
@@ -162,10 +175,14 @@ describe('linked delivery preview and result UI', () => {
   test('6.3 and 6.4 abort target reads and fence late results at route lifetime end', async () => {
     let resolveChannels!: (value: []) => void
     const client = clientWith({
-      listChannels: vi.fn().mockReturnValue(new Promise((resolve) => { resolveChannels = resolve })),
+      listChannels: vi.fn().mockReturnValue(
+        new Promise((resolve) => {
+          resolveChannels = resolve
+        }),
+      ),
     })
     await act(async () => root.render(<DeliveryForm linkedClient={client} />))
-    const signal = vi.mocked(client.listChannels).mock.calls[0]?.[0]?.signal as AbortSignal
+    const signal = vi.mocked(client).listChannels.mock.calls[0]?.[0]?.signal as AbortSignal
     expect(signal).toBeInstanceOf(AbortSignal)
 
     await act(async () => root.render(<p>移動先</p>))
@@ -183,10 +200,14 @@ describe('linked delivery preview and result UI', () => {
     storage.saveDeliveryOperationId(operationId)
     const client = clientWith({ checkStatus: vi.fn().mockResolvedValue(status('processing')) })
 
-    await act(async () => root.render(<DeliveryForm linkedClient={client} ownerSessionStorage={storage} />))
+    await act(async () =>
+      root.render(<DeliveryForm linkedClient={client} ownerSessionStorage={storage} />),
+    )
 
     expect(client.checkStatus).toHaveBeenCalledTimes(1)
-    expect(client.checkStatus).toHaveBeenCalledWith(operationId, { signal: expect.any(AbortSignal) })
+    expect(client.checkStatus).toHaveBeenCalledWith(operationId, {
+      signal: expect.any(AbortSignal) as unknown,
+    })
     expect(client.listChannels).not.toHaveBeenCalled()
     expect(client.send).not.toHaveBeenCalled()
     expect(container.textContent).toContain('配信を処理中です')
@@ -196,22 +217,27 @@ describe('linked delivery preview and result UI', () => {
 
   // テストケース: 保存operationがunknownまたは完了状態へhydrateされ、新しい配信を開始する。
   // 期待値: unknownではIDを保持し、完了後の明示操作だけでIDを削除して空入力へ戻る。
-  test.each(['unknown', 'succeeded', 'failed'] as const)('6.5 converges saved %s operation without restoring content', async (resultStatus) => {
-    const storage = createOwnerSessionStorage(memoryStorage())
-    storage.saveDeliveryOperationId(operationId)
-    const client = clientWith({ checkStatus: vi.fn().mockResolvedValue(status(resultStatus)) })
-    await act(async () => root.render(<DeliveryForm linkedClient={client} ownerSessionStorage={storage} />))
+  test.each(['unknown', 'succeeded', 'failed'] as const)(
+    '6.5 converges saved %s operation without restoring content',
+    async (resultStatus) => {
+      const storage = createOwnerSessionStorage(memoryStorage())
+      storage.saveDeliveryOperationId(operationId)
+      const client = clientWith({ checkStatus: vi.fn().mockResolvedValue(status(resultStatus)) })
+      await act(async () =>
+        root.render(<DeliveryForm linkedClient={client} ownerSessionStorage={storage} />),
+      )
 
-    expect(storage.readDeliveryOperationId()).toBe(operationId)
-    if (resultStatus === 'unknown') {
-      expect(container.textContent).not.toContain('新しい配信')
-      return
-    }
-    await click('新しい配信')
-    expect(storage.readDeliveryOperationId()).toBeNull()
-    expect(container.querySelector('[name="subject"]')).not.toBeNull()
-    expect(client.listChannels).toHaveBeenCalledTimes(1)
-  })
+      expect(storage.readDeliveryOperationId()).toBe(operationId)
+      if (resultStatus === 'unknown') {
+        expect(container.textContent).not.toContain('新しい配信')
+        return
+      }
+      await click('新しい配信')
+      expect(storage.readDeliveryOperationId()).toBeNull()
+      expect(container.querySelector('[name="subject"]')).not.toBeNull()
+      expect(client.listChannels).toHaveBeenCalledTimes(1)
+    },
+  )
 
   // テストケース: 保存operation IDのstatusがnot-foundを返す。
   // 期待値: IDを削除し、安全なmessageと新規配信入力だけへ収束する。
@@ -219,12 +245,20 @@ describe('linked delivery preview and result UI', () => {
     const storage = createOwnerSessionStorage(memoryStorage())
     storage.saveDeliveryOperationId(operationId)
     const client = clientWith({
-      checkStatus: vi.fn().mockRejectedValue(new DeliveryApiError({ code: 'operation_not_found', summary: 'private' }, 404)),
+      checkStatus: vi
+        .fn()
+        .mockRejectedValue(
+          new DeliveryApiError({ code: 'operation_not_found', summary: 'private' }, 404),
+        ),
     })
-    await act(async () => root.render(<DeliveryForm linkedClient={client} ownerSessionStorage={storage} />))
+    await act(async () =>
+      root.render(<DeliveryForm linkedClient={client} ownerSessionStorage={storage} />),
+    )
 
     expect(storage.readDeliveryOperationId()).toBeNull()
-    expect(container.textContent).toContain('以前の配信状態を確認できませんでした。新しい配信を開始できます。')
+    expect(container.textContent).toContain(
+      '以前の配信状態を確認できませんでした。新しい配信を開始できます。',
+    )
     expect(container.textContent).not.toContain('private')
     expect(container.querySelector('[name="subject"]')).not.toBeNull()
     expect(client.send).not.toHaveBeenCalled()
@@ -236,16 +270,35 @@ describe('linked delivery preview and result UI', () => {
     const storage = createOwnerSessionStorage(memoryStorage())
     storage.saveDeliveryOperationId(operationId)
     const invalid = vi.fn()
-    const checkStatus = vi.fn()
-      .mockRejectedValueOnce(new DeliveryApiError({ code: 'authentication_required', summary: 'login' }, 401))
+    const checkStatus = vi
+      .fn<LinkedDeliveryApiClient['checkStatus']>()
+      .mockRejectedValueOnce(
+        new DeliveryApiError({ code: 'authentication_required', summary: 'login' }, 401),
+      )
       .mockResolvedValueOnce(status('succeeded'))
     const client = clientWith({ checkStatus })
 
-    await act(async () => root.render(<DeliveryForm linkedClient={client} ownerSessionStorage={storage} onSessionInvalid={invalid} />))
+    await act(async () =>
+      root.render(
+        <DeliveryForm
+          linkedClient={client}
+          ownerSessionStorage={storage}
+          onSessionInvalid={invalid}
+        />,
+      ),
+    )
     expect(invalid).toHaveBeenCalledTimes(1)
     expect(storage.readDeliveryOperationId()).toBe(operationId)
     await act(async () => root.render(<p>login</p>))
-    await act(async () => root.render(<DeliveryForm linkedClient={client} ownerSessionStorage={storage} onSessionInvalid={invalid} />))
+    await act(async () =>
+      root.render(
+        <DeliveryForm
+          linkedClient={client}
+          ownerSessionStorage={storage}
+          onSessionInvalid={invalid}
+        />,
+      ),
+    )
 
     expect(checkStatus).toHaveBeenCalledTimes(2)
     expect(checkStatus.mock.calls.map((call) => call[0])).toEqual([operationId, operationId])
@@ -269,23 +322,30 @@ describe('linked delivery preview and result UI', () => {
 
     await click('入力へ戻る')
     expect((container.querySelector('[name="subject"]') as HTMLInputElement).value).toBe('障害通知')
-    expect((container.querySelector('[name="body"]') as HTMLTextAreaElement).value).toBe('復旧しました。')
-    expect((container.querySelector('[name="receiptRequested"]') as HTMLInputElement).checked).toBe(true)
+    expect((container.querySelector('[name="body"]') as HTMLTextAreaElement).value).toBe(
+      '復旧しました。',
+    )
+    expect((container.querySelector('[name="receiptRequested"]') as HTMLInputElement).checked).toBe(
+      true,
+    )
   })
 
   // テストケース: 確認済み内容の送信ボタンを連打し、processingからsucceededへ状態確認する。
   // 期待値: 同じoperationを一度だけ送信し、LINE受付とpending受取確認を別行で表示する。
   test('sends once and separates LINE acceptance from pending receipt', async () => {
     let resolveSend!: (value: LinkedDeliveryStatus) => void
-    const sendPromise = new Promise<LinkedDeliveryStatus>((resolve) => { resolveSend = resolve })
+    const sendPromise = new Promise<LinkedDeliveryStatus>((resolve) => {
+      resolveSend = resolve
+    })
     const client = clientWith({
       send: vi.fn().mockReturnValue(sendPromise),
       checkStatus: vi.fn().mockResolvedValue(status('succeeded')),
     })
     await preparePreview(client)
 
-    const sendButton = [...container.querySelectorAll('button')]
-      .find((candidate) => candidate.textContent === '確認した内容を送信')!
+    const sendButton = [...container.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent === '確認した内容を送信',
+    )!
     await act(async () => {
       sendButton.click()
       sendButton.click()
@@ -305,7 +365,9 @@ describe('linked delivery preview and result UI', () => {
 
     await act(async () => resolveSend(status('processing')))
     await click('状態を再確認')
-    expect(client.checkStatus).toHaveBeenCalledWith(operationId, { signal: expect.any(AbortSignal) })
+    expect(client.checkStatus).toHaveBeenCalledWith(operationId, {
+      signal: expect.any(AbortSignal) as unknown,
+    })
     expect(client.send).toHaveBeenCalledTimes(1)
     expect(container.textContent).toContain('LINEに受け付けられました')
     expect(container.textContent).toContain('配信状態')
@@ -353,7 +415,9 @@ describe('linked delivery preview and result UI', () => {
     expect(container.textContent).not.toContain(recipientId)
 
     await click('状態を再確認')
-    expect(client.checkStatus).toHaveBeenCalledWith(operationId, { signal: expect.any(AbortSignal) })
+    expect(client.checkStatus).toHaveBeenCalledWith(operationId, {
+      signal: expect.any(AbortSignal) as unknown,
+    })
     expect(client.send).toHaveBeenCalledTimes(1)
   })
 

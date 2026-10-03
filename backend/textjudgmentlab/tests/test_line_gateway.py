@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
+from unittest import IsolatedAsyncioTestCase
 
 import httpx
-from unittest import IsolatedAsyncioTestCase
 
 from textjudgmentlab.line_gateway import (
     LabLineGateway,
@@ -9,7 +9,6 @@ from textjudgmentlab.line_gateway import (
     LineIdentityUnavailable,
     VerifiedLabIdentity,
 )
-
 
 NOW = datetime(2026, 9, 21, tzinfo=UTC)
 
@@ -39,14 +38,17 @@ class LabLineGatewayTests(IsolatedAsyncioTestCase):
                 request.extensions["timeout"],
                 {"connect": 4.0, "read": 4.0, "write": 4.0, "pool": 4.0},
             )
-            return httpx.Response(200, json={
-                "iss": "https://access.line.me",
-                "aud": "1234567890",
-                "exp": NOW.timestamp() + 60,
-                "sub": "Uowner-subject",
-                "name": "捨てる表示名",
-                "picture": "https://example.test/private.png",
-            })
+            return httpx.Response(
+                200,
+                json={
+                    "iss": "https://access.line.me",
+                    "aud": "1234567890",
+                    "exp": NOW.timestamp() + 60,
+                    "sub": "Uowner-subject",
+                    "name": "捨てる表示名",
+                    "picture": "https://example.test/private.png",
+                },
+            )
 
         result = await gateway_for(handler).verify("id-token-canary")
 
@@ -65,20 +67,51 @@ class LabLineGatewayTests(IsolatedAsyncioTestCase):
     # 期待値: raw payloadを漏らさず固定分類へ縮約し、自動再試行しない
     async def test_classifies_rejections_and_unavailability_without_retry(self) -> None:
         cases = (
-            ({"iss": "https://access.line.me", "aud": "other", "exp": NOW.timestamp() + 1, "sub": "U1"}, "wrong_channel"),
-            ({"iss": "https://access.line.me", "aud": "1234567890", "exp": NOW.timestamp(), "sub": "U1"}, "invalid_proof"),
-            ({"iss": "https://access.line.me", "aud": "1234567890", "exp": NOW.timestamp() + 1, "sub": ""}, "invalid_proof"),
+            (
+                {
+                    "iss": "https://access.line.me",
+                    "aud": "other",
+                    "exp": NOW.timestamp() + 1,
+                    "sub": "U1",
+                },
+                "wrong_channel",
+            ),
+            (
+                {
+                    "iss": "https://access.line.me",
+                    "aud": "1234567890",
+                    "exp": NOW.timestamp(),
+                    "sub": "U1",
+                },
+                "invalid_proof",
+            ),
+            (
+                {
+                    "iss": "https://access.line.me",
+                    "aud": "1234567890",
+                    "exp": NOW.timestamp() + 1,
+                    "sub": "",
+                },
+                "invalid_proof",
+            ),
         )
         for payload, code in cases:
             with self.subTest(code=code):
-                result = await gateway_for(lambda _request: httpx.Response(200, json=payload)).verify("secret")
+                result = await gateway_for(
+                    lambda _request: httpx.Response(200, json=payload)
+                ).verify("secret")
                 self.assertEqual(result, LineIdentityRejected(code))
                 self.assertNotIn("secret", repr(result))
 
-        audience_error = await gateway_for(lambda _request: httpx.Response(400, json={
-            "error": "invalid_request",
-            "error_description": "Invalid IdToken Audience.",
-        })).verify("secret")
+        audience_error = await gateway_for(
+            lambda _request: httpx.Response(
+                400,
+                json={
+                    "error": "invalid_request",
+                    "error_description": "Invalid IdToken Audience.",
+                },
+            )
+        ).verify("secret")
         self.assertEqual(audience_error, LineIdentityRejected("wrong_channel"))
 
         attempts = 0

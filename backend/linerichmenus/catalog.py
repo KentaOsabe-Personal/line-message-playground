@@ -15,7 +15,6 @@ from .types import (
     TemplateReference,
 )
 
-
 _WIDTH = 2500
 _HEIGHT = 843
 
@@ -115,9 +114,7 @@ class DefaultTemplateCatalog:
                 if key not in value:
                     errors.append(InputFieldError(f"{field_name}.{key}", "required"))
             display_name = (
-                _normalize_display_name(
-                    value["displayName"], field_name, descriptor, errors
-                )
+                _normalize_display_name(value["displayName"], field_name, descriptor, errors)
                 if "displayName" in value
                 else None
             )

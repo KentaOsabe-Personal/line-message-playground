@@ -21,7 +21,9 @@ export type ChannelAdminAction =
   | { type: 'operationCompleted'; key: string }
 
 export const initialChannelAdminState: ChannelAdminState = { state: 'idle' }
-const hasOperations = (state: ChannelAdminState): state is Extract<ChannelAdminState, { operations: OperationStateMap }> =>
+const hasOperations = (
+  state: ChannelAdminState,
+): state is Extract<ChannelAdminState, { operations: OperationStateMap }> =>
   state.state === 'empty' || state.state === 'ready'
 const withoutOperation = (operations: OperationStateMap, key: string): OperationStateMap =>
   Object.fromEntries(Object.entries(operations).filter(([operationKey]) => operationKey !== key))
@@ -48,8 +50,10 @@ export function transitionChannelAdmin(
   }
   if (action.type === 'operationFailed') {
     if (!hasOperations(state) || state.operations[action.key] === undefined) return state
-    if (action.error.code === 'network_error') return { state: 'refresh_required', reason: 'unknown_result' }
-    if (action.error.code === 'stale_channel') return { state: 'refresh_required', reason: 'stale_channel' }
+    if (action.error.code === 'network_error')
+      return { state: 'refresh_required', reason: 'unknown_result' }
+    if (action.error.code === 'stale_channel')
+      return { state: 'refresh_required', reason: 'stale_channel' }
     return { ...state, operations: withoutOperation(state.operations, action.key) }
   }
   if (action.type === 'mutationSucceeded') {
@@ -58,7 +62,9 @@ export function transitionChannelAdmin(
     if (state.state === 'empty') return { state: 'ready', items: [{ ...action.item }], operations }
     const found = state.items.some((item) => item.channelId === action.item.channelId)
     const items = found
-      ? state.items.map((item) => item.channelId === action.item.channelId ? { ...action.item } : item)
+      ? state.items.map((item) =>
+          item.channelId === action.item.channelId ? { ...action.item } : item,
+        )
       : [...state.items, { ...action.item }]
     return { state: 'ready', items, operations }
   }
@@ -67,7 +73,9 @@ export function transitionChannelAdmin(
     const operations = withoutOperation(state.operations, action.key)
     if (state.state === 'empty') return { state: 'empty', operations }
     const items = state.items.filter((item) => item.channelId !== action.channelId)
-    return items.length === 0 ? { state: 'empty', operations } : { state: 'ready', items, operations }
+    return items.length === 0
+      ? { state: 'empty', operations }
+      : { state: 'ready', items, operations }
   }
   if (action.type === 'operationCompleted') {
     if (!hasOperations(state) || state.operations[action.key] === undefined) return state

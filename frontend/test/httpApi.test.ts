@@ -15,7 +15,11 @@ describe('ProtectedHttpClient', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
     const client = createProtectedHttpClient()
 
-    await client.request({ path: '/api/account/session/line/', method: 'POST', body: { idToken: 'write-only' } })
+    await client.request({
+      path: '/api/account/session/line/',
+      method: 'POST',
+      body: { idToken: 'write-only' },
+    })
 
     expect(fetchMock).toHaveBeenCalledWith('/api/account/session/line/', {
       method: 'POST',
@@ -31,15 +35,18 @@ describe('ProtectedHttpClient', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
     const client = createProtectedHttpClient()
 
-    await expect(client.request({ path: '/api/account/session/', method: 'DELETE' }))
-      .rejects.toEqual(new ProtectedHttpClientError('csrf_missing'))
+    await expect(
+      client.request({ path: '/api/account/session/', method: 'DELETE' }),
+    ).rejects.toEqual(new ProtectedHttpClientError('csrf_missing'))
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
   // テストケース: 保護要求が401を返す。
   // 期待値: tokenを再送せず、session失効をcontrollerへ1回通知する。
   test('notifies session invalidation without retrying a 401 response', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 401 }))
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('{}', { status: 401 }))
     const onSessionInvalid = vi.fn()
     const client = createProtectedHttpClient({ onSessionInvalid })
 
@@ -75,7 +82,8 @@ describe('ProtectedHttpClient', () => {
       fetch: vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError')),
     })
 
-    await expect(client.request({ path: '/api/account/session/', method: 'GET', signal: controller.signal }))
-      .rejects.toEqual(new ProtectedHttpClientError('aborted'))
+    await expect(
+      client.request({ path: '/api/account/session/', method: 'GET', signal: controller.signal }),
+    ).rejects.toEqual(new ProtectedHttpClientError('aborted'))
   })
 })

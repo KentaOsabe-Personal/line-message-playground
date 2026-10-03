@@ -11,7 +11,6 @@ from django.utils import timezone
 
 from .repositories import UnlinkSnapshot
 
-
 _PURPOSE = "account_unlink"
 _VERSION = 1
 _MAX_AGE_SECONDS = 5 * 60
@@ -40,9 +39,7 @@ class UnlinkConfirmation:
         return (
             payload is not None
             and self._valid_payload(payload, now)
-            and signing.constant_time_compare(
-                payload["fingerprint"], self.fingerprint(snapshot)
-            )
+            and signing.constant_time_compare(payload["fingerprint"], self.fingerprint(snapshot))
         )
 
     @staticmethod
@@ -69,7 +66,7 @@ class UnlinkConfirmation:
             return None
         try:
             value = signing.TimestampSigner(salt=_SALT).unsign_object(token)
-        except (signing.BadSignature, json.JSONDecodeError, TypeError, ValueError):
+        except signing.BadSignature, json.JSONDecodeError, TypeError, ValueError:
             return None
         if not isinstance(value, dict) or set(value) != {
             "purpose",

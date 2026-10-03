@@ -1,4 +1,8 @@
-import type { ConversationCore, ConversationStage, ConversationChoice } from './textJudgmentLabState'
+import type {
+  ConversationCore,
+  ConversationStage,
+  ConversationChoice,
+} from './textJudgmentLabState'
 
 export type Topic = 'missing_notification' | 'notification_settings'
 export type Scope = 'all' | 'specific' | 'unknown'
@@ -9,9 +13,7 @@ export type Impact = 'unassessed' | 'needs_review' | 'low' | 'high'
 export type EndReason = 'resolved' | 'settings_completed' | 'unresolved' | 'interrupted'
 
 export type Evidence<T> =
-  | { kind: 'known'; value: T }
-  | { kind: 'unmentioned' }
-  | { kind: 'needs_review' }
+  { kind: 'known'; value: T } | { kind: 'unmentioned' } | { kind: 'needs_review' }
 
 export type ConfirmedAnswers = {
   topic: Topic | null
@@ -53,7 +55,12 @@ export type JudgmentResponse = {
   }
   inspection: JudgmentInspection
   details: {
-    choices: Readonly<Record<'topic' | 'relevance' | 'change' | 'scope' | 'workaround' | 'result' | 'impact_evidence', ChoiceDetail>>
+    choices: Readonly<
+      Record<
+        'topic' | 'relevance' | 'change' | 'scope' | 'workaround' | 'result' | 'impact_evidence',
+        ChoiceDetail
+      >
+    >
     score: ScoreDetail
     noul: { type: 'noul'; noul: number }
     jevElapsedMs: number
@@ -115,8 +122,8 @@ export type LabProtocolError = {
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: LabProtocolError }
 
-
-export type ChoiceId = 'topic' | 'relevance' | 'change' | 'scope' | 'workaround' | 'result' | 'impact_evidence'
+export type ChoiceId =
+  'topic' | 'relevance' | 'change' | 'scope' | 'workaround' | 'result' | 'impact_evidence'
 export type JudgmentId = ChoiceId | 'impact' | 'urgency'
 export type SentQuestion =
   | Readonly<{ type: 'choice'; instructions: string; criteria: Readonly<Record<string, string>> }>
@@ -124,15 +131,26 @@ export type SentQuestion =
   | Readonly<{ type: 'noul'; instructions: string }>
 export type AdoptionPolicySnapshot = Readonly<{
   version: 'text-judgment-adoption/1'
-  choice: Readonly<{ minConfidence: 0.70; minProbability: 0.70; requireUniqueMaximum: true }>
-  score: Readonly<{ requiredImpactEvidence: 'present'; minConfidence: 0.70; highFrom: 1.5 }>
-  noul: Readonly<{ urgentFrom: 0.80; notUrgentThrough: 0.20 }>
+  choice: Readonly<{ minConfidence: 0.7; minProbability: 0.7; requireUniqueMaximum: true }>
+  score: Readonly<{ requiredImpactEvidence: 'present'; minConfidence: 0.7; highFrom: 1.5 }>
+  noul: Readonly<{ urgentFrom: 0.8; notUrgentThrough: 0.2 }>
 }>
-export type NormalizationReason = 'eligible' | 'unmentioned' | 'unclear' |
-  'confidence_below_threshold' | 'probability_below_threshold' | 'maximum_not_unique' |
-  'impact_evidence_not_adopted' | 'impact_evidence_absent' | 'noul_between_thresholds'
+export type NormalizationReason =
+  | 'eligible'
+  | 'unmentioned'
+  | 'unclear'
+  | 'confidence_below_threshold'
+  | 'probability_below_threshold'
+  | 'maximum_not_unique'
+  | 'impact_evidence_not_adopted'
+  | 'impact_evidence_absent'
+  | 'noul_between_thresholds'
 export type PolicyCheck = Readonly<{
-  rule: NormalizationReason | 'score_high_boundary' | 'noul_urgent_boundary' | 'noul_not_urgent_boundary'
+  rule:
+    | NormalizationReason
+    | 'score_high_boundary'
+    | 'noul_urgent_boundary'
+    | 'noul_not_urgent_boundary'
   actual: number | string | boolean
   operator: 'gte' | 'lte' | 'eq'
   expected: number | string | boolean
@@ -153,23 +171,32 @@ export type JudgmentInspection = Readonly<{
     impact: Impact
     recentUserTexts: readonly string[]
   }>
-  questions: Readonly<Record<ChoiceId, Extract<SentQuestion, { type: 'choice' }>> & {
-    impact: Extract<SentQuestion, { type: 'score' }>
-    urgency: Extract<SentQuestion, { type: 'noul' }>
-  }>
+  questions: Readonly<
+    Record<ChoiceId, Extract<SentQuestion, { type: 'choice' }>> & {
+      impact: Extract<SentQuestion, { type: 'score' }>
+      urgency: Extract<SentQuestion, { type: 'noul' }>
+    }
+  >
   policy: AdoptionPolicySnapshot
   normalization: Readonly<Record<JudgmentId, NormalizationDecision>>
 }>
 export type ConfirmedChange = {
   [K in keyof ConfirmedAnswers]: Readonly<{ field: K; value: NonNullable<ConfirmedAnswers[K]> }>
 }[keyof ConfirmedAnswers]
-export type ApplicationReason = 'newly_confirmed' | 'unmentioned' | 'conditions_not_met' |
-  'confirmed_preserved' | 'priority_rule' | 'not_used_here' | 'applied_no_action_change'
+export type ApplicationReason =
+  | 'newly_confirmed'
+  | 'unmentioned'
+  | 'conditions_not_met'
+  | 'confirmed_preserved'
+  | 'priority_rule'
+  | 'not_used_here'
+  | 'applied_no_action_change'
 export type ApplicationDecision = Readonly<{
   judgmentId: JudgmentId
   disposition: 'applied' | 'not_applied' | 'not_used'
   reason: ApplicationReason
-  priorityRule: 'restart' | 'different_topic' | 'multiple_topics' | 'out_of_scope' | 'guard_needs_review' | null
+  priorityRule:
+    'restart' | 'different_topic' | 'multiple_topics' | 'out_of_scope' | 'guard_needs_review' | null
 }>
 export type QuestionSnapshot = Readonly<{
   id: QuestionId
@@ -185,18 +212,33 @@ export type ConversationApplication = Readonly<{
   decisions: readonly ApplicationDecision[]
   skipped: readonly Readonly<{
     question: 'topic' | 'scope' | 'workaround' | 'urgency'
-    reason: 'answered_before' | 'answered_this_turn' | 'impact_low' | 'settings_consultation' | 'cannot_read_termination'
+    reason:
+      | 'answered_before'
+      | 'answered_this_turn'
+      | 'impact_low'
+      | 'settings_consultation'
+      | 'cannot_read_termination'
   }>[]
   needsConfirmation: readonly Readonly<{
     question: QuestionId
-    reason: 'unmentioned' | 'conditions_not_met' | 'unclear' | 'impact_unassessed' | 'missing_answer' | 'multiple_topics' | 'guard_needs_review'
+    reason:
+      | 'unmentioned'
+      | 'conditions_not_met'
+      | 'unclear'
+      | 'impact_unassessed'
+      | 'missing_answer'
+      | 'multiple_topics'
+      | 'guard_needs_review'
     mode: 'free_and_choices' | 'choices_only'
   }>[]
   next: Readonly<ConversationStage>
   nextQuestion: QuestionSnapshot | null
   notice: ConversationCore['notice']
 }>
-export type ConversationTransition = Readonly<{ core: ConversationCore; application: ConversationApplication }>
+export type ConversationTransition = Readonly<{
+  core: ConversationCore
+  application: ConversationApplication
+}>
 export type TurnOrigin = Readonly<{
   id: string
   text: string
@@ -204,9 +246,28 @@ export type TurnOrigin = Readonly<{
   previousQuestion: QuestionSnapshot
 }>
 export type TurnRecord =
-  | (TurnOrigin & Readonly<{ kind: 'pending'; source: 'text' | 'example'; request: JudgmentRequest }>)
-  | (TurnOrigin & Readonly<{ kind: 'judged'; source: 'text' | 'example'; request: JudgmentRequest;
-      judgment: JudgmentResponse; application: ConversationApplication; uiElapsedMs: number }>)
-  | (TurnOrigin & Readonly<{ kind: 'choice'; source: 'choice'; answer: ConversationChoice; application: ConversationApplication }>)
-  | (TurnOrigin & Readonly<{ kind: 'failed'; source: 'text' | 'example'; failure: 'judgment_failed' | 'auth_expired' | 'access_unavailable' }>)
+  | (TurnOrigin &
+      Readonly<{ kind: 'pending'; source: 'text' | 'example'; request: JudgmentRequest }>)
+  | (TurnOrigin &
+      Readonly<{
+        kind: 'judged'
+        source: 'text' | 'example'
+        request: JudgmentRequest
+        judgment: JudgmentResponse
+        application: ConversationApplication
+        uiElapsedMs: number
+      }>)
+  | (TurnOrigin &
+      Readonly<{
+        kind: 'choice'
+        source: 'choice'
+        answer: ConversationChoice
+        application: ConversationApplication
+      }>)
+  | (TurnOrigin &
+      Readonly<{
+        kind: 'failed'
+        source: 'text' | 'example'
+        failure: 'judgment_failed' | 'auth_expired' | 'access_unavailable'
+      }>)
   | (TurnOrigin & Readonly<{ kind: 'interrupted'; source: 'text' | 'example' }>)

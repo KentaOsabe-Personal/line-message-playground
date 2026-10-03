@@ -34,12 +34,23 @@ describe('channel admin DTO', () => {
   })
 
   test('accepts only the closed deactivation summary used by lifecycle navigation', () => {
-    const value = { ...item(), deactivationSummary: {
-      operationId: '22222222-2222-4222-8222-222222222222', status: 'confirmation_required',
-      reason: 'external_default', updatedAt: '2026-08-01T10:02:00+09:00',
-    }, richMenuRefreshRequired: true }
+    const value = {
+      ...item(),
+      deactivationSummary: {
+        operationId: '22222222-2222-4222-8222-222222222222',
+        status: 'confirmation_required',
+        reason: 'external_default',
+        updatedAt: '2026-08-01T10:02:00+09:00',
+      },
+      richMenuRefreshRequired: true,
+    }
     expect(parseChannelAdminItem(value)).toEqual({ ok: true, value })
-    expect(parseChannelAdminItem({ ...value, deactivationSummary: { ...value.deactivationSummary, targetResourceId: 'secret' } })).toMatchObject({ ok: false })
+    expect(
+      parseChannelAdminItem({
+        ...value,
+        deactivationSummary: { ...value.deactivationSummary, targetResourceId: 'secret' },
+      }),
+    ).toMatchObject({ ok: false })
   })
 
   // テストケース: secret様field、余分なfield、別channelのWebhook URLを解析する。
@@ -48,9 +59,15 @@ describe('channel admin DTO', () => {
     for (const invalid of [
       { ...item(), accessToken: 'secret' },
       { ...item(), note: 'extra' },
-      { ...item(), webhookUrl: 'https://example.test/api/line/webhooks/22222222-2222-4222-8222-222222222222/' },
+      {
+        ...item(),
+        webhookUrl: 'https://example.test/api/line/webhooks/22222222-2222-4222-8222-222222222222/',
+      },
     ]) {
-      expect(parseChannelAdminItem(invalid)).toMatchObject({ ok: false, error: { code: 'protocol_error' } })
+      expect(parseChannelAdminItem(invalid)).toMatchObject({
+        ok: false,
+        error: { code: 'protocol_error' },
+      })
     }
   })
 
@@ -65,26 +82,35 @@ describe('channel admin DTO', () => {
       { ...item(), credentialsState: 'unknown' },
     ]
     for (const invalid of invalidValues) {
-      expect(parseChannelAdminItem(invalid)).toMatchObject({ ok: false, error: { code: 'protocol_error' } })
+      expect(parseChannelAdminItem(invalid)).toMatchObject({
+        ok: false,
+        error: { code: 'protocol_error' },
+      })
     }
   })
 
   // テストケース: 削除結果と限定scopeの接続確認結果を解析する。
   // 期待値: exactな非秘密結果だけを受理し、余分な生応答を拒否する。
   test('validates delete and connection results exactly', () => {
-    expect(parseDeletedChannel({ channelId, label: '通知チャネル', deleted: true })).toMatchObject({ ok: true })
-    expect(parseConnectionCheck({
-      channelId,
-      status: 'connected',
-      checkedAt: '2026-08-01T10:01:00+09:00',
-      scope: 'access_token_and_bot_identity_only',
-    })).toMatchObject({ ok: true })
-    expect(parseConnectionCheck({
-      channelId,
-      status: 'connected',
-      checkedAt: '2026-08-01T10:01:00+09:00',
-      scope: 'access_token_and_bot_identity_only',
-      rawResponse: {},
-    })).toMatchObject({ ok: false, error: { code: 'protocol_error' } })
+    expect(parseDeletedChannel({ channelId, label: '通知チャネル', deleted: true })).toMatchObject({
+      ok: true,
+    })
+    expect(
+      parseConnectionCheck({
+        channelId,
+        status: 'connected',
+        checkedAt: '2026-08-01T10:01:00+09:00',
+        scope: 'access_token_and_bot_identity_only',
+      }),
+    ).toMatchObject({ ok: true })
+    expect(
+      parseConnectionCheck({
+        channelId,
+        status: 'connected',
+        checkedAt: '2026-08-01T10:01:00+09:00',
+        scope: 'access_token_and_bot_identity_only',
+        rawResponse: {},
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'protocol_error' } })
   })
 })

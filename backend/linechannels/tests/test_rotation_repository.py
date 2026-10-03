@@ -62,9 +62,7 @@ class DjangoRotationCredentialRepositoryTests(TransactionTestCase):
 
         for operation in (
             lambda: self.repository.get_credentials_for_update(channel.public_id),
-            lambda: self.repository.replace_credentials_locked(
-                channel.public_id, self.pair()
-            ),
+            lambda: self.repository.replace_credentials_locked(channel.public_id, self.pair()),
         ):
             with self.subTest(operation=operation):
                 with self.assertRaises(RepositoryProgrammingError) as captured:
@@ -80,9 +78,7 @@ class DjangoRotationCredentialRepositoryTests(TransactionTestCase):
         with transaction.atomic():
             current = self.repository.get_credentials_for_update(committed.public_id)
             self.assertEqual(current.access_token.ciphertext, b"initial-access")
-            self.repository.replace_credentials_locked(
-                committed.public_id, self.pair(b"committed")
-            )
+            self.repository.replace_credentials_locked(committed.public_id, self.pair(b"committed"))
 
         with self.assertRaisesRegex(RuntimeError, "rollback"):
             with transaction.atomic():

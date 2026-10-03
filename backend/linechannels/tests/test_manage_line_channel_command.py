@@ -20,7 +20,6 @@ from linechannels.types import (
 )
 from linechannels.validators import build_credential_pair
 
-
 COMMAND_PATH = "linechannels.management.commands.manage_line_channel"
 
 
@@ -74,7 +73,11 @@ class ManageLineChannelCommandTests(SimpleTestCase):
         )
         inputs = (
             (register, "register", (register,)),
-            (UpdateLineChannel(self.public_id, label="更新"), "update", (UpdateLineChannel(self.public_id, label="更新"),)),
+            (
+                UpdateLineChannel(self.public_id, label="更新"),
+                "update",
+                (UpdateLineChannel(self.public_id, label="更新"),),
+            ),
             (SetLineChannelActive(self.public_id, True), "set_active", (self.public_id, True)),
             (SetLineChannelActive(self.public_id, False), "set_active", (self.public_id, False)),
         )
@@ -84,9 +87,7 @@ class ManageLineChannelCommandTests(SimpleTestCase):
                 service = Mock()
                 getattr(service, expected_method).return_value = self.success
 
-                stdout, stderr = self.invoke(
-                    ManageLineChannelInputCollected(value), service
-                )
+                stdout, stderr = self.invoke(ManageLineChannelInputCollected(value), service)
 
                 getattr(service, expected_method).assert_called_once_with(*expected_args)
                 self.assertEqual(
@@ -123,9 +124,7 @@ class ManageLineChannelCommandTests(SimpleTestCase):
         failed_service = Mock()
         failed_service.update.return_value = ChannelMutationFailed("channel_not_found")
 
-        stdout, stderr = self.invoke(
-            ManageLineChannelInputCollected(command), failed_service
-        )
+        stdout, stderr = self.invoke(ManageLineChannelInputCollected(command), failed_service)
 
         self.assertIn("channel_not_found", stdout + stderr)
         canary = "raw-secret-error-canary"
@@ -139,9 +138,10 @@ class ManageLineChannelCommandTests(SimpleTestCase):
         service = Mock()
         service.update.return_value = self.success
         stdout = io.StringIO()
-        with patch(
-            f"{COMMAND_PATH}.build_line_channel_service", return_value=service
-        ), patch(f"{COMMAND_PATH}.build_manage_line_channel_prompts") as prompts:
+        with (
+            patch(f"{COMMAND_PATH}.build_line_channel_service", return_value=service),
+            patch(f"{COMMAND_PATH}.build_manage_line_channel_prompts") as prompts,
+        ):
             call_command(
                 "manage_line_channel",
                 channel_public_id=str(self.public_id),

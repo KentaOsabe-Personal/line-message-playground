@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
 from uuid import UUID
 
 from django.utils import timezone
@@ -10,7 +9,6 @@ from rest_framework import serializers
 from .repository import HistoryQuery, OwnerChannelScope
 from .services import HistoryRequest, PreviewRequest
 from .types import OperationCommand, OperationKind, TemplateInput, TemplateReference
-
 
 _INVALID = "入力値が不正です。"
 
@@ -31,7 +29,7 @@ class CanonicalUUIDField(serializers.Field):
             raise serializers.ValidationError(_INVALID)
         try:
             parsed = UUID(data)
-        except (ValueError, TypeError, AttributeError):
+        except ValueError, TypeError, AttributeError:
             raise serializers.ValidationError(_INVALID) from None
         if str(parsed) != data:
             raise serializers.ValidationError(_INVALID)
@@ -101,9 +99,7 @@ class OperationRequestSerializer(ExactRequestSerializer):
     confirmationToken = serializers.CharField(
         required=False, max_length=4096, trim_whitespace=False
     )
-    templateId = serializers.CharField(
-        required=False, max_length=64, trim_whitespace=False
-    )
+    templateId = serializers.CharField(required=False, max_length=64, trim_whitespace=False)
     templateVersion = serializers.IntegerField(required=False, min_value=1)
     fields = StrictTemplateField(required=False)
     subjectOperationId = CanonicalUUIDField(required=False)

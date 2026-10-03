@@ -41,9 +41,11 @@ from .types import (
     LinkedPushStored,
     LinkedTargetSnapshot,
     OwnerIdentitySnapshot,
-    OwnerPrincipal as DeliveryOwnerPrincipal,
     SubmitLinkedDelivery,
     TargetUnavailable,
+)
+from .types import (
+    OwnerPrincipal as DeliveryOwnerPrincipal,
 )
 
 SAFE_SUMMARIES = {
@@ -70,9 +72,7 @@ def error_response(code, http_status, *, fields=None):
 
 def serializer_error_response(serializer):
     fields = {
-        field: ["入力値が不正です。"]
-        for field in serializer.errors
-        if field != "non_field_errors"
+        field: ["入力値が不正です。"] for field in serializer.errors if field != "non_field_errors"
     }
     return error_response("validation_error", status.HTTP_400_BAD_REQUEST, fields=fields)
 
@@ -143,9 +143,7 @@ def linked_submission_response(snapshot, http_status):
         "status": snapshot.status,
         "acceptedAt": snapshot.accepted_at.isoformat(),
         "completedAt": (
-            snapshot.completed_at.isoformat()
-            if snapshot.completed_at is not None
-            else None
+            snapshot.completed_at.isoformat() if snapshot.completed_at is not None else None
         ),
         "lineRequestId": snapshot.line_request_id,
         "receipt": {
@@ -183,9 +181,7 @@ class DeliveryTargetChannelListAPIView(LocalDeliveryAPIView):
         principal = request.user
         assert isinstance(principal, OwnerPrincipal)
         try:
-            choices = build_target_directory().list_channels(
-                principal.identity_public_id
-            )
+            choices = build_target_directory().list_channels(principal.identity_public_id)
         except DatabaseError:
             return error_response(
                 "storage_unavailable",
@@ -281,15 +277,11 @@ class PreviewAPIView(LocalDeliveryAPIView):
             )
 
         confirmation_service = build_confirmation_service()
-        receipt_expires_at = confirmation_service.receipt_expires_at(
-            values["receiptRequested"]
-        )
+        receipt_expires_at = confirmation_service.receipt_expires_at(values["receiptRequested"])
         confirmation = confirmation_service.issue(
             ConfirmationSnapshot(
                 owner=DeliveryOwnerPrincipal(context.session.owner_slot),
-                owner_identity=OwnerIdentitySnapshot(
-                    principal.identity_public_id
-                ),
+                owner_identity=OwnerIdentitySnapshot(principal.identity_public_id),
                 channel_public_id=target.snapshot.channel_public_id,
                 recipient_public_id=target.snapshot.recipient_public_id,
                 target_revision=target.revision,
@@ -452,7 +444,7 @@ class DeliveryStatusAPIView(LocalDeliveryAPIView):
             return serializer_error_response(serializer)
         try:
             parsed_operation_id = UUID(operation_id)
-        except (TypeError, ValueError, AttributeError):
+        except TypeError, ValueError, AttributeError:
             return error_response("validation_error", status.HTTP_400_BAD_REQUEST)
         if str(parsed_operation_id) != operation_id:
             return error_response("validation_error", status.HTTP_400_BAD_REQUEST)
@@ -476,14 +468,10 @@ class DeliveryStatusAPIView(LocalDeliveryAPIView):
             )
         if not isinstance(snapshot.target, FixedTargetSnapshot):
             http_status = (
-                status.HTTP_202_ACCEPTED
-                if snapshot.status == "processing"
-                else status.HTTP_200_OK
+                status.HTTP_202_ACCEPTED if snapshot.status == "processing" else status.HTTP_200_OK
             )
             return linked_submission_response(snapshot, http_status)
         http_status = (
-            status.HTTP_202_ACCEPTED
-            if snapshot.status == "processing"
-            else status.HTTP_200_OK
+            status.HTTP_202_ACCEPTED if snapshot.status == "processing" else status.HTTP_200_OK
         )
         return fixed_submission_response(snapshot, http_status)

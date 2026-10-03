@@ -38,9 +38,7 @@ class JudgmentServiceTests(SimpleTestCase):
     def test_composes_single_successful_judgment(self) -> None:
         now = datetime(2026, 9, 21, tzinfo=UTC)
         gateway = _Gateway(
-            JevTransportSuccess(
-                {"model": "jev-1.13.0", "answers": _valid_answers()}, 25.0
-            )
+            JevTransportSuccess({"model": "jev-1.13.0", "answers": _valid_answers()}, 25.0)
         )
         service = JudgmentService(
             model="jev-1.13.0",
@@ -54,19 +52,27 @@ class JudgmentServiceTests(SimpleTestCase):
 
         self.assertIsInstance(result, JudgmentSuccess)
         self.assertEqual(len(gateway.payloads), 1)
-        self.assertEqual(tuple(gateway.payloads[0]["questions"]), (
-            "topic", "relevance", "change", "scope", "workaround", "result",
-            "impact_evidence", "impact", "urgency",
-        ))
+        self.assertEqual(
+            tuple(gateway.payloads[0]["questions"]),
+            (
+                "topic",
+                "relevance",
+                "change",
+                "scope",
+                "workaround",
+                "result",
+                "impact_evidence",
+                "impact",
+                "urgency",
+            ),
+        )
 
     # テストケース: Jev応答中に本人principalが失効する。
     # 期待値: 正常な外部結果でも公開せずaccess_expiredを返す。
     def test_discards_result_when_principal_expires_after_remote_call(self) -> None:
         now = datetime(2026, 9, 21, tzinfo=UTC)
         gateway = _Gateway(
-            JevTransportSuccess(
-                {"model": "jev-1.13.0", "answers": _valid_answers()}, 25.0
-            )
+            JevTransportSuccess({"model": "jev-1.13.0", "answers": _valid_answers()}, 25.0)
         )
         service = JudgmentService(
             model="jev-1.13.0",
@@ -156,33 +162,56 @@ class JudgmentInspectionServiceTests(SimpleTestCase):
     # 期待値: 閲覧用の記録が実際の送信内容と一致する。処理時間には通信だけでなく正規化も含める。
     def test_service_returns_v2_snapshot_and_total_normalization_time(self):
         from unittest.mock import patch
-        from textjudgmentlab.judgment_questions import state_payload, questions_payload
+
+        from textjudgmentlab.judgment_questions import questions_payload, state_payload
+
         now = datetime(2026, 9, 21, tzinfo=UTC)
-        gateway = _Gateway(JevTransportSuccess({"model": "jev-1.13.0", "answers": _valid_answers()}, 25))
-        service = JudgmentService(model="jev-1.13.0", gateway=gateway,
-            limits=LabLimits(), clock=lambda: now)
+        gateway = _Gateway(
+            JevTransportSuccess({"model": "jev-1.13.0", "answers": _valid_answers()}, 25)
+        )
+        service = JudgmentService(
+            model="jev-1.13.0", gateway=gateway, limits=LabLimits(), clock=lambda: now
+        )
         with patch("textjudgmentlab.services.monotonic", side_effect=(10.0, 10.125)):
-            result = async_to_sync(service.evaluate)(LabPrincipal(now + timedelta(minutes=1), "owner"), _request())
+            result = async_to_sync(service.evaluate)(
+                LabPrincipal(now + timedelta(minutes=1), "owner"), _request()
+            )
         self.assertIsInstance(result, JudgmentSuccess)
         self.assertEqual(result.contract_version, 2)
         self.assertEqual(result.details.jev_elapsed_ms, 125)
         self.assertEqual(state_payload(result.inspection.state), gateway.payloads[0]["state"])
-        self.assertEqual(questions_payload(result.inspection.questions), gateway.payloads[0]["questions"])
-        self.assertEqual(set(result.inspection.normalization), set(gateway.payloads[0]["questions"]))
+        self.assertEqual(
+            questions_payload(result.inspection.questions), gateway.payloads[0]["questions"]
+        )
+        self.assertEqual(
+            set(result.inspection.normalization), set(gateway.payloads[0]["questions"])
+        )
 
     # テストケース: 判定結果の正規化中に、本人の認証期限が切れる。
     # 期待値: 正規化後に認証期限を再確認し、期限切れの場合は成功応答を返さない。
     def test_rechecks_principal_after_normalization(self):
         from unittest.mock import patch
+
         from textjudgmentlab.judgment_policy import normalize_judgment
+
         now = datetime(2026, 9, 21, tzinfo=UTC)
         current = [now]
+
         def normalize(*args, **kwargs):
             result = normalize_judgment(*args, **kwargs)
             current[0] += timedelta(seconds=2)
             return result
-        service = JudgmentService(model="jev-1.13.0", limits=LabLimits(), clock=lambda: current[0],
-            gateway=_Gateway(JevTransportSuccess({"model": "jev-1.13.0", "answers": _valid_answers()}, 25)))
+
+        service = JudgmentService(
+            model="jev-1.13.0",
+            limits=LabLimits(),
+            clock=lambda: current[0],
+            gateway=_Gateway(
+                JevTransportSuccess({"model": "jev-1.13.0", "answers": _valid_answers()}, 25)
+            ),
+        )
         with patch("textjudgmentlab.services.normalize_judgment", side_effect=normalize):
-            result = async_to_sync(service.evaluate)(LabPrincipal(now + timedelta(seconds=1), "owner"), _request())
+            result = async_to_sync(service.evaluate)(
+                LabPrincipal(now + timedelta(seconds=1), "owner"), _request()
+            )
         self.assertEqual(result, JudgmentFailure("access_expired"))

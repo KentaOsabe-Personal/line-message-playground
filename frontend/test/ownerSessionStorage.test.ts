@@ -7,12 +7,18 @@ const operationId = '123e4567-e89b-42d3-a456-426614174000'
 function createMemoryStorage(): Storage {
   const values = new Map<string, string>()
   return {
-    get length() { return values.size },
+    get length() {
+      return values.size
+    },
     clear: () => values.clear(),
     getItem: (key) => values.get(key) ?? null,
     key: (index) => [...values.keys()][index] ?? null,
-    removeItem: (key) => { values.delete(key) },
-    setItem: (key, value) => { values.set(key, value) },
+    removeItem: (key) => {
+      values.delete(key)
+    },
+    setItem: (key, value) => {
+      values.set(key, value)
+    },
   }
 }
 
@@ -90,7 +96,9 @@ describe('OwnerSessionStorage', () => {
   // 期待値: 例外を外へ出さず、安全な空状態へ収束する。
   test('fails closed when browser storage is unavailable', () => {
     const unavailable = new Proxy({} as Storage, {
-      get: () => { throw new DOMException('blocked', 'SecurityError') },
+      get: () => {
+        throw new DOMException('blocked', 'SecurityError')
+      },
     })
     const adapter = createOwnerSessionStorage(unavailable)
 
@@ -111,9 +119,12 @@ describe('OwnerSessionStorage', () => {
     storage.setItem('line-owner:delivery-operation-id', operationId)
     storage.setItem('line-owner:unlink-reauthentication-pending', '1')
     const writeBlockedStorage = new Proxy(storage, {
-      get: (target, property) => property === 'setItem'
-        ? () => { throw new DOMException('full', 'QuotaExceededError') }
-        : Reflect.get(target, property),
+      get: (target, property): unknown =>
+        property === 'setItem'
+          ? () => {
+              throw new DOMException('full', 'QuotaExceededError')
+            }
+          : Reflect.get(target, property),
     })
     const adapter = createOwnerSessionStorage(writeBlockedStorage)
 

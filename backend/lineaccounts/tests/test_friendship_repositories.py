@@ -95,9 +95,7 @@ class AccountProjectionRepositoryTests(TransactionTestCase):
     # テストケース: exact targetと同時に他provider・他channel・他identityのrecipientを保持する
     # 期待値: target更新後も3種類の非対象recipientの全projection fieldが不変となる
     def test_apply_keeps_every_non_target_recipient_unchanged(self):
-        same_provider_other_channel = self.create_channel(
-            provider_id=self.provider_id
-        )
+        same_provider_other_channel = self.create_channel(provider_id=self.provider_id)
         other_provider = "0099999999"
         other_provider_channel = self.create_channel(provider_id=other_provider)
         same_provider_other_identity = LineIdentity.objects.create(
@@ -156,9 +154,7 @@ class AccountProjectionRepositoryTests(TransactionTestCase):
                 webhook_event_id="01J00000000000000000000001",
             )
 
-        for recipient in DeliveryRecipient.objects.filter(
-            public_id__in=before
-        ):
+        for recipient in DeliveryRecipient.objects.filter(public_id__in=before):
             self.assertEqual(
                 (
                     recipient.friendship_state,

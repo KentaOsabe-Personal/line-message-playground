@@ -60,9 +60,7 @@ class WebhookEventReceiptTests(TestCase):
         WebhookEventReceipt.objects.create(**self._values())
 
         with self.assertRaises(IntegrityError), transaction.atomic():
-            WebhookEventReceipt.objects.create(
-                **self._values(channel_public_id=uuid4())
-            )
+            WebhookEventReceipt.objects.create(**self._values(channel_public_id=uuid4()))
 
         self.assertEqual(WebhookEventReceipt.objects.count(), 1)
 
@@ -91,9 +89,7 @@ class WebhookEventReceiptTests(TestCase):
             self._values(
                 webhook_event_id="01ARZ3NDEKTSV4RRFFQ69G5FAZ",
                 status=WebhookEventReceipt.Status.FAILED,
-                failure_code=(
-                    WebhookEventReceipt.FailureCode.DISPATCH_DEADLINE_EXCEEDED
-                ),
+                failure_code=(WebhookEventReceipt.FailureCode.DISPATCH_DEADLINE_EXCEEDED),
                 completed_at=completed_at,
             ),
         )

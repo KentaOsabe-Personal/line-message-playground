@@ -11,7 +11,6 @@ from linerichmenus.repository import (
     ReplacementRecorded,
 )
 
-
 NOW = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 
 
@@ -32,15 +31,19 @@ class RichMenuRepositoryReplacementTests(TransactionTestCase):
         self.state = RichMenuChannelState.objects.create(channel_public_id=uuid4())
         self.previous = self._operation(status="succeeded", stage="verifying")
         self.old = ManagedRichMenu.objects.create(
-            channel_state=self.state, origin_operation=self.previous,
+            channel_state=self.state,
+            origin_operation=self.previous,
             ownership_marker="old-" + uuid4().hex,
-            lifecycle="applied", image_digest="a" * 64,
+            lifecycle="applied",
+            image_digest="a" * 64,
         )
         self.replacement = self._operation(status="processing", stage="verifying")
         self.candidate = ManagedRichMenu.objects.create(
-            channel_state=self.state, origin_operation=self.replacement,
+            channel_state=self.state,
+            origin_operation=self.replacement,
             ownership_marker="new-" + uuid4().hex,
-            lifecycle="candidate", image_digest="b" * 64,
+            lifecycle="candidate",
+            image_digest="b" * 64,
         )
         self.state.current_resource = self.old
         self.state.active_operation = self.replacement
@@ -95,9 +98,11 @@ class RichMenuRepositoryReplacementTests(TransactionTestCase):
     # 期待値: 部分更新せずinvalid relationとして拒否する。
     def test_record_replacement_rejects_unrelated_resources(self):
         unrelated = ManagedRichMenu.objects.create(
-            channel_state=self.state, origin_operation=self.previous,
+            channel_state=self.state,
+            origin_operation=self.previous,
             ownership_marker="unrelated-" + uuid4().hex,
-            lifecycle="applied", image_digest="c" * 64,
+            lifecycle="applied",
+            image_digest="c" * 64,
         )
         result = self.repository.record_replacement(
             replacement_operation_id=self.replacement.operation_id,
@@ -113,11 +118,17 @@ class RichMenuRepositoryReplacementTests(TransactionTestCase):
 
     def _operation(self, *, status, stage):
         return RichMenuOperation.objects.create(
-            operation_id=uuid4(), channel_state=self.state,
-            owner_identity_public_id=uuid4(), provider_id="0012345678",
-            kind="apply", request_fingerprint=uuid4().hex * 2,
+            operation_id=uuid4(),
+            channel_state=self.state,
+            owner_identity_public_id=uuid4(),
+            provider_id="0012345678",
+            kind="apply",
+            request_fingerprint=uuid4().hex * 2,
             confirmation_usage_digest=uuid4().hex * 2,
-            expected_channel_revision=NOW, status=status, stage=stage,
+            expected_channel_revision=NOW,
+            status=status,
+            stage=stage,
             result_code="accepted" if status == "processing" else "succeeded",
-            accepted_at=NOW, completed_at=NOW if status == "succeeded" else None,
+            accepted_at=NOW,
+            completed_at=NOW if status == "succeeded" else None,
         )

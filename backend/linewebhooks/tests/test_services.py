@@ -6,16 +6,31 @@ from uuid import UUID
 from django.db import DatabaseError
 from django.test import TestCase as DjangoTestCase
 
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 from linechannels.types import (
     ChannelSecret,
     CredentialUnavailable,
     WebhookChannelAvailable,
 )
-from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
+from linewebhooks.models import WebhookEventReceipt
+from linewebhooks.repositories import DjangoEventReceiptRepository
 from linewebhooks.services import WebhookIngressService
+from linewebhooks.tests.support import (
+    CHANNEL_ID as INTEGRATION_CHANNEL_ID,
+)
+from linewebhooks.tests.support import (
+    EVENT_IDS,
+    RecordingHandler,
+    build_service,
+    sign_raw_body,
+    signed_payload,
+)
+from linewebhooks.tests.support import (
+    event as integration_event,
+)
 from linewebhooks.types import (
-    HandlerFailed,
     HandlerExecutionContext,
+    HandlerFailed,
     HandlerRegistration,
     HandlerSucceeded,
     IngressAccepted,
@@ -28,18 +43,6 @@ from linewebhooks.types import (
     VerifiedWebhookPayload,
     WebhookAuditEntry,
 )
-from linewebhooks.models import WebhookEventReceipt
-from linewebhooks.repositories import DjangoEventReceiptRepository
-from linewebhooks.tests.support import (
-    CHANNEL_ID as INTEGRATION_CHANNEL_ID,
-    EVENT_IDS,
-    RecordingHandler,
-    build_service,
-    event as integration_event,
-    sign_raw_body,
-    signed_payload,
-)
-
 
 CHANNEL_ID = UUID("12345678-1234-4234-9234-123456789abc")
 EVENT_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -275,6 +278,7 @@ class WebhookIngressServiceTests(TestCase):
                 )
                 self.assertEqual(result, IngressRejected(code="unexpected"))
                 self.assertEqual(trace, expected_trace)
+
     # テストケース: 不正な公開識別子、署名、payload を順番に拒否する
     # 期待値: 各信頼段階より後ろの依存を呼ばず、安全な分類へ収束する
     def test_rejections_stop_before_later_trust_stages(self) -> None:
@@ -467,9 +471,7 @@ class WebhookIngressServiceTests(TestCase):
     def test_does_not_record_deadline_audit_below_two_seconds(self) -> None:
         for elapsed in (1.5, 1.999):
             with self.subTest(elapsed=elapsed):
-                service, _, _, audit = self._service(
-                    monotonic_values=[10.0, 10.0 + elapsed]
-                )
+                service, _, _, audit = self._service(monotonic_values=[10.0, 10.0 + elapsed])
                 result = service.ingest(str(CHANNEL_ID), b"{}", "signature")
                 self.assertIsInstance(result, IngressAccepted)
                 self.assertNotIn(
@@ -486,18 +488,14 @@ class WebhookIngressServiceIntegrationTests(DjangoTestCase):
         service, audit = build_service(handler=handler)
 
         empty_body, empty_signature = signed_payload([])
-        empty_result = service.ingest(
-            str(INTEGRATION_CHANNEL_ID), empty_body, empty_signature
-        )
+        empty_result = service.ingest(str(INTEGRATION_CHANNEL_ID), empty_body, empty_signature)
         events = [
             integration_event(EVENT_IDS[0]),
             integration_event(EVENT_IDS[1], event_type="future-event"),
             integration_event(EVENT_IDS[2]),
         ]
         raw_body, signature = signed_payload(events)
-        batch_result = service.ingest(
-            str(INTEGRATION_CHANNEL_ID), raw_body, signature
-        )
+        batch_result = service.ingest(str(INTEGRATION_CHANNEL_ID), raw_body, signature)
 
         self.assertIsInstance(empty_result, IngressAccepted)
         self.assertIsInstance(batch_result, IngressAccepted)
@@ -540,12 +538,8 @@ class WebhookIngressServiceIntegrationTests(DjangoTestCase):
             ]
         )
 
-        first = service.ingest(
-            str(INTEGRATION_CHANNEL_ID), first_body, first_signature
-        )
-        duplicate = service.ingest(
-            str(INTEGRATION_CHANNEL_ID), duplicate_body, duplicate_signature
-        )
+        first = service.ingest(str(INTEGRATION_CHANNEL_ID), first_body, first_signature)
+        duplicate = service.ingest(str(INTEGRATION_CHANNEL_ID), duplicate_body, duplicate_signature)
 
         self.assertIsInstance(first, IngressAccepted)
         self.assertIsInstance(duplicate, IngressAccepted)
@@ -554,9 +548,7 @@ class WebhookIngressServiceIntegrationTests(DjangoTestCase):
         self.assertEqual(receipt.occurred_at_ms, 100)
         self.assertFalse(receipt.is_redelivery)
         self.assertEqual(len(handler.events), 1)
-        self.assertEqual(
-            [entry.outcome for entry in audit.entries].count("event_duplicate"), 1
-        )
+        self.assertEqual([entry.outcome for entry in audit.entries].count("event_duplicate"), 1)
 
     # テストケース: handlerの安全な失敗と生例外を別eventで処理する
     # 期待値: 両方をhandler_failedへ確定し、生例外でbatch分類を中断せずacceptedを返す
@@ -566,22 +558,16 @@ class WebhookIngressServiceIntegrationTests(DjangoTestCase):
                 WebhookEventReceipt.objects.all().delete()
                 handler = RecordingHandler(result)
                 service, audit = build_service(handler=handler)
-                raw_body, signature = signed_payload(
-                    [integration_event(EVENT_IDS[0])]
-                )
+                raw_body, signature = signed_payload([integration_event(EVENT_IDS[0])])
 
-                response = service.ingest(
-                    str(INTEGRATION_CHANNEL_ID), raw_body, signature
-                )
+                response = service.ingest(str(INTEGRATION_CHANNEL_ID), raw_body, signature)
 
                 self.assertIsInstance(response, IngressAccepted)
                 receipt = WebhookEventReceipt.objects.get()
                 self.assertEqual(receipt.status, "failed")
                 self.assertEqual(receipt.failure_code, "handler_failed")
                 self.assertEqual(len(handler.events), 1)
-                self.assertIn(
-                    "handler_failed", [entry.outcome for entry in audit.entries]
-                )
+                self.assertIn("handler_failed", [entry.outcome for entry in audit.entries])
 
     # テストケース: 一件目が安全なhandler失敗となる二件batchを具象台帳で処理する
     # 期待値: 一件目をfailedへ確定した後も二件目をdispatchし、processedへ確定してacceptedを返す
@@ -638,9 +624,7 @@ class WebhookIngressServiceIntegrationTests(DjangoTestCase):
             "_create_receipt",
             side_effect=DatabaseError("accept-storage-canary"),
         ):
-            rejected = service.ingest(
-                str(INTEGRATION_CHANNEL_ID), raw_body, signature
-            )
+            rejected = service.ingest(str(INTEGRATION_CHANNEL_ID), raw_body, signature)
 
         self.assertEqual(rejected, IngressRejected(code="storage_unavailable"))
         self.assertEqual(WebhookEventReceipt.objects.count(), 0)
@@ -658,13 +642,9 @@ class WebhookIngressServiceIntegrationTests(DjangoTestCase):
             "_conditional_update",
             side_effect=fail_first_finalize,
         ):
-            unavailable = service.ingest(
-                str(INTEGRATION_CHANNEL_ID), raw_body, signature
-            )
+            unavailable = service.ingest(str(INTEGRATION_CHANNEL_ID), raw_body, signature)
 
-        self.assertEqual(
-            unavailable, IngressRejected(code="storage_unavailable")
-        )
+        self.assertEqual(unavailable, IngressRejected(code="storage_unavailable"))
         self.assertEqual(len(handler.events), 2)
         self.assertEqual(
             list(WebhookEventReceipt.objects.order_by("pk").values_list("status", flat=True)),
@@ -740,13 +720,9 @@ class WebhookIngressServiceIntegrationTests(DjangoTestCase):
                     credential_repository=UnavailableCredentialRepository(code),
                 )
 
-                result = service.ingest(
-                    str(INTEGRATION_CHANNEL_ID), raw_body, signature
-                )
+                result = service.ingest(str(INTEGRATION_CHANNEL_ID), raw_body, signature)
 
-                self.assertEqual(
-                    result, IngressRejected(code="channel_unavailable")
-                )
+                self.assertEqual(result, IngressRejected(code="channel_unavailable"))
                 self.assertEqual(handler.events, [])
                 self.assertEqual(
                     [entry.outcome for entry in audit.entries],

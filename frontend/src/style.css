@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
   --color-page: #f2f7f4;
@@ -35,7 +35,7 @@
 }
 
 :root {
-  font-family: Inter, "Hiragino Sans", "Yu Gothic UI", system-ui, sans-serif;
+  font-family: Inter, 'Hiragino Sans', 'Yu Gothic UI', system-ui, sans-serif;
   color: var(--color-text);
   background: var(--color-page);
   --focus-ring: 3px solid var(--color-focus);
@@ -1478,7 +1478,7 @@ label {
   color: var(--color-danger);
 }
 
-  .channel-card,
+.channel-card,
 .channel-editor,
 .confirmation,
 .empty-state,

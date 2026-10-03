@@ -89,10 +89,7 @@ class OutOfScopeInteraction:
 
 
 ParseResult: TypeAlias = (
-    ParsedTextInteraction
-    | ParsedPostbackInteraction
-    | InvalidInteraction
-    | OutOfScopeInteraction
+    ParsedTextInteraction | ParsedPostbackInteraction | InvalidInteraction | OutOfScopeInteraction
 )
 
 
@@ -140,9 +137,7 @@ class ActionFailed:
     status: Literal["failed"] = "failed"
 
 
-ActionOutcome: TypeAlias = (
-    ActionSucceeded | ActionNoChange | ActionRejected | ActionFailed
-)
+ActionOutcome: TypeAlias = ActionSucceeded | ActionNoChange | ActionRejected | ActionFailed
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -201,9 +196,7 @@ InteractionOutcome: TypeAlias = Literal[
     "credential_unavailable",
     "deadline_exceeded",
 ]
-ReplyOutcome: TypeAlias = Literal[
-    "accepted", "rejected", "unknown", "not_started"
-]
+ReplyOutcome: TypeAlias = Literal["accepted", "rejected", "unknown", "not_started"]
 EventType: TypeAlias = Literal["message", "postback"]
 OperationKind: TypeAlias = Literal["none", "command", "action"]
 

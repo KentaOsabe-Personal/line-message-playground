@@ -61,9 +61,7 @@ class StrictRequestSerializerTests(SimpleTestCase):
             set(unlink.validated_data),
             {"confirmationToken", "userAccessToken"},
         )
-        self.assertTrue(
-            UnlinkRequestSerializer().fields["userAccessToken"].write_only
-        )
+        self.assertTrue(UnlinkRequestSerializer().fields["userAccessToken"].write_only)
 
     # テストケース: 有効なLINE credential requestを内部値へ変換する
     # 期待値: domain側へraw stringではなくredactedな専用型を渡す
@@ -80,9 +78,7 @@ class StrictRequestSerializerTests(SimpleTestCase):
         self.assertIsInstance(login.validated_data["idToken"], IdToken)
         self.assertNotIn("id-token-canary", repr(login.validated_data))
         self.assertTrue(recipient.is_valid(), recipient.errors)
-        self.assertIsInstance(
-            recipient.validated_data["accessToken"], UserAccessToken
-        )
+        self.assertIsInstance(recipient.validated_data["accessToken"], UserAccessToken)
         self.assertNotIn("access-token-canary", repr(recipient.validated_data))
 
     # テストケース: enabledへbool以外のJSON scalarを渡す

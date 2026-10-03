@@ -310,11 +310,7 @@ class SignedFriendshipProjectionIntegrationTests(TestCase):
         )
 
         self.assertEqual(
-            list(
-                FriendshipSyncAudit.objects.order_by("pk").values_list(
-                    "outcome", flat=True
-                )
-            ),
+            list(FriendshipSyncAudit.objects.order_by("pk").values_list("outcome", flat=True)),
             [
                 "invalid",
                 "out_of_scope",
@@ -351,9 +347,7 @@ class SignedFriendshipProjectionIntegrationTests(TestCase):
     # 期待値: 登録境界以前をstaleとして拒否し、直後のeventからorder追跡を開始する
     def test_legacy_null_order_starts_tracking_after_registration_boundary(self) -> None:
         baseline_ms = int(self.recipient.created_at.timestamp() * 1000)
-        DeliveryRecipient.objects.filter(pk=self.recipient.pk).update(
-            friendship_state="friend"
-        )
+        DeliveryRecipient.objects.filter(pk=self.recipient.pk).update(friendship_state="friend")
         self.recipient.refresh_from_db()
         self.assertIsNone(self.recipient.last_friendship_event_occurred_at_ms)
         self.assertIsNone(self.recipient.last_friendship_webhook_event_id)
@@ -383,11 +377,7 @@ class SignedFriendshipProjectionIntegrationTests(TestCase):
             "01ARZ3NDEKTSV4RRFFQ69G5FB8",
         )
         self.assertEqual(
-            list(
-                FriendshipSyncAudit.objects.order_by("pk").values_list(
-                    "outcome", flat=True
-                )
-            ),
+            list(FriendshipSyncAudit.objects.order_by("pk").values_list("outcome", flat=True)),
             ["stale", "state_maintained"],
         )
 
@@ -452,11 +442,7 @@ class SignedFriendshipProjectionIntegrationTests(TestCase):
             "01ARZ3NDEKTSV4RRFFQ69G5FAX",
         )
         self.assertEqual(
-            list(
-                FriendshipSyncAudit.objects.order_by("pk").values_list(
-                    "outcome", flat=True
-                )
-            ),
+            list(FriendshipSyncAudit.objects.order_by("pk").values_list("outcome", flat=True)),
             ["applied", "state_maintained"],
         )
         self.assertEqual(DeliveryAttempt.objects.count(), 0)

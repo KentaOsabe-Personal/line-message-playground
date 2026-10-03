@@ -4,8 +4,8 @@ from uuid import UUID
 
 from django.test import TestCase as DjangoTestCase
 
-from linechannels.types import ChannelSecret, WebhookChannelAvailable
 from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
+from linechannels.types import ChannelSecret, WebhookChannelAvailable
 from linewebhooks.handlers import StaticHandlerRegistry
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.repositories import DjangoEventReceiptRepository
@@ -18,7 +18,6 @@ from linewebhooks.types import (
     VerifiedEventData,
     VerifiedWebhookPayload,
 )
-
 
 CHANNEL_ID = UUID("12345678-1234-4234-9234-123456789abc")
 EVENT_IDS = (
@@ -61,9 +60,7 @@ class _ReceiptRepository:
     def __init__(self) -> None:
         self.deadline_failures: list[int] = []
 
-    def accept_batch(
-        self, candidates: tuple[object, ...]
-    ) -> tuple[ReceiptDecision, ...]:
+    def accept_batch(self, candidates: tuple[object, ...]) -> tuple[ReceiptDecision, ...]:
         return tuple(
             ReceiptDecision(
                 receipt_id=index + 1,
@@ -95,9 +92,7 @@ class _Handler:
     def __init__(self) -> None:
         self.contexts: list[HandlerExecutionContext] = []
 
-    def handle(
-        self, event: object, context: HandlerExecutionContext
-    ) -> HandlerSucceeded:
+    def handle(self, event: object, context: HandlerExecutionContext) -> HandlerSucceeded:
         self.contexts.append(context)
         return HandlerSucceeded()
 
@@ -268,9 +263,7 @@ class DeadlineDispatchTests(TestCase):
             request_started_at_monotonic=10.0,
         )
 
-        cutoffs = [
-            context.external_io_deadline_monotonic for context in handler.contexts
-        ]
+        cutoffs = [context.external_io_deadline_monotonic for context in handler.contexts]
         self.assertAlmostEqual(cutoffs[0], 11.56)  # type: ignore[arg-type]
         self.assertAlmostEqual(cutoffs[1], 11.68)  # type: ignore[arg-type]
 

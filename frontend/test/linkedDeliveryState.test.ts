@@ -1,17 +1,16 @@
 import { describe, expect, test } from 'vitest'
 
 import type { LinkedDeliveryStatus, LinkedPreviewResponse, SafeError } from '../src/deliveryDto'
-import {
-  initialLinkedDeliveryState,
-  transitionLinkedDelivery,
-} from '../src/deliveryState'
+import { initialLinkedDeliveryState, transitionLinkedDelivery } from '../src/deliveryState'
 
 const channelOne = '11111111-1111-4111-8111-111111111111'
 const channelTwo = '22222222-2222-4222-8222-222222222222'
 const recipientOne = '33333333-3333-4333-8333-333333333333'
 const operationOne = '44444444-4444-4444-8444-444444444444'
 
-const previewResponse = (overrides: Partial<LinkedPreviewResponse> = {}): LinkedPreviewResponse => ({
+const previewResponse = (
+  overrides: Partial<LinkedPreviewResponse> = {},
+): LinkedPreviewResponse => ({
   channelId: channelOne,
   channelLabel: '通知チャネル',
   recipientId: recipientOne,
@@ -46,14 +45,13 @@ const confirmed = () => {
   })
 }
 
-const submitted = () => transitionLinkedDelivery(confirmed(), {
-  type: 'submitted',
-  operationId: operationOne,
-})
+const submitted = () =>
+  transitionLinkedDelivery(confirmed(), {
+    type: 'submitted',
+    operationId: operationOne,
+  })
 
-const status = (
-  deliveryStatus: LinkedDeliveryStatus['status'],
-): LinkedDeliveryStatus => {
+const status = (deliveryStatus: LinkedDeliveryStatus['status']): LinkedDeliveryStatus => {
   const common = {
     operationId: operationOne,
     snapshot: {
@@ -239,7 +237,9 @@ describe('linked delivery state', () => {
     }
 
     expect(duplicate).toBe(first)
-    expect(transitionLinkedDelivery(first, { type: 'deliveryUpdated', result: staleResult })).toBe(first)
+    expect(transitionLinkedDelivery(first, { type: 'deliveryUpdated', result: staleResult })).toBe(
+      first,
+    )
   })
 
   // テストケース: submittingとprocessing中に5つの入力変更と追加submitを行う。
@@ -260,10 +260,12 @@ describe('linked delivery state', () => {
 
     for (const state of [submitting, processing]) {
       for (const event of editEvents) expect(transitionLinkedDelivery(state, event)).toBe(state)
-      expect(transitionLinkedDelivery(state, {
-        type: 'submitted',
-        operationId: crypto.randomUUID(),
-      })).toBe(state)
+      expect(
+        transitionLinkedDelivery(state, {
+          type: 'submitted',
+          operationId: crypto.randomUUID(),
+        }),
+      ).toBe(state)
     }
   })
 
@@ -286,14 +288,18 @@ describe('linked delivery state', () => {
   test('6.5 hydrates saved operation statuses without restoring delivery content', () => {
     for (const expected of ['processing', 'unknown', 'succeeded', 'failed'] as const) {
       const checking = transitionLinkedDelivery(initialLinkedDeliveryState, {
-        type: 'hydrateStarted', operationId: operationOne,
+        type: 'hydrateStarted',
+        operationId: operationOne,
       })
       const hydrated = transitionLinkedDelivery(checking, {
-        type: 'deliveryUpdated', result: status(expected),
+        type: 'deliveryUpdated',
+        result: status(expected),
       })
       expect(hydrated.phase).toBe(expected)
       if (expected === 'succeeded' || expected === 'failed') {
-        expect(transitionLinkedDelivery(hydrated, { type: 'newDelivery' })).toEqual(initialLinkedDeliveryState)
+        expect(transitionLinkedDelivery(hydrated, { type: 'newDelivery' })).toEqual(
+          initialLinkedDeliveryState,
+        )
       }
     }
   })
@@ -362,7 +368,7 @@ describe('linked delivery state', () => {
       requestId: 'preview-1',
       error,
     })
-    error.fields!.subject![0] = 'secret canary'
+    error.fields!.subject[0] = 'secret canary'
 
     expect(rejected).toEqual({
       phase: 'editing',

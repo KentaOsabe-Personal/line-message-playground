@@ -2,33 +2,39 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from .jev_gateway import JevTransportFailure, JevTransportResult
 from .types import (
+    AdoptionPolicySnapshot,
     Change,
+    ChoiceAdoptionPolicy,
     ChoiceDetail,
+    ChoiceId,
     Evidence,
     JudgmentDetails,
     JudgmentEvidence,
     JudgmentFailure,
+    JudgmentId,
     JudgmentRequest,
+    KnownEvidence,
+    NeedsReviewEvidence,
+    NormalizationDecision,
+    NormalizationReason,
     NormalizationResult,
     NormalizedJudgment,
-    KnownEvidence,
-    AdoptionPolicySnapshot, ChoiceAdoptionPolicy, ScoreAdoptionPolicy, NoulAdoptionPolicy,
-    NormalizationDecision, PolicyCheck, NormalizationReason, JudgmentId, ChoiceId,
-    NeedsReviewEvidence,
+    NoulAdoptionPolicy,
     NoulDetail,
+    PolicyCheck,
     Relevance,
     ResultAnswer,
     Scope,
+    ScoreAdoptionPolicy,
     ScoreDetail,
     Topic,
     UnmentionedEvidence,
     Workaround,
 )
-
 
 _CHOICES: dict[ChoiceId, tuple[str, ...]] = {
     "topic": (
@@ -91,12 +97,9 @@ def _probabilities(value: object, candidates: tuple[str, ...]) -> dict[str, floa
     if not isinstance(value, Mapping) or set(value) != set(candidates):
         raise _InvalidResponse
     probabilities = {
-        candidate: _number(value[candidate], minimum=0.0, maximum=1.0)
-        for candidate in candidates
+        candidate: _number(value[candidate], minimum=0.0, maximum=1.0) for candidate in candidates
     }
-    if not math.isclose(
-        sum(probabilities.values()), 1.0, rel_tol=0.0, abs_tol=0.01 + 1e-12
-    ):
+    if not math.isclose(sum(probabilities.values()), 1.0, rel_tol=0.0, abs_tol=0.01 + 1e-12):
         raise _InvalidResponse
     return probabilities
 
@@ -121,12 +124,27 @@ def _choice(answer: object, candidates: tuple[str, ...]) -> ChoiceDetail:
 def _choice_decision(detail: ChoiceDetail) -> NormalizationDecision:
     maximum = max(detail.probabilities.values())
     checks = (
-        PolicyCheck("confidence_below_threshold", detail.confidence, "gte", _POLICY.choice.min_confidence,
-                    detail.confidence >= _POLICY.choice.min_confidence),
-        PolicyCheck("probability_below_threshold", maximum, "gte", _POLICY.choice.min_probability,
-                    maximum >= _POLICY.choice.min_probability),
-        PolicyCheck("maximum_not_unique", sum(value == maximum for value in detail.probabilities.values()),
-                    "eq", 1, sum(value == maximum for value in detail.probabilities.values()) == 1),
+        PolicyCheck(
+            "confidence_below_threshold",
+            detail.confidence,
+            "gte",
+            _POLICY.choice.min_confidence,
+            detail.confidence >= _POLICY.choice.min_confidence,
+        ),
+        PolicyCheck(
+            "probability_below_threshold",
+            maximum,
+            "gte",
+            _POLICY.choice.min_probability,
+            maximum >= _POLICY.choice.min_probability,
+        ),
+        PolicyCheck(
+            "maximum_not_unique",
+            sum(value == maximum for value in detail.probabilities.values()),
+            "eq",
+            1,
+            sum(value == maximum for value in detail.probabilities.values()) == 1,
+        ),
     )
     reasons = tuple(check.rule for check in checks if not check.passed)
     if reasons:
@@ -141,7 +159,9 @@ def _choice_decision(detail: ChoiceDetail) -> NormalizationDecision:
 T = TypeVar("T")
 
 
-def _evidence(detail: ChoiceDetail, decision: NormalizationDecision, values: Mapping[str, T]) -> Evidence[T]:
+def _evidence(
+    detail: ChoiceDetail, decision: NormalizationDecision, values: Mapping[str, T]
+) -> Evidence[T]:
     if decision.status == "needs_review":
         return NeedsReviewEvidence()
     if decision.status == "unmentioned":
@@ -149,7 +169,9 @@ def _evidence(detail: ChoiceDetail, decision: NormalizationDecision, values: Map
     return KnownEvidence(values[detail.choice])
 
 
-def _categorical(detail: ChoiceDetail, decision: NormalizationDecision, values: Mapping[str, T], fallback: T) -> T:
+def _categorical(
+    detail: ChoiceDetail, decision: NormalizationDecision, values: Mapping[str, T], fallback: T
+) -> T:
     if decision.status != "eligible":
         return fallback
     return values[detail.choice]
@@ -197,13 +219,10 @@ def normalize_judgment(
         }
         score = _score(answers["impact"])
         urgency_answer = answers["urgency"]
-        if (
-            not isinstance(urgency_answer, Mapping)
-            or urgency_answer.get("type") != "noul"
-        ):
+        if not isinstance(urgency_answer, Mapping) or urgency_answer.get("type") != "noul":
             raise _InvalidResponse
         noul = _number(urgency_answer.get("noul"), minimum=0.0, maximum=1.0)
-    except (KeyError, _InvalidResponse):
+    except KeyError, _InvalidResponse:
         return JudgmentFailure("judge_unavailable")
 
     decisions: dict[JudgmentId, NormalizationDecision] = {
@@ -216,9 +235,20 @@ def normalize_judgment(
     high = score.score >= _POLICY.score.high_from
     score_checks = (
         PolicyCheck("impact_evidence_not_adopted", adopted, "eq", True, adopted),
-        PolicyCheck("impact_evidence_absent", impact_evidence.choice, "eq",
-                    _POLICY.score.required_impact_evidence, present),
-        PolicyCheck("confidence_below_threshold", score.confidence, "gte", _POLICY.score.min_confidence, confident),
+        PolicyCheck(
+            "impact_evidence_absent",
+            impact_evidence.choice,
+            "eq",
+            _POLICY.score.required_impact_evidence,
+            present,
+        ),
+        PolicyCheck(
+            "confidence_below_threshold",
+            score.confidence,
+            "gte",
+            _POLICY.score.min_confidence,
+            confident,
+        ),
         PolicyCheck("score_high_boundary", score.score, "gte", _POLICY.score.high_from, high),
     )
     score_reasons: list[NormalizationReason] = []
@@ -230,7 +260,9 @@ def normalize_judgment(
         score_reasons.append("confidence_below_threshold")
     if score_reasons:
         impact = "needs_review"
-        decisions["impact"] = NormalizationDecision("needs_review", tuple(score_reasons), score_checks)
+        decisions["impact"] = NormalizationDecision(
+            "needs_review", tuple(score_reasons), score_checks
+        )
     else:
         impact = "high" if high else "low"
         decisions["impact"] = NormalizationDecision("eligible", ("eligible",), score_checks)
@@ -239,14 +271,18 @@ def normalize_judgment(
     not_urgent = noul <= _POLICY.noul.not_urgent_through
     noul_checks = (
         PolicyCheck("noul_urgent_boundary", noul, "gte", _POLICY.noul.urgent_from, urgent),
-        PolicyCheck("noul_not_urgent_boundary", noul, "lte", _POLICY.noul.not_urgent_through, not_urgent),
+        PolicyCheck(
+            "noul_not_urgent_boundary", noul, "lte", _POLICY.noul.not_urgent_through, not_urgent
+        ),
     )
     if urgent or not_urgent:
         urgency: Evidence[bool] = KnownEvidence(urgent)
         decisions["urgency"] = NormalizationDecision("eligible", ("eligible",), noul_checks)
     else:
         urgency = NeedsReviewEvidence()
-        decisions["urgency"] = NormalizationDecision("needs_review", ("noul_between_thresholds",), noul_checks)
+        decisions["urgency"] = NormalizationDecision(
+            "needs_review", ("noul_between_thresholds",), noul_checks
+        )
 
     topic_values: dict[str, Topic | str] = {
         "missing_notification": Topic.MISSING_NOTIFICATION,
@@ -256,7 +292,8 @@ def normalize_judgment(
     evidence = JudgmentEvidence(
         topic=_evidence(choices["topic"], decisions["topic"], topic_values),
         relevance=_categorical(
-            choices["relevance"], decisions["relevance"],
+            choices["relevance"],
+            decisions["relevance"],
             {
                 "in_scope": Relevance.IN_SCOPE,
                 "mixed": Relevance.MIXED,
@@ -265,16 +302,19 @@ def normalize_judgment(
             Relevance.NEEDS_REVIEW,
         ),
         change=_categorical(
-            choices["change"], decisions["change"],
+            choices["change"],
+            decisions["change"],
             {"keep": Change.KEEP, "restart": Change.RESTART},
             Change.NEEDS_REVIEW,
         ),
         scope=_evidence(
-            choices["scope"], decisions["scope"],
+            choices["scope"],
+            decisions["scope"],
             {"all": Scope.ALL, "specific": Scope.SPECIFIC, "unknown": Scope.UNKNOWN},
         ),
         workaround=_evidence(
-            choices["workaround"], decisions["workaround"],
+            choices["workaround"],
+            decisions["workaround"],
             {
                 "can_read": Workaround.CAN_READ,
                 "cannot_read": Workaround.CANNOT_READ,
@@ -282,7 +322,8 @@ def normalize_judgment(
             },
         ),
         result=_evidence(
-            choices["result"], decisions["result"],
+            choices["result"],
+            decisions["result"],
             {
                 "done": ResultAnswer.DONE,
                 "not_done": ResultAnswer.NOT_DONE,

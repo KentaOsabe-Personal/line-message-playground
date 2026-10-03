@@ -33,7 +33,6 @@ from linewebhooks.container import build_webhook_ingress_service
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.views import WebhookAPIView
 
-
 _PROVIDER_ID = "0012345678"
 _ACCESS_TOKEN_CANARY = "composition-access-token-canary"
 _CHANNEL_SECRET_CANARY = "composition-channel-secret-canary"
@@ -84,9 +83,7 @@ class LinkedDeliveryCompositionE2ETests(APITestCase):
                 owner,
                 timezone.now() + timedelta(hours=8),
             )
-        self.identity = LineIdentity.objects.get(
-            public_id=identity_summary.public_id
-        )
+        self.identity = LineIdentity.objects.get(public_id=identity_summary.public_id)
         self.channel = LineChannel.objects.create(
             messaging_api_channel_id=_MESSAGING_CHANNEL_ID_CANARY,
             bot_user_id=_BOT_USER_ID_CANARY,
@@ -336,27 +333,19 @@ class LinkedDeliveryCompositionE2ETests(APITestCase):
         )
         self.assertEqual(reply_gateway.calls, [])
         self.assertEqual(
-            InteractionAudit.objects.get(
-                webhook_event_id=_EVENT_ID
-            ).interaction_outcome,
+            InteractionAudit.objects.get(webhook_event_id=_EVENT_ID).interaction_outcome,
             "action_succeeded",
         )
         self.assertEqual(
-            WebhookEventReceipt.objects.get(
-                webhook_event_id=_EVENT_ID
-            ).status,
+            WebhookEventReceipt.objects.get(webhook_event_id=_EVENT_ID).status,
             "processed",
         )
         self.assertEqual(
-            InteractionAudit.objects.filter(
-                webhook_event_id=_EVENT_ID
-            ).count(),
+            InteractionAudit.objects.filter(webhook_event_id=_EVENT_ID).count(),
             1,
         )
         self.assertEqual(
-            WebhookEventReceipt.objects.filter(
-                webhook_event_id=_EVENT_ID
-            ).count(),
+            WebhookEventReceipt.objects.filter(webhook_event_id=_EVENT_ID).count(),
             1,
         )
 
@@ -370,9 +359,7 @@ class LinkedDeliveryCompositionE2ETests(APITestCase):
             confirmed_status.data["receipt"]["status"],
             "confirmed",
         )
-        self.assertIsNotNone(
-            confirmed_status.data["receipt"]["confirmedAt"]
-        )
+        self.assertIsNotNone(confirmed_status.data["receipt"]["confirmedAt"])
         self.assertEqual(DeliveryAttempt.objects.count(), 1)
 
         persisted_surfaces = (
@@ -429,14 +416,10 @@ class LinkedDeliveryCompositionE2ETests(APITestCase):
         )
 
         with (
-            patch(
-                "delivery.views.build_status_service"
-            ) as service_factory,
+            patch("delivery.views.build_status_service") as service_factory,
             patch("logging.Logger._log") as log_call,
         ):
-            service_factory.return_value.check_linked_status.side_effect = (
-                poisoned_exception
-            )
+            service_factory.return_value.check_linked_status.side_effect = poisoned_exception
             response = self.client.post(
                 f"/api/deliveries/{operation_id}/status/",
                 format="json",

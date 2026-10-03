@@ -60,7 +60,11 @@ class AdminSerializerTests(SimpleTestCase):
     def test_optional_credential_pair_has_exact_update_semantics(self):
         revision = datetime(2026, 8, 1, tzinfo=timezone.utc).isoformat()
         base = {"expectedUpdatedAt": revision, "label": "更新後"}
-        for extras, has_pair in (({}, False), ({"accessToken": "", "channelSecret": ""}, False), ({"accessToken": "new-a", "channelSecret": "new-s"}, True)):
+        for extras, has_pair in (
+            ({}, False),
+            ({"accessToken": "", "channelSecret": ""}, False),
+            ({"accessToken": "new-a", "channelSecret": "new-s"}, True),
+        ):
             with self.subTest(extras=tuple(extras)):
                 serializer = UpdateChannelRequestSerializer(data={**base, **extras})
                 self.assertTrue(serializer.is_valid(), serializer.errors)
@@ -76,7 +80,9 @@ class AdminSerializerTests(SimpleTestCase):
     def test_operation_serializers_enforce_exact_shapes(self):
         channel_id = uuid4()
         revision = "2026-08-01T12:00:00+09:00"
-        state = SetChannelStateRequestSerializer(data={"expectedUpdatedAt": revision, "active": False})
+        state = SetChannelStateRequestSerializer(
+            data={"expectedUpdatedAt": revision, "active": False}
+        )
         delete = DeleteChannelRequestSerializer(data={"expectedUpdatedAt": revision})
         check = ConnectionCheckRequestSerializer(data={})
         self.assertTrue(state.is_valid(), state.errors)

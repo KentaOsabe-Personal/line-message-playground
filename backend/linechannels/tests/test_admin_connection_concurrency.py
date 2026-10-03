@@ -51,9 +51,7 @@ class AdminConnectionConcurrencyTests(TransactionTestCase):
                 )
             )
             owner = repository.bind_owner_identity(owner, identity.public_id)
-            session = repository.create_owner_session(
-                owner, timezone.now() + timedelta(hours=8)
-            )
+            session = repository.create_owner_session(owner, timezone.now() + timedelta(hours=8))
         self.context = OwnerOperationContext(session.public_id, identity.public_id)
         self.bot_user_id = f"U{uuid4().hex}"
         result = build_line_channel_service().register(
@@ -157,9 +155,7 @@ class AdminConnectionConcurrencyTests(TransactionTestCase):
     def test_connection_check_discards_result_after_concurrent_session_invalidation(self):
         def invalidate_session():
             with transaction.atomic():
-                return DjangoAccountRepository().delete_owner_session(
-                    self.context.owner_session_id
-                )
+                return DjangoAccountRepository().delete_owner_session(self.context.owner_session_id)
 
         outcome, invalidated = self.run_check_during(invalidate_session)
         self.assertTrue(invalidated)

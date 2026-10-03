@@ -3,8 +3,8 @@ from unittest.mock import Mock, patch
 from uuid import uuid4
 
 from django.db import DatabaseError, transaction
-from rest_framework.test import APIClient, APITestCase
 from django.utils import timezone
+from rest_framework.test import APIClient, APITestCase
 
 from delivery.confirmation import (
     ConfirmationRejected,
@@ -20,8 +20,12 @@ from delivery.types import (
     LinkedPushExecuted,
     LinkedPushPreparation,
     LinkedPushStored,
-    LinePushAccepted as LinkedLinePushAccepted,
     OwnerIdentitySnapshot,
+)
+from delivery.types import (
+    LinePushAccepted as LinkedLinePushAccepted,
+)
+from delivery.types import (
     OwnerPrincipal as DeliveryOwnerPrincipal,
 )
 from lineaccounts.authentication import OWNER_SESSION_KEY
@@ -31,6 +35,7 @@ from lineaccounts.models import DeliveryRecipient, LineIdentity, OwnerAccount
 from lineaccounts.repositories import DjangoAccountRepository
 from lineaccounts.types import LineSubject
 from linechannels.models import LineChannel
+
 
 class DeliveryApiTests(APITestCase):
     def setUp(self):
@@ -128,9 +133,7 @@ class DeliveryApiTests(APITestCase):
         )
         self.assertIsNotNone(response.data["receiptExpiresAt"])
         self.assertNotIn("一行目", response.data["confirmationToken"])
-        decoded = ConfirmationService().decode_for_test(
-            response.data["confirmationToken"]
-        )
+        decoded = ConfirmationService().decode_for_test(response.data["confirmationToken"])
         self.assertEqual(
             decoded,
             {
@@ -183,9 +186,7 @@ class DeliveryApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIs(response.data["receiptRequested"], False)
         self.assertIsNone(response.data["receiptExpiresAt"])
-        decoded = ConfirmationService().decode_for_test(
-            response.data["confirmationToken"]
-        )
+        decoded = ConfirmationService().decode_for_test(response.data["confirmationToken"])
         self.assertEqual(
             decoded,
             {
@@ -229,9 +230,7 @@ class DeliveryApiTests(APITestCase):
         self.assertEqual(hidden.status_code, 404)
         self.assertEqual(hidden.data["error"]["code"], "target_not_available")
         self.assertEqual(unavailable.status_code, 409)
-        self.assertEqual(
-            unavailable.data["error"]["code"], "target_not_deliverable"
-        )
+        self.assertEqual(unavailable.data["error"]["code"], "target_not_deliverable")
         self.assertEqual(DeliveryAttempt.objects.count(), 0)
 
     # テストケース: active ownerがOriginまたはCSRF tokenなしでpreviewを要求する
@@ -376,9 +375,7 @@ class DeliveryApiTests(APITestCase):
                 format="json",
             ),
             client.post("/api/deliveries/", {}, format="json"),
-            client.post(
-                "/api/deliveries/not-a-uuid/status/", {}, format="json"
-            ),
+            client.post("/api/deliveries/not-a-uuid/status/", {}, format="json"),
         )
 
         self.assertTrue(all(response.status_code == 401 for response in responses))
@@ -433,16 +430,12 @@ class DeliveryApiTests(APITestCase):
         self.assertTrue(all(response.status_code == 403 for response in responses))
         self.assertTrue(
             all(
-                response.json()["error"]["code"]
-                in ("owner_not_allowed", "owner_operation_blocked")
+                response.json()["error"]["code"] in ("owner_not_allowed", "owner_operation_blocked")
                 for response in responses
             )
         )
         self.assertTrue(
-            all(
-                "pending-secret-canary" not in str(response.json())
-                for response in responses
-            )
+            all("pending-secret-canary" not in str(response.json()) for response in responses)
         )
         self.assertEqual(DeliveryAttempt.objects.count(), 0)
         service_factory.assert_not_called()
@@ -527,15 +520,9 @@ class DeliveryApiTests(APITestCase):
             status=status_value,
             accepted_at=now,
             completed_at=completed_at,
-            line_request_id=(
-                "line-request-safe"
-                if status_value == "succeeded"
-                else None
-            ),
+            line_request_id=("line-request-safe" if status_value == "succeeded" else None),
             line_accepted_request_id=(
-                "line-accepted-internal"
-                if status_value == "succeeded"
-                else None
+                "line-accepted-internal" if status_value == "succeeded" else None
             ),
             failure=failure,
             receipt_status=receipt_status,
@@ -872,11 +859,7 @@ class DeliveryApiTests(APITestCase):
                 "confirmationToken": "opaque-confirmation",
             }
             send_mutations = (
-                {
-                    key: value
-                    for key, value in valid_send.items()
-                    if key != "confirmationToken"
-                },
+                {key: value for key, value in valid_send.items() if key != "confirmationToken"},
                 {**valid_send, "unknownField": "secret-dto-canary"},
                 {**valid_send, "operationId": uuid4().hex},
                 {**valid_send, "confirmationToken": {"token": "secret-dto-canary"}},
@@ -1037,8 +1020,18 @@ class DeliveryApiTests(APITestCase):
     def test_linked_send_maps_all_confirmation_rejections_before_service(self):
         cases = (
             ("invalid", 400, "confirmation_required", "送信内容をもう一度確認してください。"),
-            ("expired", 409, "confirmation_expired", "確認期限が切れています。もう一度確認してください。"),
-            ("mismatch", 409, "confirmation_stale", "内容が変更されています。もう一度確認してください。"),
+            (
+                "expired",
+                409,
+                "confirmation_expired",
+                "確認期限が切れています。もう一度確認してください。",
+            ),
+            (
+                "mismatch",
+                409,
+                "confirmation_stale",
+                "内容が変更されています。もう一度確認してください。",
+            ),
         )
         for reason, http_status, code, summary in cases:
             with self.subTest(reason=reason):
@@ -1137,9 +1130,7 @@ class DeliveryApiTests(APITestCase):
             ("expired", now - timedelta(seconds=1), None, None),
         )
         observed_pairs = set()
-        for delivery_status, completed_at, failure, expected_http_status in (
-            delivery_cases
-        ):
+        for delivery_status, completed_at, failure, expected_http_status in delivery_cases:
             for (
                 receipt_status,
                 receipt_expires_at,
@@ -1229,9 +1220,7 @@ class DeliveryApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["error"]["code"], "validation_error")
-        self.assertFalse(
-            DeliveryAttempt.objects.filter(operation_id=operation_id).exists()
-        )
+        self.assertFalse(DeliveryAttempt.objects.filter(operation_id=operation_id).exists())
 
     # テストケース: migration済みの既存fixed配信をowner scoped status endpointで照会する
     # 期待値: legacy応答形と確定結果を維持しlinked snapshot・receiptを黙示追加しない

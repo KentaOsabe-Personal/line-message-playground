@@ -3,12 +3,17 @@ from uuid import uuid4
 
 from django.test import SimpleTestCase, TransactionTestCase
 
-from lineaccounts.types import LineSubject
 from lineaccounts.friendship_repositories import DjangoAccountProjectionRepository
 from lineaccounts.models import DeliveryRecipient, LineIdentity, OwnerAccount
+from lineaccounts.types import LineSubject
 from linechannels.models import LineChannel
 from linechannels.repositories import DjangoLineChannelDirectory
 from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
+from linefriendships.models import FriendshipSyncAudit
+from linefriendships.parsing import DefaultFriendshipEventParser
+from linefriendships.repositories import DjangoFriendshipAuditRepository
+from linefriendships.services import DefaultFriendshipSyncService, decide_projection
+from linefriendships.types import LockedRecipientProjection, ValidatedFriendshipEvent
 from linewebhooks.types import (
     FrozenJsonObject,
     HandlerFailed,
@@ -16,17 +21,10 @@ from linewebhooks.types import (
     VerifiedWebhookEvent,
 )
 
-from linefriendships.models import FriendshipSyncAudit
-from linefriendships.parsing import DefaultFriendshipEventParser
-from linefriendships.repositories import DjangoFriendshipAuditRepository
-from linefriendships.services import DefaultFriendshipSyncService, decide_projection
-from linefriendships.types import LockedRecipientProjection, ValidatedFriendshipEvent
-
 
 class FriendshipOrderingDecisionTests(SimpleTestCase):
     baseline_ms = int(
-        datetime(2026, 7, 21, 0, 0, 0, 999999, tzinfo=timezone.utc).timestamp()
-        * 1000
+        datetime(2026, 7, 21, 0, 0, 0, 999999, tzinfo=timezone.utc).timestamp() * 1000
     )
 
     def target(
@@ -38,9 +36,7 @@ class FriendshipOrderingDecisionTests(SimpleTestCase):
     ):
         return LockedRecipientProjection(
             recipient_public_id=uuid4(),
-            registered_at=datetime(
-                2026, 7, 21, 0, 0, 0, 999999, tzinfo=timezone.utc
-            ),
+            registered_at=datetime(2026, 7, 21, 0, 0, 0, 999999, tzinfo=timezone.utc),
             friendship_state=state,
             last_occurred_at_ms=last_occurred_at_ms,
             last_webhook_event_id=last_webhook_event_id,
@@ -257,13 +253,10 @@ class FriendshipSyncServiceTests(TransactionTestCase):
         source=None,
         follow=None,
     ):
-        occurred_at_ms = occurred_at_ms or (
-            int(self.recipient.created_at.timestamp() * 1000) + 1
-        )
+        occurred_at_ms = occurred_at_ms or (int(self.recipient.created_at.timestamp() * 1000) + 1)
         data = {
             "type": event_type,
-            "source": source
-            or {"type": "user", "userId": self.subject_value},
+            "source": source or {"type": "user", "userId": self.subject_value},
         }
         if follow is not None:
             data["follow"] = follow
@@ -279,9 +272,7 @@ class FriendshipSyncServiceTests(TransactionTestCase):
     # テストケース: exact matchする新しいfollowを同期handlerへ渡す
     # 期待値: state/orderとapplied監査を同一成功処理で確定する
     def test_applies_projection_and_records_safe_audit(self):
-        result = self.service().handle(
-            self.event(follow={"isUnblocked": True})
-        )
+        result = self.service().handle(self.event(follow={"isUnblocked": True}))
 
         self.assertIsInstance(result, HandlerSucceeded)
         stored = DeliveryRecipient.objects.get(pk=self.recipient.pk)
@@ -302,23 +293,20 @@ class FriendshipSyncServiceTests(TransactionTestCase):
         maintained = self.service().handle(
             self.event(
                 event_id="01J00000000000000000000001",
-                occurred_at_ms=int(self.recipient.created_at.timestamp() * 1000)
-                + 2,
+                occurred_at_ms=int(self.recipient.created_at.timestamp() * 1000) + 2,
             )
         )
         duplicate = self.service().handle(
             self.event(
                 event_id="01J00000000000000000000001",
-                occurred_at_ms=int(self.recipient.created_at.timestamp() * 1000)
-                + 2,
+                occurred_at_ms=int(self.recipient.created_at.timestamp() * 1000) + 2,
             )
         )
         stale = self.service().handle(
             self.event(
                 event_type="unfollow",
                 event_id="01J00000000000000000000009",
-                occurred_at_ms=int(self.recipient.created_at.timestamp() * 1000)
-                + 1,
+                occurred_at_ms=int(self.recipient.created_at.timestamp() * 1000) + 1,
             )
         )
 
@@ -327,11 +315,7 @@ class FriendshipSyncServiceTests(TransactionTestCase):
         self.assertIsInstance(duplicate, HandlerSucceeded)
         self.assertIsInstance(stale, HandlerSucceeded)
         self.assertEqual(
-            list(
-                FriendshipSyncAudit.objects.order_by("pk").values_list(
-                    "outcome", flat=True
-                )
-            ),
+            list(FriendshipSyncAudit.objects.order_by("pk").values_list("outcome", flat=True)),
             ["applied", "state_maintained", "duplicate", "stale"],
         )
         self.assertEqual(
@@ -355,20 +339,14 @@ class FriendshipSyncServiceTests(TransactionTestCase):
         self.recipient.refresh_from_db()
         self.assertEqual(self.recipient.friendship_state, "unknown")
         self.assertEqual(
-            list(
-                FriendshipSyncAudit.objects.order_by("pk").values_list(
-                    "outcome", flat=True
-                )
-            ),
+            list(FriendshipSyncAudit.objects.order_by("pk").values_list("outcome", flat=True)),
             ["invalid", "out_of_scope"],
         )
 
     # テストケース: provider付きchannelまたはaccount targetを解決できない
     # 期待値: unresolvable/unlinkedを正常監査してrecipientを変更しない
     def test_audits_unresolvable_and_unlinked_as_success(self):
-        unresolvable = self.service(directory=_MissingChannelDirectory()).handle(
-            self.event()
-        )
+        unresolvable = self.service(directory=_MissingChannelDirectory()).handle(self.event())
         unlinked = self.service().handle(
             self.event(
                 event_id="01J00000000000000000000001",
@@ -379,11 +357,7 @@ class FriendshipSyncServiceTests(TransactionTestCase):
         self.assertIsInstance(unresolvable, HandlerSucceeded)
         self.assertIsInstance(unlinked, HandlerSucceeded)
         self.assertEqual(
-            list(
-                FriendshipSyncAudit.objects.order_by("pk").values_list(
-                    "outcome", flat=True
-                )
-            ),
+            list(FriendshipSyncAudit.objects.order_by("pk").values_list("outcome", flat=True)),
             ["unresolvable", "unlinked"],
         )
 
@@ -402,9 +376,7 @@ class FriendshipSyncServiceTests(TransactionTestCase):
     # テストケース: 旧record-only audit repositoryをvalid projectionへ渡す
     # 期待値: mandatory channel lock contract欠落をfail closedしprojectionを開始しない
     def test_record_only_repository_cannot_bypass_projection_fence(self):
-        result = self.service(audit=_RecordOnlyAuditRepository()).handle(
-            self.event()
-        )
+        result = self.service(audit=_RecordOnlyAuditRepository()).handle(self.event())
 
         self.assertIsInstance(result, HandlerFailed)
         stored = DeliveryRecipient.objects.get(pk=self.recipient.pk)

@@ -6,12 +6,12 @@ from PIL import Image
 
 from linerichmenus.apps import FONT_PATH
 from linerichmenus.catalog import DefaultTemplateCatalog
-from linerichmenus.renderer import DefaultDeterministicRenderer, _fit_font_and_lines
 from linerichmenus.gateway import ImageObserved, _decode_image
+from linerichmenus.renderer import DefaultDeterministicRenderer, _fit_font_and_lines
 from linerichmenus.types import (
     NormalizedTemplate,
-    RenderRejected,
     RenderedImage,
+    RenderRejected,
     TemplateFieldValue,
     TemplateInput,
     TemplateReference,
@@ -162,6 +162,4 @@ class DeterministicRendererTests(SimpleTestCase):
             f"area{index}": {"displayName": display_name, "uri": uri}
             for index, (display_name, uri) in enumerate(values, start=1)
         }
-        return self.catalog.normalize(
-            TemplateInput(TemplateReference(template_id, 1), fields)
-        )
+        return self.catalog.normalize(TemplateInput(TemplateReference(template_id, 1), fields))

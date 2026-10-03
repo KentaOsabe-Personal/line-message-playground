@@ -4,7 +4,6 @@ from rest_framework import serializers
 
 from .types import IdToken, UserAccessToken
 
-
 _SAFE_FIELD_ERROR = "入力値が不正です。"
 
 
@@ -102,7 +101,5 @@ class UnlinkRequestSerializer(StrictRequestSerializer):
             "local_deletion_pending": set(),
         }.get(account_state)
         if expected_fields is not None and set(attrs) != expected_fields:
-            raise serializers.ValidationError(
-                {"non_field_errors": [_SAFE_FIELD_ERROR]}
-            )
+            raise serializers.ValidationError({"non_field_errors": [_SAFE_FIELD_ERROR]})
         return attrs

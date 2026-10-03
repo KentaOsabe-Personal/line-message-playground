@@ -11,6 +11,8 @@ claim、claim種別、現在のコード状態に対応するcommand出力とexi
 | TEST_OR_BUILD | 実際のcommand出力とexit code。別種類の検証から推測しない |
 | FEATURE_GO | full suite、build成果物が最初の使用可能状態へ到達するruntime smoke、要件網羅、task横断統合、design全体整合、blocked taskの評価 |
 
+[READMEのローカル品質チェック](../../../../README.md#ローカル品質チェック)が必要な変更では、TASK・FIX・FEATURE_GOの証拠に対象サービス全体の静的チェック結果を含めます。失敗は `NOT_VERIFIED`、環境不足による未実施は `MANUAL_VERIFY_REQUIRED` とし、文書のみで対象外なら理由を残します。
+
 failed／skipped／未検証範囲も確認します。test成功だけでは `FEATURE_GO` を返せません。
 
 - `VERIFIED`: claimの全範囲を証拠が満たす。

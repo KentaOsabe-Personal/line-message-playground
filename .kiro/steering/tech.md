@@ -56,7 +56,7 @@ Frontend は ES Modules、React JSX transform、ES2022 を前提とします。B
 
 ### テストと検証の範囲
 
-サービスごとのテスト配置・日本語コメント規約は各AGENTSにあります。現時点でCI、Python静的型検査、coverage、E2E、共通lint/formatterは導入されていないため、未確立の必須基準を仮定しません。
+サービスごとのテスト配置・日本語コメント規約は各AGENTSにあります。BackendはRuffのLint・整形、FrontendはESLint／typescript-eslintの型情報を使うLint、React Hooks検査、Prettierの整形、TypeScriptの型検査をローカルで実行します。正本はREADMEの「ローカル品質チェック」と `sh scripts/check.sh [all|frontend|backend]` です。実装・受入・PR公開前に変更範囲に対応するサービス全体を検査し、失敗・未実施を合格扱いしません。GitHub Actionsは使用しません。Python静的型検査、coverage、E2Eの必須基準は未導入です。
 
 ## 共通コマンド
 

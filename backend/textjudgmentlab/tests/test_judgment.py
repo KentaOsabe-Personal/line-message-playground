@@ -3,20 +3,28 @@ from uuid import UUID
 from django.test import SimpleTestCase
 
 from textjudgmentlab.jev_gateway import JevTransportSuccess
-from textjudgmentlab.judgment_questions import QUESTION_IDS, build_jev_request, build_judgment_input, state_payload, questions_payload
 from textjudgmentlab.judgment_policy import normalize_judgment
+from textjudgmentlab.judgment_questions import (
+    QUESTION_IDS,
+    build_jev_request,
+    build_judgment_input,
+    questions_payload,
+    state_payload,
+)
 from textjudgmentlab.types import (
     ConfirmedAnswers,
     Impact,
     JudgmentContext,
-    JudgmentRequest,
     JudgmentFailure,
-    NormalizedJudgment as JudgmentSuccess,
+    JudgmentRequest,
     KnownEvidence,
     NeedsReviewEvidence,
     QuestionId,
     Scope,
     Topic,
+)
+from textjudgmentlab.types import (
+    NormalizedJudgment as JudgmentSuccess,
 )
 
 
@@ -104,8 +112,7 @@ class JudgmentQuestionsTests(SimpleTestCase):
     def test_all_questions_include_complete_mixed_input_instruction(self) -> None:
         payload = build_jev_request(_request(), model="jev-1.13.0")
         required = (
-            "範囲・回避策・結果は現在の対象内相談についてだけ抽出し、"
-            "対象外の話題の回答を混ぜない。"
+            "範囲・回避策・結果は現在の対象内相談についてだけ抽出し、対象外の話題の回答を混ぜない。"
         )
 
         for question_id, question in payload["questions"].items():
@@ -136,13 +143,9 @@ def _valid_answers() -> dict[str, object]:
                 "unclear",
             ),
         ),
-        "relevance": _choice(
-            "in_scope", ("in_scope", "mixed", "out_of_scope", "unclear")
-        ),
+        "relevance": _choice("in_scope", ("in_scope", "mixed", "out_of_scope", "unclear")),
         "change": _choice("keep", ("keep", "restart", "unclear")),
-        "scope": _choice(
-            "specific", ("all", "specific", "unknown", "unmentioned", "unclear")
-        ),
+        "scope": _choice("specific", ("all", "specific", "unknown", "unmentioned", "unclear")),
         "workaround": _choice(
             "can_read",
             ("can_read", "cannot_read", "unknown", "unmentioned", "unclear"),
@@ -158,9 +161,7 @@ def _valid_answers() -> dict[str, object]:
                 "unclear",
             ),
         ),
-        "impact_evidence": _choice(
-            "present", ("present", "absent", "unclear")
-        ),
+        "impact_evidence": _choice("present", ("present", "absent", "unclear")),
         "impact": {
             "type": "score",
             "score": 1.5,
@@ -278,7 +279,12 @@ class JudgmentPolicyTests(SimpleTestCase):
         answers["result"] = _choice(
             "unmentioned",
             (
-                "done", "not_done", "not_tried", "cannot_check", "unmentioned", "unclear",
+                "done",
+                "not_done",
+                "not_tried",
+                "cannot_check",
+                "unmentioned",
+                "unclear",
             ),
         )
         answers["impact"]["score"] = 1.49
@@ -313,20 +319,42 @@ class JudgmentPolicyTests(SimpleTestCase):
 
         for answers in mutations:
             with self.subTest(answers=answers):
-                self.assertEqual(
-                    _normalize(answers), JudgmentFailure("judge_unavailable")
-                )
+                self.assertEqual(_normalize(answers), JudgmentFailure("judge_unavailable"))
 
     # テストケース: Choiceの最大確率0.70前後と同率最大を返す。
     # 期待値: 0.70以上の一意最大だけを採用し、それ以外は要確認にする。
     def test_choice_probability_threshold_and_unique_maximum(self) -> None:
         cases = (
-            ({"all": 0.70, "specific": 0.10, "unknown": 0.10,
-              "unmentioned": 0.05, "unclear": 0.05}, "known"),
-            ({"all": 0.69, "specific": 0.11, "unknown": 0.10,
-              "unmentioned": 0.05, "unclear": 0.05}, "needs_review"),
-            ({"all": 0.40, "specific": 0.40, "unknown": 0.10,
-              "unmentioned": 0.05, "unclear": 0.05}, "needs_review"),
+            (
+                {
+                    "all": 0.70,
+                    "specific": 0.10,
+                    "unknown": 0.10,
+                    "unmentioned": 0.05,
+                    "unclear": 0.05,
+                },
+                "known",
+            ),
+            (
+                {
+                    "all": 0.69,
+                    "specific": 0.11,
+                    "unknown": 0.10,
+                    "unmentioned": 0.05,
+                    "unclear": 0.05,
+                },
+                "needs_review",
+            ),
+            (
+                {
+                    "all": 0.40,
+                    "specific": 0.40,
+                    "unknown": 0.10,
+                    "unmentioned": 0.05,
+                    "unclear": 0.05,
+                },
+                "needs_review",
+            ),
         )
         for probabilities, expected_kind in cases:
             answers = _valid_answers()
@@ -351,9 +379,7 @@ class JudgmentPolicyTests(SimpleTestCase):
             answers["relevance"] = _choice(
                 "mixed", ("in_scope", "mixed", "out_of_scope", "unclear")
             )
-            answers["impact_evidence"] = _choice(
-                evidence_choice, ("present", "absent", "unclear")
-            )
+            answers["impact_evidence"] = _choice(evidence_choice, ("present", "absent", "unclear"))
 
             result = _normalize(answers)
 
@@ -368,12 +394,19 @@ class SentJudgmentInputTests(SimpleTestCase):
     # 期待値: 質問文が画面の文言と一致し、質問の版が2になる。閲覧用の記録が実際の送信内容と一致する。
     def test_snapshot_and_question_prompts_match_sent_payload(self):
         from dataclasses import replace
+
         prompts = {
             (QuestionId.START, None): "どちらについて相談しますか？",
             (QuestionId.TOPIC, None): "どちらについて相談しますか？",
             (QuestionId.SCOPE, Topic.MISSING_NOTIFICATION): "通知が届かない範囲を教えてください。",
-            (QuestionId.SCOPE, Topic.NOTIFICATION_SETTINGS): "通知を設定したい範囲を教えてください。",
-            (QuestionId.WORKAROUND, Topic.MISSING_NOTIFICATION): "LINEを開けばメッセージを確認できますか？",
+            (
+                QuestionId.SCOPE,
+                Topic.NOTIFICATION_SETTINGS,
+            ): "通知を設定したい範囲を教えてください。",
+            (
+                QuestionId.WORKAROUND,
+                Topic.MISSING_NOTIFICATION,
+            ): "LINEを開けばメッセージを確認できますか？",
             (QuestionId.URGENCY, Topic.MISSING_NOTIFICATION): "お急ぎですか？",
             (QuestionId.URGENCY, Topic.NOTIFICATION_SETTINGS): "お急ぎですか？",
             (QuestionId.RESULT, Topic.MISSING_NOTIFICATION): "案内を試した結果を教えてください。",
@@ -382,8 +415,14 @@ class SentJudgmentInputTests(SimpleTestCase):
         for (question, topic), prompt in prompts.items():
             with self.subTest(question=question, topic=topic):
                 request = _request()
-                request = replace(request, context=replace(request.context, question=question,
-                    confirmed=replace(request.context.confirmed, topic=topic)))
+                request = replace(
+                    request,
+                    context=replace(
+                        request.context,
+                        question=question,
+                        confirmed=replace(request.context.confirmed, topic=topic),
+                    ),
+                )
                 built = build_judgment_input(request, model="jev-1.13.0")
                 payload = built.to_payload()
                 self.assertEqual(payload["state"]["questionText"], prompt)
@@ -415,12 +454,24 @@ class NormalizationRecordTests(SimpleTestCase):
     # 期待値: 満たさなかった条件をすべて記録する。丸める前の比較値と正規化した判定結果が一致する。
     def test_collects_all_failed_choice_conditions(self):
         answers = _valid_answers()
-        answers["scope"].update(choice="all", confidence=0.6999,
-            probabilities={"all": 0.4, "specific": 0.4, "unknown": 0.2, "unmentioned": 0, "unclear": 0})
+        answers["scope"].update(
+            choice="all",
+            confidence=0.6999,
+            probabilities={
+                "all": 0.4,
+                "specific": 0.4,
+                "unknown": 0.2,
+                "unmentioned": 0,
+                "unclear": 0,
+            },
+        )
         result = _normalize(answers)
         decision = result.normalization["scope"]
         self.assertEqual(decision.status, result.evidence.scope.kind)
-        self.assertEqual(set(decision.reasons), {"confidence_below_threshold", "probability_below_threshold", "maximum_not_unique"})
+        self.assertEqual(
+            set(decision.reasons),
+            {"confidence_below_threshold", "probability_below_threshold", "maximum_not_unique"},
+        )
         self.assertEqual(decision.checks[0].actual, 0.6999)
         self.assertTrue(all(not check.passed for check in decision.checks))
 
@@ -435,20 +486,32 @@ class NormalizationRecordTests(SimpleTestCase):
         self.assertEqual(decision.reasons, ("eligible",))
         self.assertFalse(decision.checks[-1].passed)
         self.assertEqual(decision.checks[-1].actual, 1.4999)
-        for candidate, confidence, reason in (("present", 0.69, "impact_evidence_not_adopted"),
-                ("absent", 0.9, "impact_evidence_absent"), ("unclear", 0.9, "impact_evidence_not_adopted")):
-            answers["impact_evidence"] = _choice(candidate, ("present", "absent", "unclear"), confidence)
+        for candidate, confidence, reason in (
+            ("present", 0.69, "impact_evidence_not_adopted"),
+            ("absent", 0.9, "impact_evidence_absent"),
+            ("unclear", 0.9, "impact_evidence_not_adopted"),
+        ):
+            answers["impact_evidence"] = _choice(
+                candidate, ("present", "absent", "unclear"), confidence
+            )
             answers["impact"]["confidence"] = 0.6999
             result = _normalize(answers)
             self.assertEqual(result.evidence.impact, "needs_review")
-            self.assertEqual(set(result.normalization["impact"].reasons), {reason, "confidence_below_threshold"})
+            self.assertEqual(
+                set(result.normalization["impact"].reasons), {reason, "confidence_below_threshold"}
+            )
 
     # テストケース: Noulが2つの閾値それぞれの直前・一致・直後となる応答を返す。
     # 期待値: 両方の閾値との比較値を記録し、急ぎ・急ぎなし・要確認の判定が正規化した判定結果と一致する。
     def test_noul_boundaries_record_both_comparisons(self):
-        for value, status, known in ((0.1999, "eligible", False), (0.2, "eligible", False),
-                (0.2001, "needs_review", None), (0.7999, "needs_review", None),
-                (0.8, "eligible", True), (0.8001, "eligible", True)):
+        for value, status, known in (
+            (0.1999, "eligible", False),
+            (0.2, "eligible", False),
+            (0.2001, "needs_review", None),
+            (0.7999, "needs_review", None),
+            (0.8, "eligible", True),
+            (0.8001, "eligible", True),
+        ):
             with self.subTest(value=value):
                 answers = _valid_answers()
                 answers["urgency"]["noul"] = value
@@ -456,16 +519,23 @@ class NormalizationRecordTests(SimpleTestCase):
                 decision = result.normalization["urgency"]
                 self.assertEqual(decision.status, status)
                 self.assertEqual([c.actual for c in decision.checks], [value, value])
-                self.assertEqual(result.evidence.urgency,
-                    NeedsReviewEvidence() if known is None else KnownEvidence(known))
+                self.assertEqual(
+                    result.evidence.urgency,
+                    NeedsReviewEvidence() if known is None else KnownEvidence(known),
+                )
 
     # テストケース: 採用条件を満たす回答として、unclear・unmentioned・本人が分からないと答えたunknownを返す。
     # 期待値: unclearは要確認、unmentionedは未言及、unknownは採用可能となる。
     def test_special_candidates_follow_condition_checks(self):
-        for candidate, status, reason in (("unclear", "needs_review", "unclear"),
-                ("unmentioned", "unmentioned", "unmentioned"), ("unknown", "eligible", "eligible")):
+        for candidate, status, reason in (
+            ("unclear", "needs_review", "unclear"),
+            ("unmentioned", "unmentioned", "unmentioned"),
+            ("unknown", "eligible", "eligible"),
+        ):
             answers = _valid_answers()
-            answers["scope"] = _choice(candidate, ("all", "specific", "unknown", "unmentioned", "unclear"))
+            answers["scope"] = _choice(
+                candidate, ("all", "specific", "unknown", "unmentioned", "unclear")
+            )
             result = _normalize(answers)
             self.assertEqual(result.normalization["scope"].status, status)
             self.assertEqual(result.normalization["scope"].reasons, (reason,))

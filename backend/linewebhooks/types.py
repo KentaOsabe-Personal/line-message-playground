@@ -12,9 +12,7 @@ if TYPE_CHECKING:
 
 
 FrozenJsonScalar: TypeAlias = str | int | float | bool | None
-FrozenJsonValue: TypeAlias = (
-    FrozenJsonScalar | tuple["FrozenJsonValue", ...] | "FrozenJsonObject"
-)
+FrozenJsonValue: TypeAlias = FrozenJsonScalar | tuple["FrozenJsonValue", ...] | "FrozenJsonObject"
 
 
 def _freeze_json(value: object) -> FrozenJsonValue:
@@ -115,9 +113,7 @@ class HandlerFailed:
 
 
 HandlerOutcome: TypeAlias = HandlerSucceeded | HandlerFailed
-HandlerExecutionProfile: TypeAlias = Literal[
-    "local", "deadline_managed_external"
-]
+HandlerExecutionProfile: TypeAlias = Literal["local", "deadline_managed_external"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,10 +131,7 @@ class HandlerExecutionContext:
             or self.response_deadline_monotonic <= 0
         ):
             raise ValueError("invalid response deadline")
-        if (
-            type(self.dispatch_index) is not int
-            or not 0 <= self.dispatch_index <= 9
-        ):
+        if type(self.dispatch_index) is not int or not 0 <= self.dispatch_index <= 9:
             raise ValueError("invalid dispatch index")
         if (
             type(self.remaining_dispatch_count) is not int
@@ -175,6 +168,7 @@ class HandlerRegistration:
         ):
             raise ValueError("unknown handler execution profile")
 
+
 IngressFailureCode: TypeAlias = Literal[
     "channel_unavailable",
     "signature_rejected",
@@ -197,9 +191,7 @@ class IngressRejected:
 
 IngressResult: TypeAlias = IngressAccepted | IngressRejected
 ReceiptInitialStatus: TypeAlias = Literal["processing", "unsupported"]
-ReceiptStatus: TypeAlias = Literal[
-    "processing", "processed", "failed", "unsupported"
-]
+ReceiptStatus: TypeAlias = Literal["processing", "processed", "failed", "unsupported"]
 
 
 @dataclass(frozen=True)
@@ -222,9 +214,7 @@ class ReceiptDecision:
 
 @dataclass(frozen=True)
 class ReceiptStorageFailed:
-    code: Literal["storage_retryable", "storage_unavailable"] = (
-        "storage_unavailable"
-    )
+    code: Literal["storage_retryable", "storage_unavailable"] = "storage_unavailable"
     status: Literal["failed"] = "failed"
 
 

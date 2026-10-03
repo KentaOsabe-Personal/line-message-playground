@@ -12,7 +12,6 @@ from linerichmenus.serializers import (
 from linerichmenus.services import ServiceFailed
 from linerichmenus.types import InputFieldError, NextAllowedAction, SafeResultCode
 
-
 NOW = datetime(2026, 8, 2, 3, 0, tzinfo=timezone.utc)
 
 

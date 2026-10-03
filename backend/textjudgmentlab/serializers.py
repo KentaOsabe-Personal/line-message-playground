@@ -14,7 +14,6 @@ from .types import (
     Workaround,
 )
 
-
 _SAFE_ERROR = "入力値が不正です。"
 
 
@@ -24,9 +23,7 @@ class StrictSerializer(serializers.Serializer):
             raise serializers.ValidationError({"non_field_errors": [_SAFE_ERROR]})
         unknown = set(data) - set(self.fields)
         if unknown:
-            raise serializers.ValidationError(
-                {key: [_SAFE_ERROR] for key in sorted(unknown)}
-            )
+            raise serializers.ValidationError({key: [_SAFE_ERROR] for key in sorted(unknown)})
         return super().to_internal_value(data)
 
 
@@ -59,7 +56,7 @@ class CanonicalUuidField(serializers.Field):
             self.fail("invalid")
         try:
             value = UUID(data)
-        except (ValueError, AttributeError, TypeError):
+        except ValueError, AttributeError, TypeError:
             self.fail("invalid")
         if str(value) != data:
             self.fail("invalid")
@@ -87,9 +84,7 @@ class CodePointTextField(serializers.Field):
 class ConfirmedAnswersSerializer(StrictSerializer):
     topic = StrictChoiceField(choices=[value.value for value in Topic], allow_null=True)
     scope = StrictChoiceField(choices=[value.value for value in Scope], allow_null=True)
-    workaround = StrictChoiceField(
-        choices=[value.value for value in Workaround], allow_null=True
-    )
+    workaround = StrictChoiceField(choices=[value.value for value in Workaround], allow_null=True)
     urgency = StrictBooleanField(allow_null=True)
 
 
@@ -147,9 +142,7 @@ class JudgmentRequestSerializer(StrictSerializer):
                     topic=Topic(confirmed["topic"]) if confirmed["topic"] else None,
                     scope=Scope(confirmed["scope"]) if confirmed["scope"] else None,
                     workaround=(
-                        Workaround(confirmed["workaround"])
-                        if confirmed["workaround"]
-                        else None
+                        Workaround(confirmed["workaround"]) if confirmed["workaround"] else None
                     ),
                     urgency=confirmed["urgency"],
                 ),

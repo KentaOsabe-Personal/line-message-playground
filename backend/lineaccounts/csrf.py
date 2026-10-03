@@ -7,7 +7,6 @@ from django.middleware.csrf import CsrfViewMiddleware
 
 from .errors import SafeAPIError
 
-
 _SAFE_METHODS = frozenset(("GET", "HEAD", "OPTIONS", "TRACE"))
 
 

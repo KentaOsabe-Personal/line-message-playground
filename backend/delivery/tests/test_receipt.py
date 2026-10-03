@@ -33,7 +33,6 @@ from lineinteractions.types import (
 )
 from linewebhooks.types import HandlerExecutionContext
 
-
 RECEIPT_EXPIRY = datetime(
     2026,
     7,
@@ -85,9 +84,9 @@ class ReceiptCapabilityFactoryTests(SimpleTestCase):
     def test_candidate_raw_value_is_confined_to_gateway_reveal(self):
         entropy = b"\xff" * 32
         raw = urlsafe_b64encode(entropy).rstrip(b"=").decode("ascii")
-        candidate = ReceiptCapabilityFactory(
-            random_bytes=lambda size: entropy
-        ).create(RECEIPT_EXPIRY)
+        candidate = ReceiptCapabilityFactory(random_bytes=lambda size: entropy).create(
+            RECEIPT_EXPIRY
+        )
         stream = StringIO()
         handler = logging.StreamHandler(stream)
         logger = logging.getLogger("delivery.tests.receipt")
@@ -142,9 +141,7 @@ class ReceiptCapabilityFactoryTests(SimpleTestCase):
                     ValueError,
                     "^receipt capability generation failed$",
                 ) as raised:
-                    ReceiptCapabilityFactory(
-                        random_bytes=generator
-                    ).create(RECEIPT_EXPIRY)
+                    ReceiptCapabilityFactory(random_bytes=generator).create(RECEIPT_EXPIRY)
                 self.assertNotIn("secret", repr(raised.exception))
 
     @staticmethod
@@ -187,9 +184,7 @@ class ReceiptHandlerTests(SimpleTestCase):
         stored = repository.commands[0]
         self.assertEqual(
             stored.capability_digest,
-            hashlib.sha256(
-                b"receipt-capability-canary"
-            ).hexdigest(),
+            hashlib.sha256(b"receipt-capability-canary").hexdigest(),
         )
         self.assertEqual(stored.channel_public_id, self.channel_id)
         self.assertEqual(stored.recipient_public_id, self.recipient_id)
@@ -223,9 +218,7 @@ class ReceiptHandlerTests(SimpleTestCase):
     # テストケース: 別action名、不正依存結果、clock・repository例外を処理する
     # 期待値: mutationを増やさず拒否または失敗へ縮約し秘密を結果へ露出しない
     def test_rejects_wrong_action_and_contains_processing_failures(self):
-        wrong_repository = _ReceiptRepository(
-            RuntimeError("repository-secret-canary")
-        )
+        wrong_repository = _ReceiptRepository(RuntimeError("repository-secret-canary"))
         wrong = self._command("payload-secret-canary", action_name="other")
         wrong_result = ReceiptHandler(
             attempt_repository=wrong_repository,
@@ -236,9 +229,7 @@ class ReceiptHandlerTests(SimpleTestCase):
 
         for repository, clock in (
             (
-                _ReceiptRepository(
-                    RuntimeError("repository-secret-canary")
-                ),
+                _ReceiptRepository(RuntimeError("repository-secret-canary")),
                 lambda: self.now,
             ),
             (

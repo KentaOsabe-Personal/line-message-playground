@@ -71,7 +71,7 @@ class DefaultRichMenuConfirmation:
                 raise ValueError("invalid payload values")
             issued_at = datetime.fromisoformat(payload["issuedAt"])
             _require_aware(issued_at)
-        except (signing.BadSignature, KeyError, TypeError, ValueError):
+        except signing.BadSignature, KeyError, TypeError, ValueError:
             return ConfirmationRejected(reason="preview_invalid")
 
         if issued_at > now:
@@ -98,9 +98,7 @@ def _snapshot_fingerprint(snapshot: PreviewSnapshot) -> str:
         str(len(snapshot.template.fields)).encode("ascii"),
     ]
     for field in snapshot.template.fields:
-        components.extend(
-            (field.display_name.encode("utf-8"), field.uri.encode("utf-8"))
-        )
+        components.extend((field.display_name.encode("utf-8"), field.uri.encode("utf-8")))
     components.append(snapshot.pixel_digest.encode("ascii"))
     digest = sha256()
     for component in components:

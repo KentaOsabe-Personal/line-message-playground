@@ -45,9 +45,7 @@ class LabRuntimeTests(SimpleTestCase):
     # 期待値: 例外でプロセスを止めず、秘密値を含まない固定理由で利用不可になる。
     def test_fails_closed_for_debug_missing_and_invalid_settings(self):
         debug_runtime = load_lab_runtime(self.valid_environment(), debug=True)
-        missing_runtime = load_lab_runtime(
-            {"TEXT_JUDGMENT_LAB_ENABLED": "true"}, debug=False
-        )
+        missing_runtime = load_lab_runtime({"TEXT_JUDGMENT_LAB_ENABLED": "true"}, debug=False)
         invalid_environment = self.valid_environment()
         invalid_environment["TEXT_JUDGMENT_LAB_ORIGIN"] = "http://lab.example.test/path"
         invalid_runtime = load_lab_runtime(invalid_environment, debug=False)

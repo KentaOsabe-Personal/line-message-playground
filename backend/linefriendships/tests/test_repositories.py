@@ -4,6 +4,12 @@ from uuid import uuid4
 from django.db import DatabaseError, transaction
 from django.test import TransactionTestCase
 
+from linechannels.models import LineChannel
+from linechannels.reference_fence import (
+    DjangoChannelReferenceFence,
+    ReferenceFenceResult,
+)
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 from linefriendships.models import FriendshipSyncAudit
 from linefriendships.repositories import (
     DjangoFriendshipAuditRepository,
@@ -11,12 +17,6 @@ from linefriendships.repositories import (
     FriendshipAuditStorageError,
 )
 from linefriendships.types import FriendshipAuditRecord
-from linechannels.models import LineChannel
-from linechannels.reference_fence import (
-    DjangoChannelReferenceFence,
-    ReferenceFenceResult,
-)
-from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
 
 class FriendshipAuditRepositoryTests(TransactionTestCase):
@@ -43,13 +43,13 @@ class FriendshipAuditRepositoryTests(TransactionTestCase):
         ):
             fence = mock.Mock()
             fence.lock_existing.return_value = ReferenceFenceResult(status)
-            repository = DjangoFriendshipAuditRepository(
-                reference_fence=fence
-            )
+            repository = DjangoFriendshipAuditRepository(reference_fence=fence)
 
-            with self.subTest(status=status), self.assertRaises(
-                FriendshipAuditStorageError
-            ) as raised, transaction.atomic():
+            with (
+                self.subTest(status=status),
+                self.assertRaises(FriendshipAuditStorageError) as raised,
+                transaction.atomic(),
+            ):
                 repository.record(self.audit())
 
             self.assertEqual(raised.exception.code, expected)
@@ -74,11 +74,7 @@ class FriendshipAuditRepositoryTests(TransactionTestCase):
                 self.repository.record(self.audit(outcome=outcome))
 
         self.assertEqual(
-            list(
-                FriendshipSyncAudit.objects.order_by("pk").values_list(
-                    "outcome", flat=True
-                )
-            ),
+            list(FriendshipSyncAudit.objects.order_by("pk").values_list("outcome", flat=True)),
             list(outcomes),
         )
 
@@ -125,9 +121,7 @@ class FriendshipAuditRepositoryTests(TransactionTestCase):
     # テストケース: 公開呼出し側がfence capabilityを直接偽造する
     # 期待値: 同一transaction内でもauditを作成せずcontract違反として拒否する
     def test_rejects_forged_reference_capability(self):
-        with transaction.atomic(), self.assertRaises(
-            FriendshipAuditProgrammingError
-        ) as raised:
+        with transaction.atomic(), self.assertRaises(FriendshipAuditProgrammingError) as raised:
             self.repository.record_after_fence(self.audit(), object())
 
         self.assertEqual(str(raised.exception), "invalid_reference_lock")
@@ -171,9 +165,7 @@ class FriendshipAuditRepositoryTests(TransactionTestCase):
 
         channel.delete()
 
-        with transaction.atomic(), self.assertRaises(
-            FriendshipAuditProgrammingError
-        ) as raised:
+        with transaction.atomic(), self.assertRaises(FriendshipAuditProgrammingError) as raised:
             repository.record_after_fence(record, locked)
 
         self.assertEqual(str(raised.exception), "invalid_reference_lock")
@@ -205,9 +197,7 @@ class FriendshipAuditRepositoryTests(TransactionTestCase):
 
         channel.delete()
 
-        with reusable_atomic, self.assertRaises(
-            FriendshipAuditProgrammingError
-        ) as raised:
+        with reusable_atomic, self.assertRaises(FriendshipAuditProgrammingError) as raised:
             repository.record_after_fence(record, locked)
 
         self.assertEqual(str(raised.exception), "invalid_reference_lock")
@@ -224,9 +214,7 @@ class FriendshipAuditRepositoryTests(TransactionTestCase):
                 locked = self.repository.lock_reference(record.channel_public_id)
                 raise RuntimeError("rollback")
 
-        with reusable_atomic, self.assertRaises(
-            FriendshipAuditProgrammingError
-        ) as raised:
+        with reusable_atomic, self.assertRaises(FriendshipAuditProgrammingError) as raised:
             self.repository.record_after_fence(record, locked)
 
         self.assertEqual(str(raised.exception), "invalid_reference_lock")

@@ -42,7 +42,6 @@ from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.repositories import DjangoEventReceiptRepository
 from linewebhooks.types import ReceiptCandidate, ReceiptChannelUnavailable
 
-
 NOW = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
 
 
@@ -208,9 +207,7 @@ class ReferenceWriterConcurrencyTests(TransactionTestCase):
             (
                 "delivery",
                 delivery_writer,
-                lambda: DeliveryAttempt.objects.filter(
-                    channel_public_id=channel.public_id
-                ).count(),
+                lambda: DeliveryAttempt.objects.filter(channel_public_id=channel.public_id).count(),
                 lambda result: isinstance(result, AttemptAccepted),
                 lambda: effects["delivery_push"],
             ),
@@ -325,9 +322,7 @@ class ReferenceWriterConcurrencyTests(TransactionTestCase):
             with self.subTest(writer=name):
                 channel = self._channel()
                 fence = BlockingFence()
-                writer = next(
-                    item for item in self._writers(channel, fence) if item[0] == name
-                )
+                writer = next(item for item in self._writers(channel, fence) if item[0] == name)
                 outcomes = []
                 delete_results = []
                 probe_queries = []
@@ -340,9 +335,7 @@ class ReferenceWriterConcurrencyTests(TransactionTestCase):
                 def run_delete():
                     close_old_connections()
                     with transaction.atomic():
-                        locked = DjangoChannelReferenceFence().lock_existing(
-                            channel.public_id
-                        )
+                        locked = DjangoChannelReferenceFence().lock_existing(channel.public_id)
                         if locked.status != "locked":
                             delete_results.append(locked.status)
                             return
@@ -350,12 +343,12 @@ class ReferenceWriterConcurrencyTests(TransactionTestCase):
                             check = build_channel_reference_directory().is_referenced(
                                 channel.public_id
                             )
-                        probe_queries.extend(query["sql"].lower() for query in captured.captured_queries)
+                        probe_queries.extend(
+                            query["sql"].lower() for query in captured.captured_queries
+                        )
                         delete_results.append(check.status)
                         if check.status == "unreferenced":
-                            LineChannel.objects.filter(
-                                public_id=channel.public_id
-                            ).delete()
+                            LineChannel.objects.filter(public_id=channel.public_id).delete()
                     close_old_connections()
 
                 writer_thread = threading.Thread(target=run_writer)
@@ -373,9 +366,7 @@ class ReferenceWriterConcurrencyTests(TransactionTestCase):
                 self.assertTrue(writer[3](outcomes[0]))
                 self.assertEqual(writer[4](), 1)
                 self.assertEqual(delete_results, ["referenced"])
-                self.assertTrue(
-                    LineChannel.objects.filter(public_id=channel.public_id).exists()
-                )
+                self.assertTrue(LineChannel.objects.filter(public_id=channel.public_id).exists())
                 self.assertEqual(writer[2](), 1)
                 for table in (
                     "lineaccounts_deliveryrecipient",

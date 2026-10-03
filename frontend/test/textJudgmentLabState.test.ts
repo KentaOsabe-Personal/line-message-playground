@@ -13,7 +13,10 @@ import {
 
 import { v2Response } from './textJudgmentLabV2Fixture'
 
-function selectConversationChoice(core: ConversationCore, choice: Parameters<typeof transitionChoice>[1]) {
+function selectConversationChoice(
+  core: ConversationCore,
+  choice: Parameters<typeof transitionChoice>[1],
+) {
   return transitionChoice(core, choice)?.core ?? core
 }
 
@@ -38,8 +41,14 @@ function evidence(overrides: Partial<JudgmentEvidence> = {}): JudgmentEvidence {
   }
 }
 
-function choose(core: ConversationCore, question: 'topic' | 'scope' | 'workaround' | 'urgency', value: string | boolean) {
-  return selectConversationChoice(core, { question, value } as Parameters<typeof selectConversationChoice>[1])
+function choose(
+  core: ConversationCore,
+  question: 'topic' | 'scope' | 'workaround' | 'urgency',
+  value: string | boolean,
+) {
+  return selectConversationChoice(core, { question, value } as Parameters<
+    typeof selectConversationChoice
+  >[1])
 }
 
 describe('text judgment lab conversation state', () => {
@@ -64,38 +73,54 @@ describe('text judgment lab conversation state', () => {
   // 期待値: 未確定knownだけを取り込み、通知不達の特定トーク案内へ進む。
   test('confirms all known answers from one judgment', () => {
     const initial = createConversationCore('consultation-1')
-    const next = applyJudgment(initial, evidence({
-      topic: { kind: 'known', value: 'missing_notification' },
-      scope: { kind: 'known', value: 'specific' },
-      workaround: { kind: 'known', value: 'can_read' },
-      impact: 'high',
-      urgency: { kind: 'known', value: false },
-    }))
+    const next = applyJudgment(
+      initial,
+      evidence({
+        topic: { kind: 'known', value: 'missing_notification' },
+        scope: { kind: 'known', value: 'specific' },
+        workaround: { kind: 'known', value: 'can_read' },
+        impact: 'high',
+        urgency: { kind: 'known', value: false },
+      }),
+    )
 
     expect(next.confirmed).toEqual({
-      topic: 'missing_notification', scope: 'specific', workaround: 'can_read', urgency: false,
+      topic: 'missing_notification',
+      scope: 'specific',
+      workaround: 'can_read',
+      urgency: false,
     })
-    expect(next.stage).toEqual({ kind: 'guidance', guideId: 'missing_specific', presentation: 'details_open' })
+    expect(next.stage).toEqual({
+      kind: 'guidance',
+      guideId: 'missing_specific',
+      presentation: 'details_open',
+    })
     expect(initial.confirmed.topic).toBeNull()
   })
 
   // テストケース: 後続判定が確定済み回答と矛盾する。
   // 期待値: 相談、範囲、回避策、急ぎ、impactを上書きしない。
   test('never overwrites confirmed answers with later contradictory evidence', () => {
-    const fixed = applyJudgment(createConversationCore('consultation-1'), evidence({
-      topic: { kind: 'known', value: 'missing_notification' },
-      scope: { kind: 'known', value: 'all' },
-      workaround: { kind: 'known', value: 'can_read' },
-      impact: 'high',
-      urgency: { kind: 'known', value: true },
-    }))
-    const contradicted = applyJudgment(fixed, evidence({
-      topic: { kind: 'known', value: 'notification_settings' },
-      scope: { kind: 'known', value: 'specific' },
-      workaround: { kind: 'known', value: 'cannot_read' },
-      impact: 'low',
-      urgency: { kind: 'known', value: false },
-    }))
+    const fixed = applyJudgment(
+      createConversationCore('consultation-1'),
+      evidence({
+        topic: { kind: 'known', value: 'missing_notification' },
+        scope: { kind: 'known', value: 'all' },
+        workaround: { kind: 'known', value: 'can_read' },
+        impact: 'high',
+        urgency: { kind: 'known', value: true },
+      }),
+    )
+    const contradicted = applyJudgment(
+      fixed,
+      evidence({
+        topic: { kind: 'known', value: 'notification_settings' },
+        scope: { kind: 'known', value: 'specific' },
+        workaround: { kind: 'known', value: 'cannot_read' },
+        impact: 'low',
+        urgency: { kind: 'known', value: false },
+      }),
+    )
 
     expect(contradicted.confirmed).toEqual(fixed.confirmed)
     expect(contradicted.impact).toBe('high')
@@ -105,50 +130,74 @@ describe('text judgment lab conversation state', () => {
   const guidanceCases = [
     {
       name: '通知不達・全体・lowは回避策を省略する',
-      topic: 'missing_notification', scope: 'all', impact: 'low', urgency: false,
-      guideId: 'missing_all', presentation: 'details_open',
+      topic: 'missing_notification',
+      scope: 'all',
+      impact: 'low',
+      urgency: false,
+      guideId: 'missing_all',
+      presentation: 'details_open',
     },
     {
       name: '通知不達・分からない・high・確認可能・急ぎは全体要点を示す',
-      topic: 'missing_notification', scope: 'unknown', impact: 'high', workaround: 'can_read', urgency: true,
-      guideId: 'missing_all', presentation: 'summary_first',
+      topic: 'missing_notification',
+      scope: 'unknown',
+      impact: 'high',
+      workaround: 'can_read',
+      urgency: true,
+      guideId: 'missing_all',
+      presentation: 'summary_first',
     },
     {
       name: '設定・特定・highでも回避策を質問しない',
-      topic: 'notification_settings', scope: 'specific', impact: 'high', urgency: false,
-      guideId: 'settings_specific', presentation: 'details_open',
+      topic: 'notification_settings',
+      scope: 'specific',
+      impact: 'high',
+      urgency: false,
+      guideId: 'settings_specific',
+      presentation: 'details_open',
     },
     {
       name: '設定・分からない・急ぎは全体要点を示す',
-      topic: 'notification_settings', scope: 'unknown', impact: 'low', urgency: true,
-      guideId: 'settings_all', presentation: 'summary_first',
+      topic: 'notification_settings',
+      scope: 'unknown',
+      impact: 'low',
+      urgency: true,
+      guideId: 'settings_all',
+      presentation: 'summary_first',
     },
   ] as const
 
   test.each(guidanceCases)('$name', (row) => {
     const { topic, scope, impact, urgency, guideId, presentation } = row
     const workaround = 'workaround' in row ? row.workaround : undefined
-    const next = applyJudgment(createConversationCore('consultation-1'), evidence({
-      topic: { kind: 'known', value: topic },
-      scope: { kind: 'known', value: scope },
-      workaround: workaround ? { kind: 'known', value: workaround } : unmentioned,
-      impact,
-      urgency: { kind: 'known', value: urgency },
-    }))
+    const next = applyJudgment(
+      createConversationCore('consultation-1'),
+      evidence({
+        topic: { kind: 'known', value: topic },
+        scope: { kind: 'known', value: scope },
+        workaround: workaround ? { kind: 'known', value: workaround } : unmentioned,
+        impact,
+        urgency: { kind: 'known', value: urgency },
+      }),
+    )
     expect(next.stage).toEqual({ kind: 'guidance', guideId, presentation })
-    if (topic === 'notification_settings' || impact === 'low') expect(next.confirmed.workaround).toBeNull()
+    if (topic === 'notification_settings' || impact === 'low')
+      expect(next.confirmed.workaround).toBeNull()
   })
 
   // テストケース: 通知不達でLINEを開いても確認できない。
   // 期待値: 急ぎを質問せず公式ヘルプへつなぐ未解決終了となる。
   test('ends missing-notification consultation unresolved when messages cannot be read', () => {
-    const next = applyJudgment(createConversationCore('consultation-1'), evidence({
-      topic: { kind: 'known', value: 'missing_notification' },
-      scope: { kind: 'known', value: 'all' },
-      workaround: { kind: 'known', value: 'cannot_read' },
-      impact: 'low',
-      urgency: needsReview,
-    }))
+    const next = applyJudgment(
+      createConversationCore('consultation-1'),
+      evidence({
+        topic: { kind: 'known', value: 'missing_notification' },
+        scope: { kind: 'known', value: 'all' },
+        workaround: { kind: 'known', value: 'cannot_read' },
+        impact: 'low',
+        urgency: needsReview,
+      }),
+    )
     expect(next.stage).toEqual({ kind: 'ended', outcome: 'unresolved' })
     expect(next.confirmed.urgency).toBeNull()
   })
@@ -156,7 +205,10 @@ describe('text judgment lab conversation state', () => {
   // テストケース: high、要確認、未評価の通知不達相談を進める。
   // 期待値: scopeの後に回避策だけを質問し、lowだけは急ぎへ進む。
   test.each([
-    ['high', 'workaround'], ['needs_review', 'workaround'], ['unassessed', 'workaround'], ['low', 'urgency'],
+    ['high', 'workaround'],
+    ['needs_review', 'workaround'],
+    ['unassessed', 'workaround'],
+    ['low', 'urgency'],
   ] as const)('selects one next question for impact %s', (impact, question) => {
     let core = createConversationCore('consultation-1')
     core = choose(core, 'topic', 'missing_notification')
@@ -183,7 +235,10 @@ describe('text judgment lab conversation state', () => {
   test('keeps state and clarification attempts for out-of-scope input', () => {
     let core = choose(createConversationCore('consultation-1'), 'topic', 'notification_settings')
     core = applyJudgment(core, evidence({ scope: needsReview }))
-    const next = applyJudgment(core, evidence({ relevance: 'out_of_scope', scope: { kind: 'known', value: 'specific' } }))
+    const next = applyJudgment(
+      core,
+      evidence({ relevance: 'out_of_scope', scope: { kind: 'known', value: 'specific' } }),
+    )
     expect(next.confirmed).toEqual(core.confirmed)
     expect(next.clarification).toEqual(core.clarification)
     expect(next.stage).toEqual(core.stage)
@@ -194,12 +249,15 @@ describe('text judgment lab conversation state', () => {
   // 期待値: 対象外部分を知らせ、対象内の未確定回答だけを採用する。
   test('accepts in-scope evidence from mixed input without losing context', () => {
     const core = choose(createConversationCore('consultation-1'), 'topic', 'notification_settings')
-    const next = applyJudgment(core, evidence({
-      relevance: 'mixed',
-      scope: { kind: 'known', value: 'specific' },
-      urgency: { kind: 'known', value: false },
-      impact: 'high',
-    }))
+    const next = applyJudgment(
+      core,
+      evidence({
+        relevance: 'mixed',
+        scope: { kind: 'known', value: 'specific' },
+        urgency: { kind: 'known', value: false },
+        impact: 'high',
+      }),
+    )
     expect(next.notice).toBe('mixed_scope')
     expect(next.confirmed.scope).toBe('specific')
     expect(next.stage).toMatchObject({ kind: 'guidance', guideId: 'settings_specific' })
@@ -237,13 +295,19 @@ describe('text judgment lab conversation state', () => {
   // テストケース: 初回の複数相談pickerへ自由文で一つの相談を答える。
   // 期待値: 選んだ相談だけを確定し、pickerを解除して範囲質問へ進む。
   test('starts the freely selected topic from the initial topic picker', () => {
-    let core = applyJudgment(createConversationCore('consultation-1'), evidence({
-      topic: { kind: 'known', value: 'both' },
-    }))
-    core = applyJudgment(core, evidence({
-      topic: { kind: 'known', value: 'notification_settings' },
-      scope: { kind: 'known', value: 'specific' },
-    }))
+    let core = applyJudgment(
+      createConversationCore('consultation-1'),
+      evidence({
+        topic: { kind: 'known', value: 'both' },
+      }),
+    )
+    core = applyJudgment(
+      core,
+      evidence({
+        topic: { kind: 'known', value: 'notification_settings' },
+        scope: { kind: 'known', value: 'specific' },
+      }),
+    )
 
     expect(core.confirmed.topic).toBe('notification_settings')
     expect(core.confirmed.scope).toBeNull()
@@ -254,14 +318,20 @@ describe('text judgment lab conversation state', () => {
   // テストケース: 初回の複数相談pickerへ、対象外内容を含む自由文で一つの相談を答える。
   // 期待値: 選択した相談だけを確定し、他の候補を採用せず、対象外部分があることを通知する。
   test('keeps the mixed-scope notice when starting a freely selected topic from the initial picker', () => {
-    let core = applyJudgment(createConversationCore('consultation-1'), evidence({
-      topic: { kind: 'known', value: 'both' },
-    }))
-    core = applyJudgment(core, evidence({
-      relevance: 'mixed',
-      topic: { kind: 'known', value: 'notification_settings' },
-      scope: { kind: 'known', value: 'specific' },
-    }))
+    let core = applyJudgment(
+      createConversationCore('consultation-1'),
+      evidence({
+        topic: { kind: 'known', value: 'both' },
+      }),
+    )
+    core = applyJudgment(
+      core,
+      evidence({
+        relevance: 'mixed',
+        topic: { kind: 'known', value: 'notification_settings' },
+        scope: { kind: 'known', value: 'specific' },
+      }),
+    )
 
     expect(core.confirmed.topic).toBe('notification_settings')
     expect(core.confirmed.scope).toBeNull()
@@ -277,10 +347,13 @@ describe('text judgment lab conversation state', () => {
     core = applyJudgment(core, evidence({ scope: needsReview }))
     const savedClarification = core.clarification
     core = applyJudgment(core, evidence({ topic: { kind: 'known', value: 'both' } }))
-    core = applyJudgment(core, evidence({
-      topic: { kind: 'known', value: 'missing_notification' },
-      scope: { kind: 'known', value: 'all' },
-    }))
+    core = applyJudgment(
+      core,
+      evidence({
+        topic: { kind: 'known', value: 'missing_notification' },
+        scope: { kind: 'known', value: 'all' },
+      }),
+    )
 
     expect(core.confirmed.scope).toBeNull()
     expect(core.topicPicker).toBeNull()
@@ -295,11 +368,14 @@ describe('text judgment lab conversation state', () => {
     core = applyJudgment(core, evidence({ scope: needsReview }))
     const savedClarification = core.clarification
     core = applyJudgment(core, evidence({ topic: { kind: 'known', value: 'both' } }))
-    core = applyJudgment(core, evidence({
-      relevance: 'mixed',
-      topic: { kind: 'known', value: 'missing_notification' },
-      scope: { kind: 'known', value: 'all' },
-    }))
+    core = applyJudgment(
+      core,
+      evidence({
+        relevance: 'mixed',
+        topic: { kind: 'known', value: 'missing_notification' },
+        scope: { kind: 'known', value: 'all' },
+      }),
+    )
 
     expect(core.confirmed.scope).toBeNull()
     expect(core.topicPicker).toBeNull()
@@ -312,7 +388,10 @@ describe('text judgment lab conversation state', () => {
   // 期待値: 確定回答とstageを変えず、新しい相談の開始だけを案内する。
   test('does not partially correct confirmed answers', () => {
     const core = choose(createConversationCore('consultation-1'), 'topic', 'missing_notification')
-    const next = applyJudgment(core, evidence({ change: 'restart', scope: { kind: 'known', value: 'all' } }))
+    const next = applyJudgment(
+      core,
+      evidence({ change: 'restart', scope: { kind: 'known', value: 'all' } }),
+    )
     expect(next.confirmed).toEqual(core.confirmed)
     expect(next.stage).toEqual(core.stage)
     expect(next.notice).toBe('restart_required')
@@ -327,23 +406,30 @@ describe('text judgment lab conversation state', () => {
       urgency: { kind: 'known', value: false },
       impact: 'low',
     })
-    expect(applyJudgment(createConversationCore('free'), judged).stage)
-      .toEqual(applyJudgment(createConversationCore('example'), judged).stage)
+    expect(applyJudgment(createConversationCore('free'), judged).stage).toEqual(
+      applyJudgment(createConversationCore('example'), judged).stage,
+    )
   })
 
   // テストケース: 案内表示後の結果回答判定に別のimpactが含まれる。
   // 期待値: 設定相談では支障の大きさを未評価のまま保ち、案内と表示方法も変更しない。
   test('freezes impact after guidance is shown', () => {
-    let core = applyJudgment(createConversationCore('consultation-1'), evidence({
-      topic: { kind: 'known', value: 'notification_settings' },
-      scope: { kind: 'known', value: 'all' },
-      impact: 'needs_review',
-      urgency: { kind: 'known', value: false },
-    }))
+    let core = applyJudgment(
+      createConversationCore('consultation-1'),
+      evidence({
+        topic: { kind: 'known', value: 'notification_settings' },
+        scope: { kind: 'known', value: 'all' },
+        impact: 'needs_review',
+        urgency: { kind: 'known', value: false },
+      }),
+    )
     expect(core.stage.kind).toBe('guidance')
     expect(core.impact).toBe('unassessed')
 
-    core = applyJudgment(core, evidence({ result: { kind: 'known', value: 'not_tried' }, impact: 'high' }))
+    core = applyJudgment(
+      core,
+      evidence({ result: { kind: 'known', value: 'not_tried' }, impact: 'high' }),
+    )
     expect(core.impact).toBe('unassessed')
     expect(core.stage.kind).toBe('guidance')
   })
@@ -354,15 +440,20 @@ describe('text judgment lab conversation state', () => {
     ['needs_review', needsReview],
     ['unmentioned', unmentioned],
   ] as const)('freezes guidance through the topic picker when topic is %s', (_name, topic) => {
-    let core = applyJudgment(createConversationCore('consultation-1'), evidence({
-      topic: { kind: 'known', value: 'notification_settings' },
-      scope: { kind: 'known', value: 'all' },
-      impact: 'needs_review',
-      urgency: { kind: 'known', value: false },
-    }))
+    let core = applyJudgment(
+      createConversationCore('consultation-1'),
+      evidence({
+        topic: { kind: 'known', value: 'notification_settings' },
+        scope: { kind: 'known', value: 'all' },
+        impact: 'needs_review',
+        urgency: { kind: 'known', value: false },
+      }),
+    )
     const guidance = core.stage
     expect(guidance).toEqual({
-      kind: 'guidance', guideId: 'settings_all', presentation: 'details_open',
+      kind: 'guidance',
+      guideId: 'settings_all',
+      presentation: 'details_open',
     })
 
     core = applyJudgment(core, evidence({ topic: { kind: 'known', value: 'both' } }))
@@ -381,28 +472,37 @@ describe('text judgment lab conversation state', () => {
     ['missing_notification', 'not_done', 'unresolved'],
     ['notification_settings', 'not_done', 'unresolved'],
   ] as const)('maps %s result %s to %s', (topic, result, outcome) => {
-    let core = applyJudgment(createConversationCore('consultation-1'), evidence({
-      topic: { kind: 'known', value: topic },
-      scope: { kind: 'known', value: 'all' },
-      impact: 'low',
-      urgency: { kind: 'known', value: false },
-    }))
+    let core = applyJudgment(
+      createConversationCore('consultation-1'),
+      evidence({
+        topic: { kind: 'known', value: topic },
+        scope: { kind: 'known', value: 'all' },
+        impact: 'low',
+        urgency: { kind: 'known', value: false },
+      }),
+    )
     core = selectConversationChoice(core, { question: 'result', value: result })
     expect(core.stage).toEqual({ kind: 'ended', outcome })
   })
 
-  test.each(['not_tried', 'cannot_check'] as const)('keeps guidance active for result %s', (result) => {
-    let core = applyJudgment(createConversationCore('consultation-1'), evidence({
-      topic: { kind: 'known', value: 'missing_notification' },
-      scope: { kind: 'known', value: 'all' },
-      impact: 'low',
-      urgency: { kind: 'known', value: false },
-    }))
-    const guidance = core.stage
-    core = selectConversationChoice(core, { question: 'result', value: result })
-    expect(core.stage).toEqual(guidance)
-    expect(currentQuestionId(core)).toBe('result')
-  })
+  test.each(['not_tried', 'cannot_check'] as const)(
+    'keeps guidance active for result %s',
+    (result) => {
+      let core = applyJudgment(
+        createConversationCore('consultation-1'),
+        evidence({
+          topic: { kind: 'known', value: 'missing_notification' },
+          scope: { kind: 'known', value: 'all' },
+          impact: 'low',
+          urgency: { kind: 'known', value: false },
+        }),
+      )
+      const guidance = core.stage
+      core = selectConversationChoice(core, { question: 'result', value: result })
+      expect(core.stage).toEqual(guidance)
+      expect(currentQuestionId(core)).toBe('result')
+    },
+  )
 
   // テストケース: 進行中相談を中断し、新しい相談を始める。
   // 期待値: 中断理由を区別し、新相談は前の回答や判定状態を一切持たない。

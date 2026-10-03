@@ -75,10 +75,7 @@ class UnlinkPendingMetrics:
 
 
 UnlinkExecutionResult = (
-    UnlinkCompleted
-    | UnlinkPendingReauthentication
-    | UnlinkPendingLocalRetry
-    | UnlinkRejected
+    UnlinkCompleted | UnlinkPendingReauthentication | UnlinkPendingLocalRetry | UnlinkRejected
 )
 
 
@@ -146,9 +143,7 @@ class DefaultAccountUnlinkService:
         except AccountPersistenceError:
             return UnlinkRejected("storage_unavailable")
 
-        if not self._valid_request_shape(
-            owner.state, confirmation_token, user_access_token
-        ):
+        if not self._valid_request_shape(owner.state, confirmation_token, user_access_token):
             return UnlinkRejected("validation_error")
 
         if owner.state == OwnerAccount.State.LOCAL_DELETION_PENDING:
@@ -196,10 +191,7 @@ class DefaultAccountUnlinkService:
         token: UserAccessToken | None,
         now: datetime,
     ) -> UnlinkExecutionResult:
-        if (
-            confirmation_token is None
-            or not self._confirmation.precheck(confirmation_token, now)
-        ):
+        if confirmation_token is None or not self._confirmation.precheck(confirmation_token, now):
             return UnlinkRejected("stale_confirmation")
         proof = self._verify_token(principal.identity_public_id, token)
         if proof is not None:
@@ -275,9 +267,7 @@ class DefaultAccountUnlinkService:
                 result = self._gateway.deauthorize(token)
                 if isinstance(result, LinePlatformUnavailable):
                     return UnlinkRejected(
-                        "line_rate_limited"
-                        if result.rate_limited
-                        else "line_unavailable"
+                        "line_rate_limited" if result.rate_limited else "line_unavailable"
                     )
                 if isinstance(result, (DeauthorizeRejected, DeauthorizeUncertain)):
                     return UnlinkPendingReauthentication()
@@ -285,10 +275,8 @@ class DefaultAccountUnlinkService:
                 try:
                     with transaction.atomic():
                         locked = self._repository.lock_owner_account()
-                        self._repository.mark_line_deauthorized(
-                            locked, generation, now
-                        )
-                except (AccountPersistenceError, AccountStateError):
+                        self._repository.mark_line_deauthorized(locked, generation, now)
+                except AccountPersistenceError, AccountStateError:
                     return UnlinkPendingReauthentication()
                 return self._finalize(generation)
         except UnlinkLockError:

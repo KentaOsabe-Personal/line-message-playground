@@ -1,11 +1,7 @@
 import { isChannelAdminUuid } from './channelAdminDto'
 
 export type StaticProtectedPath =
-  | '/liff'
-  | '/liff/channels'
-  | '/liff/account'
-  | '/liff/rich-menus'
-  | '/liff/deliveries'
+  '/liff' | '/liff/channels' | '/liff/account' | '/liff/rich-menus' | '/liff/deliveries'
 
 export type ProtectedAppPath = StaticProtectedPath | `/liff/rich-menus/${string}`
 

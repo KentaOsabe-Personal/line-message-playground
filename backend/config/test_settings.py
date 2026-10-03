@@ -4,7 +4,6 @@ from uuid import uuid4
 
 from cryptography.fernet import Fernet
 
-
 # テスト専用の鍵は base settings の読込前に、プロセスごとに生成する。
 os.environ["LINE_CHANNEL_CREDENTIAL_KEYS"] = Fernet.generate_key().decode("ascii")
 os.environ["DJANGO_SECRET_KEY"] = secrets.token_urlsafe(48)
@@ -15,5 +14,7 @@ os.environ["LINE_LOGIN_CHANNEL_SECRET"] = secrets.token_urlsafe(48)
 os.environ["LINE_LOGIN_PROVIDER_ID"] = "0012345678"
 os.environ["LINE_LIFF_LINKED_CHANNEL_PUBLIC_ID"] = str(uuid4())
 os.environ.pop("LINE_OWNER_SUBJECT_DIGEST", None)
+# ローカルのラボ有効化設定をテストへ持ち込まない。有効化ケースは各テストで設定する。
+os.environ["TEXT_JUDGMENT_LAB_ENABLED"] = "false"
 
 from .settings import *  # noqa: E402,F403

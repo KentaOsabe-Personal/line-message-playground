@@ -28,7 +28,7 @@ root AGENTSのGit・秘密情報規則を適用する。status、差分、既存
 ## 公開手順
 
 1. `git status --short`、current branch、unstaged／staged diffから対象を確定する。`develop`なら維持する。別feature branchは依頼対象と分かる場合に使用し、`main`へ直接commitしない。
-2. 変更領域に対応する既存検証を行う。実行不能ならblockerを記録し、未実施を成功扱いしない。
+2. 変更領域に対応する既存検証と[READMEのローカル品質チェック](../../../README.md#ローカル品質チェック)を行う。対象はunstaged／staged変更に加え、PR baseから公開予定headまでのcommit差分全体とし、対応するサービス全体を検査する。同じコード状態・設定・依存・対象範囲のfresh evidenceだけ再利用できる。必要なチェックの失敗・実行不能はblockerとして記録し、commit・push・PR作成へ進まない。文書のみで対象外なら理由を記録する。PR本文の検証欄にcommand・exit code・対象範囲を残す。GitHub Actionsの実行を前提にしない。
 3. 対象pathをstageする。`git add -A` は全変更が範囲内と確認できた場合だけ許容し、stage後のstatusを再確認する。Kiro自律実装内のより厳しいselective staging規則を緩めない。
 4. 実差分を表す簡潔な日本語summaryまたはproject-style task messageでcommitする。通常branchをupstream付きでpushする。commit／push失敗時にPRを作らない。
 5. `gh pr list --head <branch> --state open` で既存PRを調べる。更新は依頼または明確なtitle／bodyの陳腐化がある場合。新規は通常 `main` をbaseとする。stack操作は `$gh-stack` に従う。

@@ -53,9 +53,7 @@ class AdminPresenter:
             "deleted": True,
         }
 
-    def connection(
-        self, channel_id, result: ConnectionCheckCompleted
-    ) -> dict[str, object]:
+    def connection(self, channel_id, result: ConnectionCheckCompleted) -> dict[str, object]:
         return {
             "channelId": str(channel_id),
             "status": result.status,

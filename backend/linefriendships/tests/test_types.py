@@ -7,8 +7,6 @@ from django.apps import apps
 from django.test import SimpleTestCase
 
 from lineaccounts.types import LineSubject
-from linewebhooks.types import HandlerSucceeded, VerifiedWebhookEvent
-
 from linefriendships.types import (
     AccountProjectionRepository,
     FriendshipAuditRecord,
@@ -17,11 +15,11 @@ from linefriendships.types import (
     FriendshipSyncHandler,
     InvalidFriendshipEvent,
     LockedRecipientProjection,
-    OutOfScopeSource,
     ProjectionOutcome,
     ProjectionTargetMissing,
     ValidatedFriendshipEvent,
 )
+from linewebhooks.types import HandlerSucceeded
 
 
 class _Parser:

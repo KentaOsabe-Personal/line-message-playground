@@ -3,7 +3,6 @@ from uuid import UUID
 
 from .types import AccessToken, ChannelSecret, CredentialPair
 
-
 _CHANNEL_ID_PATTERN = re.compile(r"^[0-9]{1,64}$")
 _PROVIDER_ID_PATTERN = re.compile(r"^[0-9]{1,64}$", re.ASCII)
 _BOT_USER_ID_PATTERN = re.compile(r"^U[0-9a-f]{32}$")
@@ -46,7 +45,7 @@ def validate_label(value: str) -> str:
 def validate_public_id(value: str | UUID) -> UUID:
     try:
         public_id = value if isinstance(value, UUID) else UUID(value)
-    except (AttributeError, TypeError, ValueError):
+    except AttributeError, TypeError, ValueError:
         raise BoundaryValidationError() from None
     if public_id.version != 4:
         raise BoundaryValidationError()

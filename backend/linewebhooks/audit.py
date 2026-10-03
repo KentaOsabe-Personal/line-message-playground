@@ -14,9 +14,7 @@ class SafeWebhookAuditLogger:
                 "audit_outcome": entry.outcome,
                 "audit_observed_at": entry.observed_at.isoformat(),
                 "audit_channel_public_id": (
-                    str(entry.channel_public_id)
-                    if entry.channel_public_id is not None
-                    else None
+                    str(entry.channel_public_id) if entry.channel_public_id is not None else None
                 ),
                 "audit_webhook_event_id": entry.webhook_event_id,
                 "audit_event_type": entry.event_type,

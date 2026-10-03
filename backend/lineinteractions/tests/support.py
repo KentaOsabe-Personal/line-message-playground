@@ -2,7 +2,6 @@ from uuid import UUID
 
 from linewebhooks.types import FrozenJsonObject, VerifiedWebhookEvent
 
-
 CHANNEL_ID = UUID("12345678-1234-4234-9234-123456789abc")
 EVENT_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 SUBJECT = "U" + "a" * 32

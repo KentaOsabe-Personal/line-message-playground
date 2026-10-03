@@ -60,9 +60,17 @@ describe('LinePlatformLiffAdapter', () => {
   // 期待値: 外部browserはlogout後にloginし、LIFF browserは再初期化のためreloadする。
   test('restarts authentication using the supported flow for each browser context', () => {
     const externalSdk = {
-      init: vi.fn(), isInClient: vi.fn().mockReturnValue(false), isLoggedIn: vi.fn().mockReturnValue(true),
-      login: vi.fn(), logout: vi.fn(), getIDToken: vi.fn(), getAccessToken: vi.fn(),
-      permission: { query: vi.fn().mockResolvedValue({ state: 'granted' as const }), requestAll: vi.fn() },
+      init: vi.fn(),
+      isInClient: vi.fn().mockReturnValue(false),
+      isLoggedIn: vi.fn().mockReturnValue(true),
+      login: vi.fn(),
+      logout: vi.fn(),
+      getIDToken: vi.fn(),
+      getAccessToken: vi.fn(),
+      permission: {
+        query: vi.fn().mockResolvedValue({ state: 'granted' as const }),
+        requestAll: vi.fn(),
+      },
     }
     const external = createLinePlatformLiffAdapter(externalSdk, vi.fn())
     external.reauthenticate('https://example.com/liff')
@@ -70,7 +78,12 @@ describe('LinePlatformLiffAdapter', () => {
     expect(externalSdk.login).toHaveBeenCalledWith({ redirectUri: 'https://example.com/liff' })
 
     const reload = vi.fn()
-    const liffSdk = { ...externalSdk, isInClient: vi.fn().mockReturnValue(true), login: vi.fn(), logout: vi.fn() }
+    const liffSdk = {
+      ...externalSdk,
+      isInClient: vi.fn().mockReturnValue(true),
+      login: vi.fn(),
+      logout: vi.fn(),
+    }
     const inClient = createLinePlatformLiffAdapter(liffSdk, reload)
     inClient.reauthenticate('https://example.com/liff')
     expect(reload).toHaveBeenCalledTimes(1)
@@ -105,13 +118,20 @@ describe('LinePlatformLiffAdapter', () => {
   // テストケース: Mini Appで未同意のprofile権限を要求する。
   // 期待値: prompt時だけ検証画面を開き、再確認でgrantedになった場合だけ成功する。
   test('requests and confirms Mini App profile permission', async () => {
-    const query = vi.fn()
+    const query = vi
+      .fn()
       .mockResolvedValueOnce({ state: 'prompt' })
       .mockResolvedValueOnce({ state: 'granted' })
     const requestAll = vi.fn().mockResolvedValue(undefined)
     const sdk = {
-      init: vi.fn(), isInClient: vi.fn(), isLoggedIn: vi.fn(), login: vi.fn(), logout: vi.fn(),
-      getIDToken: vi.fn(), getAccessToken: vi.fn(), permission: { query, requestAll },
+      init: vi.fn(),
+      isInClient: vi.fn(),
+      isLoggedIn: vi.fn(),
+      login: vi.fn(),
+      logout: vi.fn(),
+      getIDToken: vi.fn(),
+      getAccessToken: vi.fn(),
+      permission: { query, requestAll },
     }
 
     const adapter = createLinePlatformLiffAdapter(sdk)
@@ -127,8 +147,13 @@ describe('LinePlatformLiffAdapter', () => {
   test('rejects unavailable Mini App profile permission', async () => {
     const requestAll = vi.fn()
     const sdk = {
-      init: vi.fn(), isInClient: vi.fn(), isLoggedIn: vi.fn(), login: vi.fn(), logout: vi.fn(),
-      getIDToken: vi.fn(), getAccessToken: vi.fn(),
+      init: vi.fn(),
+      isInClient: vi.fn(),
+      isLoggedIn: vi.fn(),
+      login: vi.fn(),
+      logout: vi.fn(),
+      getIDToken: vi.fn(),
+      getAccessToken: vi.fn(),
       permission: { query: vi.fn().mockResolvedValue({ state: 'unavailable' }), requestAll },
     }
 

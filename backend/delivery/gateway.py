@@ -15,16 +15,23 @@ from linebot.v3.messaging.exceptions import ApiException
 from urllib3.exceptions import (
     NewConnectionError,
     ProtocolError,
+)
+from urllib3.exceptions import (
     TimeoutError as Urllib3TimeoutError,
 )
 
 from .types import (
     LinePushAccepted as LinkedLinePushAccepted,
+)
+from .types import (
     LinePushRejected as LinkedLinePushRejected,
+)
+from .types import (
     LinePushUnknown as LinkedLinePushUnknown,
+)
+from .types import (
     PushLinkedRecipientCommand,
 )
-
 
 _RECEIPT_ALT_TEXT = "受取確認"
 _RECEIPT_TEMPLATE_TEXT = "受け取り後にボタンを押してください。"
@@ -36,11 +43,7 @@ class ChannelPushGateway(Protocol):
     def push(
         self,
         command: PushLinkedRecipientCommand,
-    ) -> (
-        LinkedLinePushAccepted
-        | LinkedLinePushRejected
-        | LinkedLinePushUnknown
-    ): ...
+    ) -> LinkedLinePushAccepted | LinkedLinePushRejected | LinkedLinePushUnknown: ...
 
 
 def _is_linked_timeout_error(error):
@@ -65,10 +68,7 @@ def _is_connection_error(error):
         NewConnectionError,
         ProtocolError,
     )
-    return any(
-        isinstance(current, connection_errors)
-        for current in _linked_error_chain(error)
-    )
+    return any(isinstance(current, connection_errors) for current in _linked_error_chain(error))
 
 
 def _linked_error_chain(error):
@@ -100,12 +100,7 @@ def _linked_header(headers, name):
     lowered = name.lower()
     try:
         for key, value in items:
-            if (
-                isinstance(key, str)
-                and key.lower() == lowered
-                and isinstance(value, str)
-                and value
-            ):
+            if isinstance(key, str) and key.lower() == lowered and isinstance(value, str) and value:
                 return value
     except Exception:
         return None
@@ -160,11 +155,7 @@ class LINEChannelPushGateway:
             headers,
             "X-Line-Accepted-Request-Id",
         )
-        if (
-            allow_accepted_conflict
-            and status == 409
-            and accepted_request_id is not None
-        ):
+        if allow_accepted_conflict and status == 409 and accepted_request_id is not None:
             return LinkedLinePushAccepted(None, accepted_request_id)
 
         rejected_failures = {
@@ -213,9 +204,7 @@ class LINEChannelPushGateway:
             subject = command.subject.reveal_for_identity_binding()
             messages = [TextMessage(text=command.text)]
             if command.receipt_capability is not None:
-                capability = (
-                    command.receipt_capability.reveal_for_push_action()
-                )
+                capability = command.receipt_capability.reveal_for_push_action()
                 messages.append(
                     TemplateMessage(
                         altText=_RECEIPT_ALT_TEXT,
@@ -224,10 +213,7 @@ class LINEChannelPushGateway:
                             actions=[
                                 PostbackAction(
                                     label=_RECEIPT_ACTION_LABEL,
-                                    data=(
-                                        f"{_RECEIPT_ACTION_PREFIX}"
-                                        f"{capability}"
-                                    ),
+                                    data=(f"{_RECEIPT_ACTION_PREFIX}{capability}"),
                                 )
                             ],
                         ),

@@ -1,5 +1,8 @@
 """LINE account API の concrete dependency composition 境界。"""
 
+from linechannels.container import build_channel_reference_fence
+from linechannels.repositories import DjangoLineChannelDirectory
+
 from .gateway import HttpxLinePlatformGateway
 from .recipient_services import DefaultRecipientService
 from .repositories import DjangoAccountRepository
@@ -7,8 +10,6 @@ from .runtime import get_line_account_runtime, resolve_liff_linked_channel_polic
 from .session_services import DefaultAccountSessionService
 from .unlink_execution_lock import MySQLUnlinkExecutionLock
 from .unlink_services import DefaultAccountUnlinkService
-from linechannels.container import build_channel_reference_fence
-from linechannels.repositories import DjangoLineChannelDirectory
 
 
 def build_session_service() -> DefaultAccountSessionService:

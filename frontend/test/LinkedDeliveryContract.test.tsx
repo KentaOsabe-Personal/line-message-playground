@@ -12,7 +12,9 @@ import type {
 } from '../src/deliveryDto'
 import DeliveryForm from '../src/DeliveryForm'
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 const channelId = '11111111-1111-4111-8111-111111111111'
 const inactiveChannelId = '22222222-2222-4222-8222-222222222222'
@@ -73,10 +75,8 @@ const preview: LinkedPreviewResponse = {
   confirmationToken: 'opaque-confirmation',
 }
 
-const jsonResponse = (body: unknown, status = 200) => new Response(
-  JSON.stringify(body),
-  { status, headers: { 'Content-Type': 'application/json' } },
-)
+const jsonResponse = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
 const statusFor = (
   deliveryStatus: LinkedDeliveryStatus['status'],
@@ -110,9 +110,10 @@ const statusFor = (
       completedAt: common.completedAt!,
       error: {
         code: deliveryStatus === 'failed' ? 'permission' : 'timeout_unknown',
-        summary: deliveryStatus === 'failed'
-          ? 'LINEへの送信を完了できませんでした。'
-          : 'LINEの受付結果を確認できませんでした。',
+        summary:
+          deliveryStatus === 'failed'
+            ? 'LINEへの送信を完了できませんでした。'
+            : 'LINEの受付結果を確認できませんでした。',
       },
     }
   }
@@ -135,30 +136,30 @@ let container: HTMLDivElement
 let root: Root
 
 const clickButton = async (label: string) => {
-  const button = [...container.querySelectorAll('button')]
-    .find((candidate) => candidate.textContent === label)
+  const button = [...container.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent === label,
+  )
   if (button === undefined) throw new Error(`button not found: ${label}`)
   await act(async () => button.click())
 }
 
 const clickInput = async (name: string, value?: string) => {
-  const selector = value === undefined
-    ? `input[name="${name}"]`
-    : `input[name="${name}"][value="${value}"]`
-  const input = container.querySelector(selector) as HTMLInputElement | null
+  const selector =
+    value === undefined ? `input[name="${name}"]` : `input[name="${name}"][value="${value}"]`
+  const input = container.querySelector<HTMLInputElement>(selector)
   if (input === null) throw new Error(`input not found: ${selector}`)
   await act(async () => input.click())
 }
 
 const enterText = async (name: string, value: string) => {
-  const element = container.querySelector(`[name="${name}"]`) as
-    | HTMLInputElement
-    | HTMLTextAreaElement
-    | null
+  const element = container.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+    `[name="${name}"]`,
+  )
   if (element === null) throw new Error(`field not found: ${name}`)
-  const prototype = element instanceof HTMLTextAreaElement
-    ? HTMLTextAreaElement.prototype
-    : HTMLInputElement.prototype
+  const prototype =
+    element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype
   Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(element, value)
   await act(async () => element.dispatchEvent(new Event('input', { bubbles: true })))
 }
@@ -193,9 +194,10 @@ describe('linked delivery frontend contract', () => {
   // 期待値: protected relative APIへ公開payloadだけを送り、sendは一回、statusは同じoperationで一回だけ実行する。
   test('runs the production composition without resending an ambiguous operation', async () => {
     const requestLog: Array<{ path: string; init?: RequestInit }> = []
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (input: string | URL | Request, init?: RequestInit) => {
-        const path = String(input)
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
+        const path = input instanceof Request ? input.url : input.toString()
         requestLog.push({ path, init })
         if (path === '/api/deliveries/targets/channels/') {
           return jsonResponse({ items: channels })
@@ -209,23 +211,25 @@ describe('linked delivery frontend contract', () => {
           return jsonResponse(statusFor('unknown', 'confirmed'))
         }
         throw new Error(`unexpected path: ${path}`)
-      },
-    )
+      })
 
-    await act(async () => root.render(
-      <DeliveryForm createOperationId={() => operationId} />,
-    ))
+    await act(async () => root.render(<DeliveryForm createOperationId={() => operationId} />))
 
     expect(container.textContent).toContain('チャネルが無効です')
-    expect((container.querySelector(
-      `input[name="channelId"][value="${inactiveChannelId}"]`,
-    ) as HTMLInputElement).disabled).toBe(true)
+    expect(
+      (
+        container.querySelector(
+          `input[name="channelId"][value="${inactiveChannelId}"]`,
+        ) as HTMLInputElement
+      ).disabled,
+    ).toBe(true)
     expect(container.querySelectorAll('fieldset legend')[0]?.textContent).toBe('配信元チャネル')
     expect(container.querySelector('input[name="recipientId"]')).toBeNull()
 
     await enterPreview()
-    const sendButton = [...container.querySelectorAll('button')]
-      .find((candidate) => candidate.textContent === '確認した内容を送信')!
+    const sendButton = [...container.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent === '確認した内容を送信',
+    )!
     await act(async () => {
       sendButton.click()
       sendButton.click()
@@ -237,7 +241,7 @@ describe('linked delivery frontend contract', () => {
     )
     expect(sendCalls).toHaveLength(1)
     expect(statusCalls).toHaveLength(1)
-    expect(JSON.parse(String(sendCalls[0]?.init?.body))).toEqual({
+    expect(JSON.parse(sendCalls[0]?.init?.body as string)).toEqual({
       channelId,
       recipientId,
       subject: '障害通知',
@@ -269,13 +273,17 @@ describe('linked delivery frontend contract', () => {
   // テストケース: 既定compositionのtarget応答に余剰secretとPII fieldが含まれる。
   // 期待値: strict DTO境界でsafe protocol errorへ変換し、生値や任意target操作を画面へ出さない。
   test('contains unsafe target payloads behind a safe accessible protocol error', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
-      items: [{
-        ...channels[0],
-        accessToken: secretCanary,
-        lineSubject: piiCanary,
-      }],
-    }))
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        items: [
+          {
+            ...channels[0],
+            accessToken: secretCanary,
+            lineSubject: piiCanary,
+          },
+        ],
+      }),
+    )
 
     await act(async () => root.render(<DeliveryForm />))
 
@@ -286,8 +294,9 @@ describe('linked delivery frontend contract', () => {
     expect(container.textContent).not.toContain(piiCanary)
     expect(container.querySelector('[name="lineUserId"]')).toBeNull()
     expect(container.querySelector('[name="accessToken"]')).toBeNull()
-    expect((container.querySelector('button[type="submit"]') as HTMLButtonElement).disabled)
-      .toBe(true)
+    expect((container.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(
+      true,
+    )
   })
 
   // テストケース: live targetとpreviewに現在の表示名を返し、送信後はdisplay nameを持たないstatusへ遷移する。
@@ -295,10 +304,12 @@ describe('linked delivery frontend contract', () => {
   test('shows the live display name only before the delivery status result', async () => {
     const client: LinkedDeliveryApiClient = {
       listChannels: vi.fn().mockResolvedValue([channels[0]]),
-      listRecipients: vi.fn().mockResolvedValue([{
-        ...recipients[0],
-        displayName: liveDisplayNameCanary,
-      }]),
+      listRecipients: vi.fn().mockResolvedValue([
+        {
+          ...recipients[0],
+          displayName: liveDisplayNameCanary,
+        },
+      ]),
       preview: vi.fn().mockResolvedValue({
         ...preview,
         recipientDisplayName: liveDisplayNameCanary,
@@ -307,12 +318,9 @@ describe('linked delivery frontend contract', () => {
       checkStatus: vi.fn(),
     }
 
-    await act(async () => root.render(
-      <DeliveryForm
-        linkedClient={client}
-        createOperationId={() => operationId}
-      />,
-    ))
+    await act(async () =>
+      root.render(<DeliveryForm linkedClient={client} createOperationId={() => operationId} />),
+    )
     await clickInput('channelId', channelId)
     expect(container.textContent).toContain(liveDisplayNameCanary)
     await clickInput('recipientId', recipientId)
@@ -355,12 +363,14 @@ describe('linked delivery frontend contract', () => {
         window.sessionStorage.clear()
         root = createRoot(container)
         const result = statusFor(deliveryStatus, receiptStatus)
-        await act(async () => root.render(
-          <DeliveryForm
-            linkedClient={clientWithStatus(result)}
-            createOperationId={() => operationId}
-          />,
-        ))
+        await act(async () =>
+          root.render(
+            <DeliveryForm
+              linkedClient={clientWithStatus(result)}
+              createOperationId={() => operationId}
+            />,
+          ),
+        )
         await clickInput('channelId', channelId)
         await clickInput('recipientId', recipientId)
         await enterText('subject', '障害通知')
@@ -376,15 +386,14 @@ describe('linked delivery frontend contract', () => {
         expect(container.textContent).not.toContain('端末に到達')
         expect(container.textContent).not.toContain('既読')
         if (receiptStatus === 'confirmed') {
-          expect(receiptSummary?.querySelector(
-            `time[datetime="${receiptConfirmedAt}"]`,
-          )).not.toBeNull()
+          expect(
+            receiptSummary?.querySelector(`time[datetime="${receiptConfirmedAt}"]`),
+          ).not.toBeNull()
         }
         if (deliveryStatus === 'processing') {
           expect(container.querySelector('input[name="subject"]')).toBeNull()
           expect(container.querySelector('input[name="channelId"]')).toBeNull()
-          expect(container.querySelector('button[type="button"]')?.textContent)
-            .toBe('状態を再確認')
+          expect(container.querySelector('button[type="button"]')?.textContent).toBe('状態を再確認')
         }
         if (deliveryStatus === 'unknown') {
           expect(container.textContent).toContain('状態だけを再確認してください')

@@ -207,4 +207,3 @@ class AdminAPIConcurrencyTests(TransactionTestCase):
             HTTP_X_CSRFTOKEN=csrf,
         )
         self.assertEqual(denied.status_code, 401)
-

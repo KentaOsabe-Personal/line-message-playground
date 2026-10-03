@@ -136,12 +136,8 @@ class AccountRepositoryTests(TestCase):
         now = timezone.now()
         with transaction.atomic():
             locked = self.repository.lock_owner_account()
-            expired = self.repository.create_owner_session(
-                locked, now - timedelta(seconds=1)
-            )
-            active = self.repository.create_owner_session(
-                locked, now + timedelta(hours=1)
-            )
+            expired = self.repository.create_owner_session(locked, now - timedelta(seconds=1))
+            active = self.repository.create_owner_session(locked, now + timedelta(hours=1))
 
         self.assertIsNone(self.repository.get_session(expired.public_id, now))
         self.assertEqual(self.repository.get_session(active.public_id, now), active)
@@ -323,9 +319,7 @@ class AccountRepositoryTests(TestCase):
         )
         with transaction.atomic():
             locked = self.repository.lock_owner_account()
-            self.repository.create_owner_session(
-                locked, timezone.now() + timedelta(hours=8)
-            )
+            self.repository.create_owner_session(locked, timezone.now() + timedelta(hours=8))
             self.repository.create_recipient(
                 locked,
                 NewRecipient(
@@ -382,9 +376,7 @@ class AccountRepositoryTests(TestCase):
             new_identity = self.repository.upsert_identity(
                 self.verified_identity(subject=f"U{uuid4().hex}", display_name="New")
             )
-            owner = self.repository.bind_owner_identity(
-                owner, new_identity.public_id
-            )
+            owner = self.repository.bind_owner_identity(owner, new_identity.public_id)
             new_session = self.repository.create_owner_session(
                 owner, timezone.now() + timedelta(hours=8)
             )
@@ -400,14 +392,14 @@ class AccountRepositoryTests(TestCase):
             self.repository.begin_unlink(owner, new_generation)
 
         for operation in ("marker", "finalize"):
-            with self.subTest(operation=operation), self.assertRaises(
-                AccountStateError
-            ) as raised, transaction.atomic():
+            with (
+                self.subTest(operation=operation),
+                self.assertRaises(AccountStateError) as raised,
+                transaction.atomic(),
+            ):
                 locked = self.repository.lock_owner_account()
                 if operation == "marker":
-                    self.repository.mark_line_deauthorized(
-                        locked, old_generation, timezone.now()
-                    )
+                    self.repository.mark_line_deauthorized(locked, old_generation, timezone.now())
                 else:
                     self.repository.finalize_unlink(locked, old_generation)
             self.assertEqual(raised.exception.code, "unlink_attempt_stale")
@@ -415,9 +407,7 @@ class AccountRepositoryTests(TestCase):
         owner = OwnerAccount.objects.get(slot=1)
         self.assertEqual(owner.identity.public_id, new_identity.public_id)
         self.assertEqual(owner.unlink_generation, new_generation)
-        self.assertTrue(
-            OwnerSession.objects.filter(public_id=new_session.public_id).exists()
-        )
+        self.assertTrue(OwnerSession.objects.filter(public_id=new_session.public_id).exists())
         self.assertTrue(
             DeliveryRecipient.objects.filter(public_id=new_recipient.public_id).exists()
         )
@@ -429,9 +419,7 @@ class AccountRepositoryTests(TestCase):
         channel = self.create_channel()
         with transaction.atomic():
             locked = self.repository.lock_owner_account()
-            self.repository.create_owner_session(
-                locked, timezone.now() + timedelta(hours=8)
-            )
+            self.repository.create_owner_session(locked, timezone.now() + timedelta(hours=8))
             self.repository.create_recipient(
                 locked,
                 NewRecipient(
@@ -443,9 +431,7 @@ class AccountRepositoryTests(TestCase):
             generation = uuid4()
             pending = self.repository.begin_unlink(locked, generation)
             confirmed_at = timezone.now()
-            self.repository.mark_line_deauthorized(
-                pending, generation, confirmed_at
-            )
+            self.repository.mark_line_deauthorized(pending, generation, confirmed_at)
 
         with mock.patch.object(
             self.repository,

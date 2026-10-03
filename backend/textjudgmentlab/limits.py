@@ -7,7 +7,6 @@ from threading import Lock
 from time import monotonic
 from typing import Literal
 
-
 _WINDOW_SECONDS = 60.0
 _MAX_STARTS = 10
 

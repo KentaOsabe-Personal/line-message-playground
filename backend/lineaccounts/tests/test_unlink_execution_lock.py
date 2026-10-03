@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock, patch
 
 import MySQLdb
-
 from django.db import connection
 from django.test import SimpleTestCase, TransactionTestCase
 
@@ -29,7 +28,9 @@ class MySQLUnlinkExecutionLockTests(SimpleTestCase):
                 self.assertTrue(acquired)
 
         self.assertEqual(cursor.execute.call_count, 2)
-        self.assertEqual(cursor.execute.call_args_list[0].args[1], ["lineaccounts-unlink-owner-1-v1"])
+        self.assertEqual(
+            cursor.execute.call_args_list[0].args[1], ["lineaccounts-unlink-owner-1-v1"]
+        )
 
     # テストケース: 別requestが同じowner lockを保持中に取得する
     # 期待値: busyをFalseで返し既存所有権を解放しない

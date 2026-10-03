@@ -47,15 +47,23 @@ export interface ChannelAdminApiClient {
 }
 
 export class ChannelAdminApiError extends Error {
-  constructor(public readonly error: SafeApiError, public readonly httpStatus?: number) {
+  constructor(
+    public readonly error: SafeApiError,
+    public readonly httpStatus?: number,
+  ) {
     super(error.summary)
     this.name = 'ChannelAdminApiError'
   }
 }
 
-const protocolError = (httpStatus?: number) => new ChannelAdminApiError({
-  code: 'protocol_error', summary: '応答形式を確認できません。',
-}, httpStatus)
+const protocolError = (httpStatus?: number) =>
+  new ChannelAdminApiError(
+    {
+      code: 'protocol_error',
+      summary: '応答形式を確認できません。',
+    },
+    httpStatus,
+  )
 const assertChannelId = (channelId: string) => {
   if (!isChannelAdminUuid(channelId)) throw protocolError()
 }
@@ -97,22 +105,67 @@ export function createChannelAdminApiClient(
     return `/api/line/channels/${channelId}/`
   }
   return Object.freeze({
-    listChannels: (options: ReadRequestOptions = {}) => requestOnce(client, { path: '/api/line/channels/', method: 'GET', ...options }, parseChannelAdminList),
-    getChannel: (channelId: string, options: ReadRequestOptions = {}) => requestOnce(client, { path: channelPath(channelId), method: 'GET', ...options }, parseChannelAdminItem),
-    register: (input: CreateChannelInput) => requestOnce(client, {
-      path: '/api/line/channels/', method: 'POST', body: input,
-    }, parseChannelAdminItem),
-    update: (channelId: string, input: UpdateChannelInput) => requestOnce(client, {
-      path: channelPath(channelId), method: 'PATCH', body: input,
-    }, parseChannelAdminItem),
-    setState: (channelId: string, input: SetChannelStateInput) => requestOnce(client, {
-      path: `${channelPath(channelId)}state/`, method: 'POST', body: input,
-    }, parseChannelAdminItem),
-    delete: (channelId: string, expectedUpdatedAt: string) => requestOnce(client, {
-      path: channelPath(channelId), method: 'DELETE', body: { expectedUpdatedAt },
-    }, parseDeletedChannel),
-    checkConnection: (channelId: string) => requestOnce(client, {
-      path: `${channelPath(channelId)}connection-check/`, method: 'POST', body: {},
-    }, parseConnectionCheck),
+    listChannels: (options: ReadRequestOptions = {}) =>
+      requestOnce(
+        client,
+        { path: '/api/line/channels/', method: 'GET', ...options },
+        parseChannelAdminList,
+      ),
+    getChannel: (channelId: string, options: ReadRequestOptions = {}) =>
+      requestOnce(
+        client,
+        { path: channelPath(channelId), method: 'GET', ...options },
+        parseChannelAdminItem,
+      ),
+    register: (input: CreateChannelInput) =>
+      requestOnce(
+        client,
+        {
+          path: '/api/line/channels/',
+          method: 'POST',
+          body: input,
+        },
+        parseChannelAdminItem,
+      ),
+    update: (channelId: string, input: UpdateChannelInput) =>
+      requestOnce(
+        client,
+        {
+          path: channelPath(channelId),
+          method: 'PATCH',
+          body: input,
+        },
+        parseChannelAdminItem,
+      ),
+    setState: (channelId: string, input: SetChannelStateInput) =>
+      requestOnce(
+        client,
+        {
+          path: `${channelPath(channelId)}state/`,
+          method: 'POST',
+          body: input,
+        },
+        parseChannelAdminItem,
+      ),
+    delete: (channelId: string, expectedUpdatedAt: string) =>
+      requestOnce(
+        client,
+        {
+          path: channelPath(channelId),
+          method: 'DELETE',
+          body: { expectedUpdatedAt },
+        },
+        parseDeletedChannel,
+      ),
+    checkConnection: (channelId: string) =>
+      requestOnce(
+        client,
+        {
+          path: `${channelPath(channelId)}connection-check/`,
+          method: 'POST',
+          body: {},
+        },
+        parseConnectionCheck,
+      ),
   })
 }

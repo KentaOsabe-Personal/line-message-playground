@@ -116,9 +116,7 @@ class DefaultChannelAdminService:
                 proof = self._lock_owner(owner)
                 if isinstance(proof, AdminServiceFailed):
                     return proof
-                channel = self._repository.get_for_owner_provider(
-                    channel_id, proof.provider_id
-                )
+                channel = self._repository.get_for_owner_provider(channel_id, proof.provider_id)
                 if channel is None:
                     return AdminServiceFailed("channel_not_found")
                 return ChannelReadSucceeded(channel)
@@ -146,7 +144,7 @@ class DefaultChannelAdminService:
                 if result.status == "failed":
                     return AdminServiceFailed(self._mutation_code(result.code))
                 return self._project_mutation(result.channel.public_id, proof.provider_id)
-        except (AttributeError, TypeError):
+        except AttributeError, TypeError:
             return AdminServiceFailed("invalid_input")
         except PersistenceError as error:
             return AdminServiceFailed(self._storage_code(error))
@@ -165,13 +163,15 @@ class DefaultChannelAdminService:
                     command.expected_updated_at,
                 )
                 if mutation_fence in {
-                    "channel_not_found", "stale_channel", "deactivation_conflict"
+                    "channel_not_found",
+                    "stale_channel",
+                    "deactivation_conflict",
                 }:
                     return AdminServiceFailed(mutation_fence)
                 if mutation_fence != "allowed" and isinstance(mutation_fence, str):
                     return AdminServiceFailed("storage_unavailable")
                 return self._update_locked(proof, command, state_change=False)
-        except (AttributeError, TypeError):
+        except AttributeError, TypeError:
             return AdminServiceFailed("invalid_input")
         except PersistenceError as error:
             return AdminServiceFailed(self._storage_code(error))
@@ -195,12 +195,8 @@ class DefaultChannelAdminService:
                     ),
                 )
                 if isinstance(result, DeactivationFailed):
-                    return AdminServiceFailed(
-                        self._mutation_code(result.code, state_change=True)
-                    )
-                return self._project_mutation(
-                    result.channel_public_id, result.provider_id
-                )
+                    return AdminServiceFailed(self._mutation_code(result.code, state_change=True))
+                return self._project_mutation(result.channel_public_id, result.provider_id)
             with transaction.atomic(using=self._using):
                 proof = self._lock_owner(owner)
                 if isinstance(proof, AdminServiceFailed):
@@ -219,11 +215,9 @@ class DefaultChannelAdminService:
                 )
                 result = self._foundation_service.update(foundation_command)
                 if result.status == "failed":
-                    return AdminServiceFailed(
-                        self._mutation_code(result.code, state_change=True)
-                    )
+                    return AdminServiceFailed(self._mutation_code(result.code, state_change=True))
                 return self._project_mutation(result.channel.public_id, proof.provider_id)
-        except (AttributeError, TypeError):
+        except AttributeError, TypeError:
             return AdminServiceFailed("invalid_input")
         except PersistenceError as error:
             return AdminServiceFailed(self._storage_code(error))
@@ -257,7 +251,7 @@ class DefaultChannelAdminService:
                     return AdminServiceFailed("storage_unavailable")
                 public_id, label = self._repository.delete_locked(locked)
                 return ChannelDeleteSucceeded(public_id, label)
-        except (AttributeError, TypeError):
+        except AttributeError, TypeError:
             return AdminServiceFailed("invalid_input")
         except PersistenceError as error:
             return AdminServiceFailed(self._storage_code(error))
@@ -275,9 +269,7 @@ class DefaultChannelAdminService:
             return AdminServiceFailed(self._storage_code(error))
 
         if isinstance(snapshot_result, AdminRepositoryUnavailable):
-            return ConnectionCheckCompleted(
-                "credential_unavailable", self._aware_now()
-            )
+            return ConnectionCheckCompleted("credential_unavailable", self._aware_now())
         if isinstance(snapshot_result, AdminRepositoryFailed):
             return AdminServiceFailed(snapshot_result.code)
         if not isinstance(snapshot_result, SnapshotAvailable):
@@ -292,8 +284,7 @@ class DefaultChannelAdminService:
                 if isinstance(final_proof, AdminServiceFailed):
                     return final_proof
                 if (
-                    final_proof.identity_public_id
-                    != initial_proof.identity_public_id
+                    final_proof.identity_public_id != initial_proof.identity_public_id
                     or final_proof.provider_id != initial_proof.provider_id
                 ):
                     return AdminServiceFailed("owner_operation_blocked")
@@ -337,9 +328,7 @@ class DefaultChannelAdminService:
             )
         )
         if result.status == "failed":
-            return AdminServiceFailed(
-                self._mutation_code(result.code, state_change=state_change)
-            )
+            return AdminServiceFailed(self._mutation_code(result.code, state_change=state_change))
         return self._project_mutation(result.channel.public_id, proof.provider_id)
 
     def _project_mutation(self, public_id: UUID, provider_id: str):
@@ -368,8 +357,6 @@ class DefaultChannelAdminService:
     def _mutation_code(code: str, *, state_change: bool = False):
         mapping = {
             "retryable": "storage_retryable",
-            "invalid_transition": (
-                "credential_unavailable" if state_change else "invalid_input"
-            ),
+            "invalid_transition": ("credential_unavailable" if state_change else "invalid_input"),
         }
         return mapping.get(code, code)

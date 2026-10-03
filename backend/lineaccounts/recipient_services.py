@@ -113,21 +113,15 @@ class DefaultRecipientService:
 
         with transaction.atomic(using=self._using):
             owner = self._repository.lock_owner_account()
-            existing = self._repository.get_recipient(
-                owner, identity_id, channel_id
-            )
+            existing = self._repository.get_recipient(owner, identity_id, channel_id)
             if existing is not None:
-                return RecipientMutationSucceeded(
-                    self._project(channel, existing)
-                )
+                return RecipientMutationSucceeded(self._project(channel, existing))
 
         friendship_state: Literal["friend", "not_friend", "unknown"] = "unknown"
         if self._linked_channel_policy.is_direct(channel_id):
             if access_token is None:
                 return RecipientMutationFailed("invalid_line_proof")
-            verification = self._gateway.verify_user_access_token(
-                access_token, identity.subject
-            )
+            verification = self._gateway.verify_user_access_token(access_token, identity.subject)
             if isinstance(verification, InvalidLineProof):
                 return RecipientMutationFailed("invalid_line_proof")
             if isinstance(verification, LinePlatformUnavailable):
@@ -146,9 +140,7 @@ class DefaultRecipientService:
         with transaction.atomic(using=self._using):
             owner = self._repository.lock_owner_account()
             current_channel = self._directory.get(channel_id)
-            failure = self._validate_channel(
-                current_channel, identity.provider_id
-            )
+            failure = self._validate_channel(current_channel, identity.provider_id)
             if failure is not None:
                 return failure
             recipient = self._repository.create_recipient(
@@ -159,9 +151,7 @@ class DefaultRecipientService:
                     friendship_state=friendship_state,
                 ),
             )
-        return RecipientMutationSucceeded(
-            self._project(current_channel, recipient)
-        )
+        return RecipientMutationSucceeded(self._project(current_channel, recipient))
 
     def set_enabled(
         self,
@@ -174,9 +164,7 @@ class DefaultRecipientService:
             raise AccountStateError("identity_not_found")
         with transaction.atomic(using=self._using):
             owner = self._repository.lock_owner_account()
-            existing = self._repository.get_recipient_by_id(
-                owner, identity_id, recipient_id
-            )
+            existing = self._repository.get_recipient_by_id(owner, identity_id, recipient_id)
             if existing is None:
                 return RecipientMutationFailed("recipient_not_found")
             channel = self._directory.get(existing.channel_id)
@@ -192,22 +180,16 @@ class DefaultRecipientService:
             )
         return RecipientMutationSucceeded(self._project(channel, recipient))
 
-    def unlink(
-        self, identity_id: UUID, recipient_id: UUID
-    ) -> RecipientMutationResult:
+    def unlink(self, identity_id: UUID, recipient_id: UUID) -> RecipientMutationResult:
         with transaction.atomic(using=self._using):
             owner = self._repository.lock_owner_account()
-            existing = self._repository.get_recipient_by_id(
-                owner, identity_id, recipient_id
-            )
+            existing = self._repository.get_recipient_by_id(owner, identity_id, recipient_id)
             if existing is None:
                 return RecipientMutationFailed("recipient_not_found")
             channel = self._directory.get(existing.channel_id)
             if channel is None:
                 return RecipientMutationFailed("channel_unavailable")
-            deleted = self._repository.delete_recipient(
-                owner, identity_id, recipient_id
-            )
+            deleted = self._repository.delete_recipient(owner, identity_id, recipient_id)
             if not deleted:
                 return RecipientMutationFailed("recipient_not_found")
         return RecipientMutationSucceeded(self._project(channel, None))
@@ -234,17 +216,13 @@ class DefaultRecipientService:
                 delivery_available=False,
             )
         delivery_available = (
-            recipient.enabled
-            and recipient.friendship_state == "friend"
-            and channel.is_active
+            recipient.enabled and recipient.friendship_state == "friend" and channel.is_active
         )
         return ChannelLinkView(
             channel_id=channel.public_id,
             channel_label=channel.label,
             channel_state="active" if channel.is_active else "inactive",
-            link_state=(
-                "linked_enabled" if recipient.enabled else "linked_disabled"
-            ),
+            link_state=("linked_enabled" if recipient.enabled else "linked_disabled"),
             friendship_state=recipient.friendship_state,
             delivery_available=delivery_available,
             recipient_id=recipient.public_id,

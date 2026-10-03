@@ -29,13 +29,12 @@ from linechannels.admin_types import (
 from .catalog import DefaultTemplateCatalog
 from .confirmation import DefaultRichMenuConfirmation
 from .gateway import (
-    GatewayAccepted,
     CreateAccepted,
+    GatewayAccepted,
     GatewayRejected,
     GatewayUnknown,
     RichMenuArea,
     RichMenuBounds,
-    RichMenuDefaultPresent,
     RichMenuGateway,
     RichMenuGatewayContext,
     RichMenuObject,
@@ -44,15 +43,17 @@ from .gateway import (
 from .reconciliation import (
     DefaultRichMenuReconciler,
     ManagedResourceTarget,
-    ReconcileContext,
-    Reconciliation,
     RecheckConfirmed,
     RecheckContext,
     RecheckUnknown,
+    ReconcileContext,
+    Reconciliation,
 )
 from .renderer import DefaultDeterministicRenderer
 from .repository import (
     AcceptedOperation,
+    DisableUnlinkRejected,
+    DisableUnlinkReplay,
     OperationAccepted,
     OperationConflict,
     OperationReplay,
@@ -60,45 +61,43 @@ from .repository import (
     RecoveryAccepted,
     RecoveryHandoffResult,
     RecoveryOutcome,
+    ReservedDisableUnlink,
+    ReserveDisableUnlink,
     StageClaimed,
     StageConflict,
     StageExpired,
     StageOutcome,
-    DisableUnlinkRejected,
-    DisableUnlinkReplay,
-    ReserveDisableUnlink,
-    ReservedDisableUnlink,
 )
 from .types import (
     ChannelStateView,
-    ConfirmationRejected,
     ConfirmationAccepted,
+    ConfirmationRejected,
     DefaultObservation,
     EffectiveCapabilities,
     HistoryPage,
     HistorySummary,
     InputFieldError,
     InputRejected,
+    IntegrationNotReady,
     IssuedConfirmation,
+    MutationReady,
     NextAllowedAction,
     NormalizedTemplate,
     ObservationKind,
-    OperationView,
     OperationCommand,
     OperationKind,
     OperationStage,
     OperationStatus,
+    OperationView,
     PreviewCommand,
     PreviewSnapshot,
     PreviewView,
     PreviewWarning,
-    RenderRejected,
     RenderedImage,
+    RenderRejected,
+    ResourceLifecycle,
     SafeResultCode,
     TemplateInput,
-    ResourceLifecycle,
-    IntegrationNotReady,
-    MutationReady,
 )
 
 
@@ -112,9 +111,7 @@ def _storage_error_code(error: BaseException) -> SafeResultCode:
 
 @runtime_checkable
 class MutationReadiness(Protocol):
-    def authorize(
-        self, kind: OperationKind
-    ) -> MutationReady | IntegrationNotReady: ...
+    def authorize(self, kind: OperationKind) -> MutationReady | IntegrationNotReady: ...
 
     def project(
         self,
@@ -133,9 +130,7 @@ class DefaultMutationReadiness:
             OperationKind.CLEANUP,
         }
     )
-    _READ_ACTIONS = frozenset(
-        {NextAllowedAction.GET_STATE, NextAllowedAction.VIEW_HISTORY}
-    )
+    _READ_ACTIONS = frozenset({NextAllowedAction.GET_STATE, NextAllowedAction.VIEW_HISTORY})
     _RECOVERY_ACTIONS = frozenset(
         {
             NextAllowedAction.UNLINK,
@@ -155,9 +150,7 @@ class DefaultMutationReadiness:
             "enabled",
         } and (mode == "read_only" or integration_complete)
 
-    def authorize(
-        self, kind: OperationKind
-    ) -> MutationReady | IntegrationNotReady:
+    def authorize(self, kind: OperationKind) -> MutationReady | IntegrationNotReady:
         if not isinstance(kind, OperationKind):
             return IntegrationNotReady(reason="unsupported_operation")
         if not self.configuration_valid or self._mode == "read_only":
@@ -175,13 +168,9 @@ class DefaultMutationReadiness:
         if not isinstance(actions, tuple) or not all(
             isinstance(action, NextAllowedAction) for action in actions
         ):
-            return EffectiveCapabilities(
-                "unavailable", (), "integration_not_ready"
-            )
+            return EffectiveCapabilities("unavailable", (), "integration_not_ready")
         if not self.configuration_valid:
-            return EffectiveCapabilities(
-                "unavailable", (), "integration_not_ready"
-            )
+            return EffectiveCapabilities("unavailable", (), "integration_not_ready")
         if channel_active is not True:
             return EffectiveCapabilities(
                 "read_only",
@@ -210,9 +199,8 @@ class PreviewRequest:
     def __post_init__(self) -> None:
         if not isinstance(self.channel_public_id, UUID):
             raise ValueError("invalid preview channel")
-        if (
-            not isinstance(self.expected_channel_revision, datetime)
-            or timezone.is_naive(self.expected_channel_revision)
+        if not isinstance(self.expected_channel_revision, datetime) or timezone.is_naive(
+            self.expected_channel_revision
         ):
             raise ValueError("invalid preview channel revision")
         if not isinstance(self.template, (TemplateInput, NormalizedTemplate)):
@@ -236,8 +224,7 @@ class ServiceFailed:
         if not isinstance(self.code, SafeResultCode):
             raise ValueError("invalid service failure code")
         if not isinstance(self.next_allowed_actions, tuple) or not all(
-            isinstance(action, NextAllowedAction)
-            for action in self.next_allowed_actions
+            isinstance(action, NextAllowedAction) for action in self.next_allowed_actions
         ):
             raise ValueError("invalid service failure actions")
         if not isinstance(self.errors, tuple) or not all(
@@ -359,9 +346,7 @@ class HistoryRequest:
             raise ValueError("invalid history channel")
         if type(self.limit) is not int or not 1 <= self.limit <= 50:
             raise ValueError("invalid history limit")
-        if self.cursor is not None and (
-            not isinstance(self.cursor, str) or not self.cursor
-        ):
+        if self.cursor is not None and (not isinstance(self.cursor, str) or not self.cursor):
             raise ValueError("invalid history cursor")
 
 
@@ -447,7 +432,7 @@ class DefaultRichMenuService:
 
         try:
             rich_menu = self._build_rich_menu_object(normalized)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return ServiceFailed(SafeResultCode.INVALID_INPUT)
         gateway_context = RichMenuGatewayContext(
             channel_public_id=snapshot.channel_public_id,
@@ -571,9 +556,7 @@ class DefaultRichMenuService:
         *,
         expected_channel_revision: datetime | None = None,
     ) -> StateResult:
-        if not isinstance(owner, OwnerOperationContext) or not isinstance(
-            channel_id, UUID
-        ):
+        if not isinstance(owner, OwnerOperationContext) or not isinstance(channel_id, UUID):
             return ServiceFailed(SafeResultCode.AUTHENTICATION_REQUIRED)
         resolved, inactive, failure = self._resolve_state_channel(
             owner,
@@ -611,16 +594,19 @@ class DefaultRichMenuService:
         refreshed = self._repository.get_state(scope)
         state = refreshed if isinstance(refreshed, ChannelStateView) else state
         return StateSucceeded(
-            state=self._with_effective_capabilities(state.__class__(
-                channel_public_id=state.channel_public_id,
-                current_resource=state.current_resource,
-                blocking_operation=state.blocking_operation,
-                active_operation=state.active_operation,
-                cleanup_resources=state.cleanup_resources,
-                latest_observation=reconciliation.observation,
-                history_summary=state.history_summary,
-                next_allowed_actions=reconciliation.next_allowed_actions,
-            ), active=True)
+            state=self._with_effective_capabilities(
+                state.__class__(
+                    channel_public_id=state.channel_public_id,
+                    current_resource=state.current_resource,
+                    blocking_operation=state.blocking_operation,
+                    active_operation=state.active_operation,
+                    cleanup_resources=state.cleanup_resources,
+                    latest_observation=reconciliation.observation,
+                    history_summary=state.history_summary,
+                    next_allowed_actions=reconciliation.next_allowed_actions,
+                ),
+                active=True,
+            )
         )
 
     def _with_effective_capabilities(
@@ -635,14 +621,10 @@ class DefaultRichMenuService:
             latest_observation=state.latest_observation,
             history_summary=state.history_summary,
             next_allowed_actions=state.next_allowed_actions,
-            capabilities=self._readiness.project(
-                state.next_allowed_actions, channel_active=active
-            ),
+            capabilities=self._readiness.project(state.next_allowed_actions, channel_active=active),
         )
 
-    def get_operation(
-        self, owner: OwnerOperationContext, operation_id: UUID
-    ) -> OperationResult:
+    def get_operation(self, owner: OwnerOperationContext, operation_id: UUID) -> OperationResult:
         proof, failure = self._lock_owner(owner)
         if failure is not None:
             return failure
@@ -670,9 +652,7 @@ class DefaultRichMenuService:
             return ServiceFailed(SafeResultCode.CHANNEL_UNAVAILABLE)
         return OperationSucceeded(operation)
 
-    def list_history(
-        self, owner: OwnerOperationContext, query
-    ) -> HistoryResult:
+    def list_history(self, owner: OwnerOperationContext, query) -> HistoryResult:
         proof, failure = self._lock_owner(owner)
         if failure is not None:
             return failure
@@ -684,9 +664,8 @@ class DefaultRichMenuService:
                     channel_public_id=query.channel_public_id,
                 )
                 from .repository import HistoryQuery
-                repository_query = HistoryQuery(
-                    scope=scope, limit=query.limit, cursor=query.cursor
-                )
+
+                repository_query = HistoryQuery(scope=scope, limit=query.limit, cursor=query.cursor)
             else:
                 scope = query.scope
                 if (
@@ -697,7 +676,7 @@ class DefaultRichMenuService:
                     return ServiceFailed(SafeResultCode.CHANNEL_UNAVAILABLE)
                 repository_query = query
             history = self._repository.list_history(repository_query)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return ServiceFailed(SafeResultCode.INVALID_INPUT)
         except Exception:
             return ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
@@ -745,9 +724,7 @@ class DefaultRichMenuService:
             # targetは公開commandから受けず、snapshot取得用の型条件だけを満たす。
             target_resource_id=command.deactivation_operation_id,
         )
-        proof, snapshot, failure = self._resolve_operation_channel(
-            command.owner, probe_command
-        )
+        proof, snapshot, failure = self._resolve_operation_channel(command.owner, probe_command)
         if failure is not None:
             return failure
         assert proof is not None and snapshot is not None
@@ -888,9 +865,7 @@ class DefaultRichMenuService:
         if reconciliation.observation.kind is ObservationKind.UNKNOWN:
             return ServiceFailed(SafeResultCode.OBSERVATION_UNKNOWN)
         expected_default_fingerprint = reconciliation.observation.fingerprint
-        observation_failure = self._record_observation(
-            scope, reconciliation.observation
-        )
+        observation_failure = self._record_observation(scope, reconciliation.observation)
         if observation_failure is not None:
             return observation_failure
         scope_failure = self._verify_scope_unchanged(owner, snapshot)
@@ -1078,9 +1053,7 @@ class DefaultRichMenuService:
         )
         if isinstance(accepted, OperationResult):
             return accepted
-        claim = self._repository.claim_stage(
-            command.operation_id, OperationStage.LOCAL_RELEASE
-        )
+        claim = self._repository.claim_stage(command.operation_id, OperationStage.LOCAL_RELEASE)
         if isinstance(claim, StageExpired):
             return OperationSucceeded(claim.operation)
         if isinstance(claim, StageConflict):
@@ -1154,9 +1127,7 @@ class DefaultRichMenuService:
                 OperationStage.UPLOADING,
             }
             if cleanup_after_observation and context.candidate is not None:
-                cleanup_failure = self._mark_resource_cleanup_required(
-                    context.candidate.public_id
-                )
+                cleanup_failure = self._mark_resource_cleanup_required(context.candidate.public_id)
                 if cleanup_failure is not None:
                     return cleanup_failure
             handoff = self._complete_recovery_confirmed(
@@ -1185,9 +1156,7 @@ class DefaultRichMenuService:
                 if isinstance(proof, OwnerFenceFailed):
                     return None, None, self._map_owner_failure(proof.code)
                 if not isinstance(proof, OwnerActiveProof):
-                    return None, None, ServiceFailed(
-                        SafeResultCode.OWNER_OPERATION_BLOCKED
-                    )
+                    return None, None, ServiceFailed(SafeResultCode.OWNER_OPERATION_BLOCKED)
                 result = self._channel_port.snapshot_exact(
                     ChannelSnapshotCommand(
                         channel_public_id=command.channel_public_id,
@@ -1196,17 +1165,13 @@ class DefaultRichMenuService:
                         expected_channel_revision=command.expected_channel_revision,
                     )
                 )
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None, None, ServiceFailed(SafeResultCode.INVALID_INPUT)
         except Exception as error:
             return None, None, ServiceFailed(_storage_error_code(error))
         if isinstance(result, ExactChannelSnapshotRejected):
             return None, None, self._map_snapshot_failure(result.code)
-        snapshot = (
-            result.snapshot
-            if isinstance(result, ExactChannelSnapshotAvailable)
-            else result
-        )
+        snapshot = result.snapshot if isinstance(result, ExactChannelSnapshotAvailable) else result
         if not isinstance(snapshot, RichMenuChannelSnapshot):
             return None, None, ServiceFailed(SafeResultCode.CHANNEL_UNAVAILABLE)
         if (
@@ -1227,9 +1192,7 @@ class DefaultRichMenuService:
         )
 
     @staticmethod
-    def _local_operation_fingerprint(
-        proof: OwnerActiveProof, command: OperationCommand
-    ) -> str:
+    def _local_operation_fingerprint(proof: OwnerActiveProof, command: OperationCommand) -> str:
         payload = {
             "ownerIdentity": str(proof.identity_public_id),
             "providerId": proof.provider_id,
@@ -1244,9 +1207,7 @@ class DefaultRichMenuService:
             else str(command.target_resource_id),
         }
         return sha256(
-            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
-                "utf-8"
-            )
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
 
     def _accept_simple_operation(
@@ -1324,16 +1285,12 @@ class DefaultRichMenuService:
             return self._map_stage_conflict(claim.reason)
         if not isinstance(claim, StageClaimed):
             return ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
-        result = self._complete_unknown(
-            operation_id, stage, SafeResultCode.OBSERVATION_UNKNOWN
-        )
+        result = self._complete_unknown(operation_id, stage, SafeResultCode.OBSERVATION_UNKNOWN)
         if isinstance(result, ServiceFailed):
             return result
         return OperationSucceeded(result)
 
-    def _get_operation(
-        self, scope: OwnerChannelScope, operation_id: UUID
-    ) -> OperationView | None:
+    def _get_operation(self, scope: OwnerChannelScope, operation_id: UUID) -> OperationView | None:
         reader = getattr(self._repository, "get_operation", None)
         if callable(reader):
             try:
@@ -1475,10 +1432,7 @@ class DefaultRichMenuService:
         target_resource_id: UUID | None,
         cleanup_required: bool = False,
     ) -> OperationView | ServiceFailed:
-        if (
-            confirmation.line_rich_menu_id is not None
-            and target_resource_id is not None
-        ):
+        if confirmation.line_rich_menu_id is not None and target_resource_id is not None:
             binder = getattr(self._repository, "bind_resource_line_id", None)
             if callable(binder):
                 try:
@@ -1645,9 +1599,7 @@ class DefaultRichMenuService:
             return ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
         observed = self._observe(scope, context)
         if isinstance(observed, ServiceFailed):
-            return self._complete_unknown(
-                operation_id, OperationStage.VERIFYING, observed.code
-            )
+            return self._complete_unknown(operation_id, OperationStage.VERIFYING, observed.code)
         if observed.observation.kind is ObservationKind.UNKNOWN:
             return self._complete_unknown(
                 operation_id, OperationStage.VERIFYING, SafeResultCode.OBSERVATION_UNKNOWN
@@ -1658,9 +1610,7 @@ class DefaultRichMenuService:
             )
         finalized = self._finalize_unlink_resource(target.public_id)
         if finalized is not None:
-            return self._complete_unknown(
-                operation_id, OperationStage.VERIFYING, finalized.code
-            )
+            return self._complete_unknown(operation_id, OperationStage.VERIFYING, finalized.code)
         return self._complete_stage(
             StageOutcome(
                 operation_id=operation_id,
@@ -2017,9 +1967,7 @@ class DefaultRichMenuService:
             access_token=snapshot.access_token,
         )
         try:
-            result = self._gateway.upload(
-                context, candidate.line_rich_menu_id, image
-            )
+            result = self._gateway.upload(context, candidate.line_rich_menu_id, image)
         except Exception:
             return self._complete_unknown(
                 operation_id, OperationStage.UPLOADING, SafeResultCode.RESPONSE_UNKNOWN
@@ -2065,9 +2013,7 @@ class DefaultRichMenuService:
         snapshot: RichMenuChannelSnapshot,
         expected_default_fingerprint: str,
     ) -> OperationView | ServiceFailed:
-        claim = self._repository.claim_stage(
-            operation_id, OperationStage.SETTING_DEFAULT
-        )
+        claim = self._repository.claim_stage(operation_id, OperationStage.SETTING_DEFAULT)
         if isinstance(claim, StageExpired):
             return claim.operation
         if isinstance(claim, StageConflict):
@@ -2194,9 +2140,7 @@ class DefaultRichMenuService:
         )
         observed = self._observe(scope, context)
         if isinstance(observed, ServiceFailed):
-            return self._complete_unknown(
-                operation_id, OperationStage.VERIFYING, observed.code
-            )
+            return self._complete_unknown(operation_id, OperationStage.VERIFYING, observed.code)
         if observed.observation.kind is ObservationKind.UNKNOWN:
             return self._complete_unknown(
                 operation_id,
@@ -2219,9 +2163,7 @@ class DefaultRichMenuService:
             )
         finalized = self._finalize_apply_resources(operation_id, candidate.public_id)
         if isinstance(finalized, ServiceFailed):
-            return self._complete_unknown(
-                operation_id, OperationStage.VERIFYING, finalized.code
-            )
+            return self._complete_unknown(operation_id, OperationStage.VERIFYING, finalized.code)
         return self._complete_stage(
             StageOutcome(
                 operation_id=operation_id,
@@ -2361,8 +2303,7 @@ class DefaultRichMenuService:
             "templateId": template.reference.template_id,
             "templateVersion": template.reference.version,
             "fields": [
-                {"displayName": field.display_name, "uri": field.uri}
-                for field in template.fields
+                {"displayName": field.display_name, "uri": field.uri} for field in template.fields
             ],
         }
 
@@ -2481,9 +2422,7 @@ class DefaultRichMenuService:
                             provider_id=proof.provider_id,
                         )
                 else:
-                    metadata_reader = getattr(
-                        self._channel_port, "get_for_owner_provider", None
-                    )
+                    metadata_reader = getattr(self._channel_port, "get_for_owner_provider", None)
                     metadata = (
                         metadata_reader(channel_id, proof.provider_id)
                         if callable(metadata_reader)
@@ -2517,7 +2456,7 @@ class DefaultRichMenuService:
                                 expected_channel_revision=expected_channel_revision,
                             )
                         )
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None, False, ServiceFailed(SafeResultCode.INVALID_INPUT)
         except Exception:
             return None, False, ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
@@ -2528,11 +2467,7 @@ class DefaultRichMenuService:
             if result.code == "channel_inactive":
                 return _ResolvedOwnerChannel(proof=proof, snapshot=None), True, None
             return None, False, self._map_snapshot_failure(result.code)
-        snapshot = (
-            result.snapshot
-            if isinstance(result, ExactChannelSnapshotAvailable)
-            else result
-        )
+        snapshot = result.snapshot if isinstance(result, ExactChannelSnapshotAvailable) else result
         if snapshot is None:
             return _ResolvedOwnerChannel(proof=proof, snapshot=None), False, None
         if not isinstance(snapshot, RichMenuChannelSnapshot):
@@ -2600,18 +2535,14 @@ class DefaultRichMenuService:
                         expected_channel_revision=request.expected_channel_revision,
                     )
                 )
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None, ServiceFailed(SafeResultCode.INVALID_INPUT)
         except Exception:
             return None, ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
 
         if isinstance(result, ExactChannelSnapshotRejected):
             return None, self._map_snapshot_failure(result.code)
-        snapshot = (
-            result.snapshot
-            if isinstance(result, ExactChannelSnapshotAvailable)
-            else result
-        )
+        snapshot = result.snapshot if isinstance(result, ExactChannelSnapshotAvailable) else result
         if not isinstance(snapshot, RichMenuChannelSnapshot):
             return None, ServiceFailed(SafeResultCode.CHANNEL_UNAVAILABLE)
         if (
@@ -2674,11 +2605,7 @@ class DefaultRichMenuService:
             if not isinstance(resources, tuple):
                 resources = tuple(resources)
             current = next(
-                (
-                    resource
-                    for resource in resources
-                    if resource.lifecycle.value == "applied"
-                ),
+                (resource for resource in resources if resource.lifecycle.value == "applied"),
                 None,
             )
             result = self._reconciler.observe_channel(
@@ -2688,7 +2615,7 @@ class DefaultRichMenuService:
                     managed_resources=resources,
                 )
             )
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return ServiceFailed(SafeResultCode.OBSERVATION_UNKNOWN)
         except Exception:
             return ServiceFailed(SafeResultCode.OBSERVATION_UNKNOWN)

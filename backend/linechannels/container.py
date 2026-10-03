@@ -2,12 +2,16 @@
 
 from . import runtime
 from .admin_gateway import DefaultLineBotInfoGateway
-from .admin_repositories import DjangoAdminChannelRepository
-from .admin_services import DefaultChannelAdminService
 from .admin_lifecycle_repositories import DjangoChannelDeactivationRepository
 from .admin_lifecycle_services import DefaultChannelDeactivationCoordinator
+from .admin_repositories import DjangoAdminChannelRepository
+from .admin_services import DefaultChannelAdminService
 from .crypto import FernetCredentialCipher
 from .management.prompts import GetPassManageLineChannelPrompts, ManageLineChannelPrompts
+from .reference_fence import (
+    ChannelReferenceDirectory,
+    DjangoChannelReferenceFence,
+)
 from .repositories import (
     CredentialRepository,
     DjangoCredentialRepository,
@@ -21,10 +25,6 @@ from .rotation import CredentialRotationService, DefaultCredentialRotationServic
 from .rotation_item import DefaultCredentialRotationItemProcessor
 from .rotation_lock import MySQLRotationLock
 from .rotation_repository import DjangoRotationCredentialRepository
-from .reference_fence import (
-    ChannelReferenceDirectory,
-    DjangoChannelReferenceFence,
-)
 from .services import DefaultLineChannelService, LineChannelService
 
 
@@ -53,8 +53,8 @@ def build_channel_reference_directory() -> ChannelReferenceDirectory:
     from lineaccounts.repositories import DjangoRecipientReferenceProbe
     from linefriendships.repositories import DjangoFriendshipReferenceProbe
     from lineinteractions.repositories import DjangoInteractionReferenceProbe
-    from linewebhooks.repositories import DjangoWebhookReferenceProbe
     from linerichmenus.container import build_headless_reference_contracts
+    from linewebhooks.repositories import DjangoWebhookReferenceProbe
 
     return ChannelReferenceDirectory(
         (

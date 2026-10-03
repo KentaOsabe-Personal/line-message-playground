@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock, patch
 
 import MySQLdb
-
 from django.db import DatabaseError, connection
 from django.test import SimpleTestCase, TransactionTestCase
 
@@ -31,9 +30,7 @@ class MySQLRotationLockTests(SimpleTestCase):
     # テストケース: 別processがlockを保持しているbusy状態で取得を試みる
     # 期待値: 例外でなくFalseを返し、終了処理で明示解放を試みる
     def test_busy_is_safe_false_and_still_runs_release(self):
-        connection, cursor = self.connection_with_results(
-            acquire_result=0, release_result=0
-        )
+        connection, cursor = self.connection_with_results(acquire_result=0, release_result=0)
 
         with patch("linechannels.rotation_lock.connections", {"default": connection}):
             with MySQLRotationLock().acquire() as acquired:
@@ -47,9 +44,7 @@ class MySQLRotationLockTests(SimpleTestCase):
         for error in (RuntimeError("canary"), KeyboardInterrupt()):
             with self.subTest(error_type=type(error).__name__):
                 connection, cursor = self.connection_with_results()
-                with patch(
-                    "linechannels.rotation_lock.connections", {"default": connection}
-                ):
+                with patch("linechannels.rotation_lock.connections", {"default": connection}):
                     with self.assertRaises(type(error)):
                         with MySQLRotationLock().acquire() as acquired:
                             self.assertTrue(acquired)
@@ -88,9 +83,7 @@ class MySQLRotationLockTests(SimpleTestCase):
             with self.subTest(invalid_acquire_row=invalid_row):
                 connection, cursor = self.connection_with_results()
                 cursor.fetchone.side_effect = (invalid_row, (None,))
-                with patch(
-                    "linechannels.rotation_lock.connections", {"default": connection}
-                ):
+                with patch("linechannels.rotation_lock.connections", {"default": connection}):
                     with self.assertRaises(RotationLockError) as captured:
                         with MySQLRotationLock().acquire():
                             self.fail("不正取得結果ではbodyへ到達しない")
@@ -100,9 +93,7 @@ class MySQLRotationLockTests(SimpleTestCase):
             with self.subTest(invalid_release_row=invalid_row):
                 connection, cursor = self.connection_with_results()
                 cursor.fetchone.side_effect = ((1,), invalid_row)
-                with patch(
-                    "linechannels.rotation_lock.connections", {"default": connection}
-                ):
+                with patch("linechannels.rotation_lock.connections", {"default": connection}):
                     with self.assertRaises(RotationLockError) as captured:
                         with MySQLRotationLock().acquire() as acquired:
                             self.assertTrue(acquired)

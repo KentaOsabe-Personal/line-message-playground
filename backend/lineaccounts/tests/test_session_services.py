@@ -24,10 +24,10 @@ from lineaccounts.runtime import (
     derive_owner_digest,
 )
 from lineaccounts.session_services import (
-    DefaultAccountSessionService,
-    DefaultOwnerIdentityBinder,
     AnonymousSessionStatus,
     AuthenticatedSessionStatus,
+    DefaultAccountSessionService,
+    DefaultOwnerIdentityBinder,
     EstablishSessionRejected,
     EstablishSessionSucceeded,
     OwnerBindingRejected,
@@ -53,9 +53,7 @@ class OwnerIdentityBinderTests(TestCase):
         return DefaultOwnerIdentityBinder(
             self.repository,
             eligibility
-            or OwnerEligibilityDigest(
-                derive_owner_digest(self.provider_id, self.subject)
-            ),
+            or OwnerEligibilityDigest(derive_owner_digest(self.provider_id, self.subject)),
         )
 
     # テストケース: 事前許可digestと一致する検証済みidentityをvacant ownerへbindingする
@@ -110,9 +108,7 @@ class OwnerIdentityBinderTests(TestCase):
             display_name="Other",
         )
         other_binder = self.binder(
-            OwnerEligibilityDigest(
-                derive_owner_digest(self.provider_id, other_subject)
-            )
+            OwnerEligibilityDigest(derive_owner_digest(self.provider_id, other_subject))
         )
 
         result = other_binder.bind(other)
@@ -151,9 +147,7 @@ class AccountSessionServiceTests(TestCase):
 
     def service(self, result=None):
         gateway = _GatewayStub(result or VerifyIdentitySucceeded(self.identity))
-        return DefaultAccountSessionService(
-            gateway, self.repository, self.eligibility
-        ), gateway
+        return DefaultAccountSessionService(gateway, self.repository, self.eligibility), gateway
 
     def create_recipient(self):
         channel = LineChannel.objects.create(
@@ -262,16 +256,10 @@ class AccountSessionServiceTests(TestCase):
         result = service.logout(first.session.public_id)
 
         self.assertTrue(result.deleted)
-        self.assertFalse(
-            OwnerSession.objects.filter(public_id=first.session.public_id).exists()
-        )
-        self.assertTrue(
-            OwnerSession.objects.filter(public_id=second.session.public_id).exists()
-        )
+        self.assertFalse(OwnerSession.objects.filter(public_id=first.session.public_id).exists())
+        self.assertTrue(OwnerSession.objects.filter(public_id=second.session.public_id).exists())
         self.assertEqual(LineIdentity.objects.count(), 1)
-        self.assertTrue(
-            DeliveryRecipient.objects.filter(public_id=recipient.public_id).exists()
-        )
+        self.assertTrue(DeliveryRecipient.objects.filter(public_id=recipient.public_id).exists())
 
     # テストケース: 1端末のsession期限後にstatusを確認する
     # 期待値: 期限切れledgerだけを匿名化・削除し、他端末・identity・recipientを維持する
@@ -283,26 +271,16 @@ class AccountSessionServiceTests(TestCase):
         recipient = self.create_recipient()
         after_first_expiry = self.now + timedelta(hours=8, seconds=1)
 
-        expired_status = service.get_status(
-            first.session.public_id, after_first_expiry
-        )
-        active_status = service.get_status(
-            second.session.public_id, after_first_expiry
-        )
+        expired_status = service.get_status(first.session.public_id, after_first_expiry)
+        active_status = service.get_status(second.session.public_id, after_first_expiry)
 
         self.assertEqual(expired_status, AnonymousSessionStatus())
         self.assertIsInstance(active_status, AuthenticatedSessionStatus)
         self.assertEqual(active_status.display_name, "Owner")
-        self.assertFalse(
-            OwnerSession.objects.filter(public_id=first.session.public_id).exists()
-        )
-        self.assertTrue(
-            OwnerSession.objects.filter(public_id=second.session.public_id).exists()
-        )
+        self.assertFalse(OwnerSession.objects.filter(public_id=first.session.public_id).exists())
+        self.assertTrue(OwnerSession.objects.filter(public_id=second.session.public_id).exists())
         self.assertEqual(LineIdentity.objects.count(), 1)
-        self.assertTrue(
-            DeliveryRecipient.objects.filter(public_id=recipient.public_id).exists()
-        )
+        self.assertTrue(DeliveryRecipient.objects.filter(public_id=recipient.public_id).exists())
 
     # テストケース: 無効な本人証明またはLINE一時障害でsession確立を要求する
     # 期待値: 安全な分類を返しowner・identity・sessionを一切作成しない

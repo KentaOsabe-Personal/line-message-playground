@@ -22,11 +22,12 @@ export class ProtectedHttpClientError extends Error {
   constructor(public readonly code: 'csrf_missing' | 'network_error' | 'aborted') {
     super(code)
     this.name = 'ProtectedHttpClientError'
-    this.summary = code === 'csrf_missing'
-      ? '安全な送信準備を確認できません。'
-      : code === 'aborted'
-        ? '読み込みを中止しました。'
-        : 'Backendに接続できません。'
+    this.summary =
+      code === 'csrf_missing'
+        ? '安全な送信準備を確認できません。'
+        : code === 'aborted'
+          ? '読み込みを中止しました。'
+          : 'Backendに接続できません。'
   }
 }
 
@@ -34,7 +35,10 @@ const unsafeMethods = new Set<HttpMethod>(['POST', 'PATCH', 'DELETE'])
 
 function readCookieValue(cookie: string, name: string): string | null {
   const prefix = `${name}=`
-  const item = cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith(prefix))
+  const item = cookie
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix))
   if (!item) return null
   try {
     const value = decodeURIComponent(item.slice(prefix.length))
@@ -44,12 +48,19 @@ function readCookieValue(cookie: string, name: string): string | null {
   }
 }
 
-export function createProtectedHttpClient(options: ProtectedHttpClientOptions = {}): ProtectedHttpClient {
+export function createProtectedHttpClient(
+  options: ProtectedHttpClientOptions = {},
+): ProtectedHttpClient {
   const fetchRequest = options.fetch ?? globalThis.fetch
   const readCookie = options.readCookie ?? (() => document.cookie)
 
   return Object.freeze({
-    async request(input: { path: string; method: HttpMethod; body?: unknown; signal?: AbortSignal }) {
+    async request(input: {
+      path: string
+      method: HttpMethod
+      body?: unknown
+      signal?: AbortSignal
+    }) {
       const headers: Record<string, string> = {}
       const request: RequestInit = {
         method: input.method,
@@ -74,7 +85,10 @@ export function createProtectedHttpClient(options: ProtectedHttpClientOptions = 
       } catch (error) {
         if (
           input.signal?.aborted === true ||
-          (typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError')
+          (typeof error === 'object' &&
+            error !== null &&
+            'name' in error &&
+            error.name === 'AbortError')
         ) {
           throw new ProtectedHttpClientError('aborted')
         }

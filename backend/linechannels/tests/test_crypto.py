@@ -114,14 +114,10 @@ class FernetCredentialCipherTests(SimpleTestCase):
         primary_key = Fernet.generate_key()
         old_key = Fernet.generate_key()
         rotating = FernetCredentialCipher(
-            parse_credential_keyring(
-                f"{primary_key.decode('ascii')},{old_key.decode('ascii')}"
-            )
+            parse_credential_keyring(f"{primary_key.decode('ascii')},{old_key.decode('ascii')}")
         )
         old_only = FernetCredentialCipher(parse_credential_keyring(old_key.decode("ascii")))
-        primary_only = FernetCredentialCipher(
-            parse_credential_keyring(primary_key.decode("ascii"))
-        )
+        primary_only = FernetCredentialCipher(parse_credential_keyring(primary_key.decode("ascii")))
         context = CredentialContext[AccessToken](uuid4(), "access_token")
         old_ciphertext = old_only.encrypt(AccessToken("old-value"), context)
         new_ciphertext = rotating.encrypt(AccessToken("new-value"), context)
@@ -143,9 +139,7 @@ class FernetCredentialCipherTests(SimpleTestCase):
         primary_key = Fernet.generate_key()
         old_key = Fernet.generate_key()
         rotating = FernetCredentialCipher(
-            parse_credential_keyring(
-                f"{primary_key.decode('ascii')},{old_key.decode('ascii')}"
-            )
+            parse_credential_keyring(f"{primary_key.decode('ascii')},{old_key.decode('ascii')}")
         )
         old_only = FernetCredentialCipher(parse_credential_keyring(old_key.decode("ascii")))
         context = CredentialContext[ChannelSecret](uuid4(), "channel_secret")

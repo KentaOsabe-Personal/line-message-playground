@@ -11,7 +11,10 @@ type Props = {
   onCancel?: () => void
 }
 
-const fieldValue = (form: FormData, name: string) => String(form.get(name) ?? '')
+const fieldValue = (form: FormData, name: string) => {
+  const value = form.get(name)
+  return typeof value === 'string' ? value : ''
+}
 
 export default function ChannelEditor({ mode, item, pending = false, onSubmit, onCancel }: Props) {
   const [message, setMessage] = useState<string | null>(null)
@@ -63,35 +66,80 @@ export default function ChannelEditor({ mode, item, pending = false, onSubmit, o
   }
 
   return (
-    <form className="channel-editor" onSubmit={(event) => { void submit(event) }}>
+    <form
+      className="channel-editor"
+      onSubmit={(event) => {
+        void submit(event)
+      }}
+    >
       <h3>{mode === 'create' ? '新しいチャネルを登録' : `${item?.label ?? ''} を編集`}</h3>
-      <label>運用者向け名称
+      <label>
+        運用者向け名称
         <input name="label" required maxLength={255} defaultValue={item?.label ?? ''} />
       </label>
-      <label>Messaging API チャネル ID
-        <input name="messagingApiChannelId" required inputMode="numeric" pattern="[0-9]{1,64}" defaultValue={item?.messagingApiChannelId ?? ''} />
+      <label>
+        Messaging API チャネル ID
+        <input
+          name="messagingApiChannelId"
+          required
+          inputMode="numeric"
+          pattern="[0-9]{1,64}"
+          defaultValue={item?.messagingApiChannelId ?? ''}
+        />
       </label>
-      <label>bot user ID
-        <input name="botUserId" required pattern="U[0-9a-f]{32}" defaultValue={item?.botUserId ?? ''} />
+      <label>
+        bot user ID
+        <input
+          name="botUserId"
+          required
+          pattern="U[0-9a-f]{32}"
+          defaultValue={item?.botUserId ?? ''}
+        />
       </label>
-      <label>provider ID
-        <input name="providerId" required inputMode="numeric" pattern="[0-9]{1,64}" defaultValue={item?.providerId ?? ''} readOnly={mode === 'edit' && item?.providerId !== null} />
+      <label>
+        provider ID
+        <input
+          name="providerId"
+          required
+          inputMode="numeric"
+          pattern="[0-9]{1,64}"
+          defaultValue={item?.providerId ?? ''}
+          readOnly={mode === 'edit' && item?.providerId !== null}
+        />
       </label>
       <fieldset>
         <legend>write-only 資格情報</legend>
-        {mode === 'edit' && <p>変更しない場合は両方を空欄にしてください。保存済みの値は表示しません。</p>}
-        <label>チャネルアクセストークン
+        {mode === 'edit' && (
+          <p>変更しない場合は両方を空欄にしてください。保存済みの値は表示しません。</p>
+        )}
+        <label>
+          チャネルアクセストークン
           <input name="accessToken" type="password" autoComplete="off" maxLength={16 * 1024} />
         </label>
-        <label>チャネルシークレット
+        <label>
+          チャネルシークレット
           <input name="channelSecret" type="password" autoComplete="off" maxLength={16 * 1024} />
         </label>
       </fieldset>
-      {mode === 'create' && <label className="inline-field"><input name="active" type="checkbox" /> 初期状態を有効にする</label>}
-      {message !== null && <p className="field-error" role="alert">{message}</p>}
+      {mode === 'create' && (
+        <label className="inline-field">
+          <input name="active" type="checkbox" /> 初期状態を有効にする
+        </label>
+      )}
+      {message !== null && (
+        <p className="field-error" role="alert">
+          {message}
+        </p>
+      )}
       <div className="actions">
-        <button type="submit" disabled={pending}>{pending ? '処理中…' : mode === 'create' ? '登録する' : '更新する'}</button>
-        {onCancel !== undefined && <button type="button" className="secondary" onClick={onCancel} disabled={pending}>キャンセル</button>}
+        <button type="submit" disabled={pending}>
+          {pending ? '処理中…' : mode === 'create' ? '登録する' : '更新する'}
+        </button>
+        {onCancel !== undefined && (
+          <button type="button" className="secondary" onClick={onCancel} disabled={pending}>
+            キャンセル
+          </button>
+        )}
       </div>
     </form>
   )

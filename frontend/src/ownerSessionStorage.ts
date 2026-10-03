@@ -27,7 +27,9 @@ function browserSessionStorage(): Storage | null {
   }
 }
 
-export function createOwnerSessionStorage(storage: Storage | null = browserSessionStorage()): OwnerSessionStorage {
+export function createOwnerSessionStorage(
+  storage: Storage | null = browserSessionStorage(),
+): OwnerSessionStorage {
   const read = (key: string): string | null => {
     try {
       return storage?.getItem(key) ?? null

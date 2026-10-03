@@ -3,8 +3,8 @@ from django.test import SimpleTestCase
 from delivery.formatters import (
     MessageValidationError,
     count_utf16_code_units,
-    format_message_snapshot,
     format_message,
+    format_message_snapshot,
 )
 from delivery.types import MessageSnapshot
 

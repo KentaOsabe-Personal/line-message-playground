@@ -136,21 +136,29 @@ class LabContractTests(SimpleTestCase):
     # 期待値: 判定サービスを呼び出さず、HTTP 400とCache-Control: no-storeを返す。
     def test_rejects_v1_at_the_http_boundary(self):
         from unittest.mock import patch
-        from rest_framework.test import APIRequestFactory, force_authenticate
+
         from django.test import override_settings
+        from rest_framework.test import APIRequestFactory, force_authenticate
+
         from textjudgmentlab.views import LabJudgmentAPIView
+
         from .test_http_boundary import RUNTIME
 
         payload = self.valid_payload()
         payload["contractVersion"] = 1
         request = APIRequestFactory().post(
-            "/api/labs/text-judgment/judgments", payload, format="json",
+            "/api/labs/text-judgment/judgments",
+            payload,
+            format="json",
             HTTP_ORIGIN=RUNTIME.origin,
         )
-        force_authenticate(request, user=LabPrincipal(datetime.now(UTC) + timedelta(minutes=1), "a" * 64))
-        with override_settings(TEXT_JUDGMENT_LAB_RUNTIME=RUNTIME), patch(
-            "textjudgmentlab.views.build_judgment_service"
-        ) as service:
+        force_authenticate(
+            request, user=LabPrincipal(datetime.now(UTC) + timedelta(minutes=1), "a" * 64)
+        )
+        with (
+            override_settings(TEXT_JUDGMENT_LAB_RUNTIME=RUNTIME),
+            patch("textjudgmentlab.views.build_judgment_service") as service,
+        ):
             response = LabJudgmentAPIView.as_view()(request)
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["error"]["code"], "invalid_input")
@@ -161,11 +169,19 @@ class LabContractTests(SimpleTestCase):
     # 期待値: 質問、理由、比較記録は作成時の値を保持する。Noulにcriteriaは定義しない。
     def test_inspection_values_defensively_copy_nested_collections(self):
         from textjudgmentlab.types import (
-            AdoptionPolicySnapshot, ChoiceAdoptionPolicy, ScoreAdoptionPolicy,
-            NoulAdoptionPolicy, PolicyCheck, NormalizationDecision,
-            JudgmentStateSnapshot, JudgmentInspection, SentChoiceQuestion,
-            SentScoreQuestion, SentNoulQuestion,
+            AdoptionPolicySnapshot,
+            ChoiceAdoptionPolicy,
+            JudgmentInspection,
+            JudgmentStateSnapshot,
+            NormalizationDecision,
+            NoulAdoptionPolicy,
+            PolicyCheck,
+            ScoreAdoptionPolicy,
+            SentChoiceQuestion,
+            SentNoulQuestion,
+            SentScoreQuestion,
         )
+
         criteria = {"keep": "継続"}
         question = SentChoiceQuestion("判定", criteria)
         criteria["keep"] = "変更"
@@ -191,12 +207,15 @@ class LabContractTests(SimpleTestCase):
         questions = {"change": question}
         normalization = {"change": decision}
         inspection = JudgmentInspection(
-            JudgmentStateSnapshot("入力", context.question, "質問", context.confirmed,
-                                  context.impact, ["前の発言"]),
+            JudgmentStateSnapshot(
+                "入力", context.question, "質問", context.confirmed, context.impact, ["前の発言"]
+            ),
             questions,
-            AdoptionPolicySnapshot(ChoiceAdoptionPolicy(0.7, 0.7, True),
-                                   ScoreAdoptionPolicy("present", 0.7, 1.5),
-                                   NoulAdoptionPolicy(0.8, 0.2)),
+            AdoptionPolicySnapshot(
+                ChoiceAdoptionPolicy(0.7, 0.7, True),
+                ScoreAdoptionPolicy("present", 0.7, 1.5),
+                NoulAdoptionPolicy(0.8, 0.2),
+            ),
             normalization,
         )
         questions.clear()
@@ -210,17 +229,27 @@ class LabContractTests(SimpleTestCase):
     # 期待値: 型付き要求へ変換する前に、不正な入力と矛盾する文脈を拒否する。
     def test_rejects_invalid_versions_and_nested_context(self):
         from copy import deepcopy
+
         base = self.valid_payload()
         cases = []
-        for field, value in (("contractVersion", 1), ("contractVersion", 3),
-                             ("contractVersion", True), ("revision", -1),
-                             ("revision", 2**53), ("revision", "2")):
+        for field, value in (
+            ("contractVersion", 1),
+            ("contractVersion", 3),
+            ("contractVersion", True),
+            ("revision", -1),
+            ("revision", 2**53),
+            ("revision", "2"),
+        ):
             payload = deepcopy(base)
             payload[field] = value
             cases.append(payload)
-        for key, value in (("topic", "other"), ("scope", "all"),
-                           ("workaround", "can_read"), ("urgency", True),
-                           ("extra", None)):
+        for key, value in (
+            ("topic", "other"),
+            ("scope", "all"),
+            ("workaround", "can_read"),
+            ("urgency", True),
+            ("extra", None),
+        ):
             payload = deepcopy(base)
             payload["context"]["confirmed"][key] = value
             cases.append(payload)

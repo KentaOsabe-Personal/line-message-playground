@@ -2,17 +2,18 @@ from datetime import timedelta
 from uuid import uuid4
 
 from django.test import TransactionTestCase
-from django.utils import timezone
 
-from linechannels.admin_lifecycle_repositories import DjangoChannelDeactivationRepository
-from linechannels.admin_lifecycle_repositories import DjangoPendingDeactivationFence
+from linechannels.admin_lifecycle_repositories import (
+    DjangoChannelDeactivationRepository,
+    DjangoPendingDeactivationFence,
+)
 from linechannels.admin_lifecycle_types import (
     AdvanceDeactivationRevision,
     CompleteDeactivation,
     DeactivationConflict,
     RecordDeactivationRevisionConflict,
-    ReserveDeactivation,
     ReservedDeactivation,
+    ReserveDeactivation,
     SaveDeactivationResult,
 )
 from linechannels.models import ChannelDeactivationState, LineChannel
@@ -97,9 +98,7 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
                 presented_channel_revision=self.channel.updated_at,
             )
         )
-        self.assertEqual(
-            advanced.view.expected_channel_revision, self.channel.updated_at
-        )
+        self.assertEqual(advanced.view.expected_channel_revision, self.channel.updated_at)
 
     # テストケース: 予約済みintentを期待revisionで完了し、古いrevisionでも再実行する。
     # 期待値: channel無効化とintent完了を同時commitし、stale CASは部分更新せず拒否する。
@@ -140,9 +139,7 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
     # 期待値: 正しいscopeは空状態、別scopeは対象非開示のnot foundとして区別する。
     def test_get_distinguishes_empty_state_from_hidden_channel(self):
         self.assertIsNone(
-            self.repository.get_for_owner(
-                self.owner_id, self.provider_id, self.channel.public_id
-            )
+            self.repository.get_for_owner(self.owner_id, self.provider_id, self.channel.public_id)
         )
         hidden = self.repository.get_for_owner(
             self.owner_id, "other-provider", self.channel.public_id
@@ -184,9 +181,10 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
     # 期待値: 通常mutationを拒否し、保存intentに結び付く回復操作だけを許可する。
     def test_pending_deactivation_fence_allows_only_its_reserved_recovery(self):
         from types import SimpleNamespace
+
         from django.db import transaction
 
-        reserved = self.reserve()
+        self.reserve()
         fence = DjangoPendingDeactivationFence()
         ordinary = SimpleNamespace(
             channel_public_id=self.channel.public_id,
@@ -207,8 +205,11 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
         state.latest_recovery_operation_id = recovery_id
         state.save(
             update_fields=(
-                "status", "safe_reason", "subject_rich_operation_id",
-                "latest_recovery_operation_id", "updated_at",
+                "status",
+                "safe_reason",
+                "subject_rich_operation_id",
+                "latest_recovery_operation_id",
+                "updated_at",
             )
         )
         recovery = SimpleNamespace(
@@ -226,8 +227,10 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
         state.latest_recovery_operation_id = None
         state.save(
             update_fields=(
-                "safe_reason", "subject_rich_operation_id",
-                "latest_recovery_operation_id", "updated_at",
+                "safe_reason",
+                "subject_rich_operation_id",
+                "latest_recovery_operation_id",
+                "updated_at",
             )
         )
         cleanup = SimpleNamespace(
@@ -245,6 +248,7 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
     # 期待値: 同じlock区間でpendingを検出し、deactivation conflictとして拒否する。
     def test_channel_mutation_lock_rejects_pending_state(self):
         from django.db import transaction
+
         from linechannels.admin_repositories import DjangoAdminChannelRepository
 
         self.reserve()
@@ -262,7 +266,9 @@ class ChannelDeactivationRepositoryTests(TransactionTestCase):
     def test_channel_mutation_and_deactivation_reserve_linearize_on_channel_lock(self):
         import threading
         from concurrent.futures import ThreadPoolExecutor
+
         from django.db import close_old_connections, transaction
+
         from linechannels.admin_repositories import DjangoAdminChannelRepository
 
         initial_revision = self.channel.updated_at

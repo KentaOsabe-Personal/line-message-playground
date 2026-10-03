@@ -69,9 +69,7 @@ class TargetRevisionBuilderTests(SimpleTestCase):
 
         first = self._build()
         equivalent_timezone = self._build(
-            channel_updated_at=self.channel_updated_at.astimezone(
-                timezone(timedelta(hours=9))
-            ),
+            channel_updated_at=self.channel_updated_at.astimezone(timezone(timedelta(hours=9))),
             recipient_updated_at=self.recipient_updated_at.astimezone(
                 timezone(timedelta(hours=-4))
             ),
@@ -93,10 +91,7 @@ class TargetRevisionBuilderTests(SimpleTestCase):
             {"recipient_public_id": UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc")},
             {"recipient_enabled": False},
             {"friendship_state": "not_friend"},
-            {
-                "recipient_updated_at": self.recipient_updated_at
-                + timedelta(microseconds=1)
-            },
+            {"recipient_updated_at": self.recipient_updated_at + timedelta(microseconds=1)},
         )
 
         for change in changes:
@@ -116,8 +111,7 @@ class TargetRevisionBuilderTests(SimpleTestCase):
             self._build(
                 recipient_enabled=True,
                 friendship_state="friend",
-                recipient_updated_at=self.recipient_updated_at
-                + timedelta(seconds=1),
+                recipient_updated_at=self.recipient_updated_at + timedelta(seconds=1),
             ),
         )
 
@@ -696,9 +690,7 @@ class DeliveryTargetDirectoryResolveTests(TestCase):
                 self.channel.save(update_fields=("is_active", "updated_at"))
                 self.recipient.enabled = enabled
                 self.recipient.friendship_state = friendship_state
-                self.recipient.save(
-                    update_fields=("enabled", "friendship_state", "updated_at")
-                )
+                self.recipient.save(update_fields=("enabled", "friendship_state", "updated_at"))
 
                 result = self.directory.resolve(
                     self.identity.public_id,

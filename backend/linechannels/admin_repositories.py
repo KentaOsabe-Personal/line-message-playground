@@ -6,6 +6,7 @@ from django.db import DatabaseError, OperationalError, transaction
 from django.db.models import Exists, OuterRef, Q, Subquery
 from django.utils import timezone
 
+from .admin_lifecycle_types import DeactivationSummary
 from .admin_types import (
     AdminChannelView,
     AdminConnectionSnapshot,
@@ -25,7 +26,6 @@ from .admin_types import (
     RichMenuChannelSnapshot,
     SnapshotAvailable,
 )
-from .admin_lifecycle_types import DeactivationSummary
 from .crypto import CredentialCryptoError
 from .models import ChannelDeactivationState, LineChannel, LineChannelCredential
 from .repositories import PersistenceError, RepositoryProgrammingError
@@ -41,19 +41,17 @@ class _AccessTokenDecryptor(Protocol):
 class DjangoAdminChannelRepository:
     _RETRYABLE_DATABASE_CODES = frozenset((1205, 1213))
 
-    def __init__(
-        self, cipher: _AccessTokenDecryptor, *, using: str = "default"
-    ) -> None:
+    def __init__(self, cipher: _AccessTokenDecryptor, *, using: str = "default") -> None:
         self._cipher = cipher
         self.using = using
 
-    def list_for_owner_provider(
-        self, owner_provider_id: str
-    ) -> tuple[AdminChannelView, ...]:
+    def list_for_owner_provider(self, owner_provider_id: str) -> tuple[AdminChannelView, ...]:
         try:
-            rows = self._safe_projection().filter(
-                self._provider_scope(owner_provider_id)
-            ).order_by("public_id")
+            rows = (
+                self._safe_projection()
+                .filter(self._provider_scope(owner_provider_id))
+                .order_by("public_id")
+            )
             return tuple(self._view(row) for row in rows)
         except OperationalError as error:
             raise self._persistence_error(error) from None
@@ -75,14 +73,17 @@ class DjangoAdminChannelRepository:
         except DatabaseError:
             raise PersistenceError("storage_unavailable") from None
 
-    def has_pending_deactivation(
-        self, public_id: UUID, owner_provider_id: str
-    ) -> bool:
+    def has_pending_deactivation(self, public_id: UUID, owner_provider_id: str) -> bool:
         try:
-            return ChannelDeactivationState.objects.using(self.using).filter(
-                line_channel__public_id=public_id,
-                line_channel__provider_id=owner_provider_id,
-            ).exclude(status="completed").exists()
+            return (
+                ChannelDeactivationState.objects.using(self.using)
+                .filter(
+                    line_channel__public_id=public_id,
+                    line_channel__provider_id=owner_provider_id,
+                )
+                .exclude(status="completed")
+                .exists()
+            )
         except OperationalError as error:
             raise self._persistence_error(error) from None
         except DatabaseError:
@@ -150,7 +151,7 @@ class DjangoAdminChannelRepository:
                 EncryptedCredential(bytes(ciphertext)),
                 CredentialContext(public_id, "access_token"),
             )
-        except (CredentialCryptoError, TypeError, ValueError):
+        except CredentialCryptoError, TypeError, ValueError:
             return AdminRepositoryUnavailable("credential_unreadable")
         if not isinstance(access_token, AccessToken):
             return AdminRepositoryUnavailable("credential_unreadable")
@@ -170,10 +171,7 @@ class DjangoAdminChannelRepository:
     ) -> ConnectionRevisionResult:
         if not transaction.get_connection(self.using).in_atomic_block:
             raise RepositoryProgrammingError("transaction_required")
-        if (
-            not isinstance(expected_updated_at, datetime)
-            or timezone.is_naive(expected_updated_at)
-        ):
+        if not isinstance(expected_updated_at, datetime) or timezone.is_naive(expected_updated_at):
             raise RepositoryProgrammingError("invalid_revision")
         try:
             row = (
@@ -193,9 +191,7 @@ class DjangoAdminChannelRepository:
             return AdminRepositoryFailed("stale_channel")
         return ConnectionRevisionUnchanged()
 
-    def snapshot_exact(
-        self, command: ChannelSnapshotCommand
-    ) -> ExactChannelSnapshotResult:
+    def snapshot_exact(self, command: ChannelSnapshotCommand) -> ExactChannelSnapshotResult:
         """Rich-menu専用のexact-provider snapshotを取得する。
 
         既存admin画面のlegacy互換scopeは変更せず、provider完全一致をこの
@@ -254,7 +250,7 @@ class DjangoAdminChannelRepository:
                 channel_revision=row["updated_at"],
                 access_token=access_token,
             )
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return ExactChannelSnapshotRejected("storage_unavailable")
         return ExactChannelSnapshotAvailable(snapshot)
 
@@ -286,9 +282,7 @@ class DjangoAdminChannelRepository:
             return ExactChannelSnapshotRejected("stale_channel")
         return ChannelRevisionUnchanged()
 
-    def lock_for_delete(
-        self, public_id: UUID, owner_provider_id: str
-    ) -> LockedAdminChannel | None:
+    def lock_for_delete(self, public_id: UUID, owner_provider_id: str) -> LockedAdminChannel | None:
         self._require_transaction()
         try:
             row = (
@@ -327,9 +321,7 @@ class DjangoAdminChannelRepository:
                 line_channel__public_id=channel.public_id
             ).delete()
             deleted, _ = (
-                LineChannel.objects.using(self.using)
-                .filter(public_id=channel.public_id)
-                .delete()
+                LineChannel.objects.using(self.using).filter(public_id=channel.public_id).delete()
             )
         except OperationalError as error:
             raise self._persistence_error(error) from None
@@ -343,9 +335,9 @@ class DjangoAdminChannelRepository:
         credential_rows = LineChannelCredential.objects.using(self.using).filter(
             line_channel_id=OuterRef("pk")
         )
-        complete_credential_rows = credential_rows.exclude(
-            access_token_ciphertext=b""
-        ).exclude(channel_secret_ciphertext=b"")
+        complete_credential_rows = credential_rows.exclude(access_token_ciphertext=b"").exclude(
+            channel_secret_ciphertext=b""
+        )
         deactivation_rows = ChannelDeactivationState.objects.using(self.using).filter(
             line_channel_id=OuterRef("pk")
         )
@@ -354,21 +346,13 @@ class DjangoAdminChannelRepository:
             .annotate(
                 admin_credentials_configured=Exists(credential_rows),
                 admin_credentials_complete=Exists(complete_credential_rows),
-                admin_credentials_updated_at=Subquery(
-                    credential_rows.values("updated_at")[:1]
-                ),
+                admin_credentials_updated_at=Subquery(credential_rows.values("updated_at")[:1]),
                 admin_deactivation_operation_id=Subquery(
                     deactivation_rows.values("operation_id")[:1]
                 ),
-                admin_deactivation_status=Subquery(
-                    deactivation_rows.values("status")[:1]
-                ),
-                admin_deactivation_reason=Subquery(
-                    deactivation_rows.values("safe_reason")[:1]
-                ),
-                admin_deactivation_updated_at=Subquery(
-                    deactivation_rows.values("updated_at")[:1]
-                ),
+                admin_deactivation_status=Subquery(deactivation_rows.values("status")[:1]),
+                admin_deactivation_reason=Subquery(deactivation_rows.values("safe_reason")[:1]),
+                admin_deactivation_updated_at=Subquery(deactivation_rows.values("updated_at")[:1]),
             )
             .values(
                 "public_id",
@@ -418,17 +402,13 @@ class DjangoAdminChannelRepository:
             is_active=row["is_active"],
             credentials_state=("configured" if configured else "repair_required"),
             credentials_updated_at=(
-                row["admin_credentials_updated_at"]
-                if row["admin_credentials_configured"]
-                else None
+                row["admin_credentials_updated_at"] if row["admin_credentials_configured"] else None
             ),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             deactivation_summary=summary,
             rich_menu_refresh_required=(
-                row["is_active"]
-                and summary is not None
-                and summary.status == "completed"
+                row["is_active"] and summary is not None and summary.status == "completed"
             ),
         )
 
@@ -439,9 +419,7 @@ class DjangoAdminChannelRepository:
     def _storage_code(self, error: OperationalError):
         code = error.args[0] if error.args else None
         return (
-            "storage_retryable"
-            if code in self._RETRYABLE_DATABASE_CODES
-            else "storage_unavailable"
+            "storage_retryable" if code in self._RETRYABLE_DATABASE_CODES else "storage_unavailable"
         )
 
 

@@ -8,7 +8,6 @@ from django.test import SimpleTestCase
 
 from linechannels.rotation import RotationItemFailure, RotationSummary
 
-
 COMMAND_PATH = "linechannels.management.commands.rotate_line_channel_credentials"
 
 

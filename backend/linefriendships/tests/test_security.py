@@ -13,16 +13,14 @@ from lineaccounts.models import DeliveryRecipient, LineIdentity, OwnerAccount
 from linechannels import runtime
 from linechannels.crypto import FernetCredentialCipher
 from linechannels.models import LineChannel, LineChannelCredential
-from linechannels.types import AccessToken, ChannelSecret, CredentialContext
 from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
+from linechannels.types import AccessToken, ChannelSecret, CredentialContext
 from linefriendships.models import FriendshipSyncAudit
 from linefriendships.parsing import DefaultFriendshipEventParser
 from linefriendships.repositories import DjangoFriendshipAuditRepository
 from linefriendships.services import DefaultFriendshipSyncService
-from linewebhooks.audit import SafeWebhookAuditLogger
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.types import FrozenJsonObject, HandlerFailed, VerifiedWebhookEvent
-
 
 VALID_USER_CANARY = "U" + "c" * 32
 INVALID_USER_CANARY = "invalid-line-user-canary"
@@ -176,9 +174,7 @@ class FriendshipSecurityIntegrationTests(TestCase):
         self.assertEqual([audit.outcome for audit in audits], ["applied", "invalid"])
         audit_fields = {field.name for field in FriendshipSyncAudit._meta.get_fields()}
         self.assertEqual(audit_fields, SAFE_AUDIT_FIELDS)
-        audit_surface = list(
-            FriendshipSyncAudit.objects.order_by("pk").values()
-        )
+        audit_surface = list(FriendshipSyncAudit.objects.order_by("pk").values())
         receipt_surface = list(WebhookEventReceipt.objects.order_by("pk").values())
         log_surface = [record.__dict__ for record in self.log_handler.records]
         rendered = "\n".join(
@@ -218,9 +214,11 @@ class FriendshipSecurityIntegrationTests(TestCase):
             channel_directory=type(
                 "Directory",
                 (),
-                {"get": lambda _self, _public_id: type(
-                    "Channel", (), {"provider_id": self.provider_id}
-                )()},
+                {
+                    "get": lambda _self, _public_id: type(
+                        "Channel", (), {"provider_id": self.provider_id}
+                    )()
+                },
             )(),
             account_repository=_FailingAccountRepository(),
             audit_repository=DjangoFriendshipAuditRepository(LOCKED_REFERENCE_FENCE),

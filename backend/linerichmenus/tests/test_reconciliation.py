@@ -3,25 +3,27 @@ from uuid import uuid4
 
 from django.test import SimpleTestCase
 
+from linechannels.types import AccessToken
 from linerichmenus.gateway import (
     GatewayUnknown,
     ImageAbsent,
     ImageObserved,
-    RichMenuDefaultExternal,
-    RichMenuDefaultNone,
-    RichMenuDefaultPresent,
-    RichMenuDefaultUnknown,
     ResourceAbsent,
     ResourceListAccepted,
     ResourceObserved,
     ResourceSummary,
+    RichMenuDefaultExternal,
+    RichMenuDefaultNone,
+    RichMenuDefaultPresent,
+    RichMenuDefaultUnknown,
+    RichMenuGatewayContext,
 )
 from linerichmenus.reconciliation import (
     DefaultRichMenuReconciler,
     ManagedResourceTarget,
-    ReconcileContext,
     RecheckConfirmed,
     RecheckContext,
+    ReconcileContext,
 )
 from linerichmenus.types import (
     NextAllowedAction,
@@ -30,9 +32,6 @@ from linerichmenus.types import (
     OperationStage,
     ResourceLifecycle,
 )
-from linerichmenus.gateway import RichMenuGatewayContext
-from linechannels.types import AccessToken
-
 
 SUBJECT_OPERATION_ID = uuid4()
 
@@ -225,9 +224,7 @@ class RecheckObservationTests(SimpleTestCase):
                 )
                 self.assertEqual(result.status, "unknown")
                 self.assertEqual(result.reason, expected_reason)
-        self.gateway.resources = ResourceListAccepted(
-            (ResourceSummary("one-id", "marker-canary"),)
-        )
+        self.gateway.resources = ResourceListAccepted((ResourceSummary("one-id", "marker-canary"),))
         confirmed = self.reconciler.recheck_operation(
             RecheckContext(
                 gateway_context=self.context,
@@ -257,9 +254,7 @@ class RecheckObservationTests(SimpleTestCase):
     # テストケース: upload unknown後にdownload digestを照合する。
     # 期待値: digest一致だけをupload確認とし、不一致は再uploadせずunknownにする。
     def test_upload_unknown_uses_download_digest_without_reupload(self):
-        candidate = target(
-            line_id="candidate-id", origin_operation_id=SUBJECT_OPERATION_ID
-        )
+        candidate = target(line_id="candidate-id", origin_operation_id=SUBJECT_OPERATION_ID)
         result = self.reconciler.recheck_operation(
             RecheckContext(
                 gateway_context=self.context,
@@ -295,9 +290,7 @@ class RecheckObservationTests(SimpleTestCase):
     # テストケース: set/clear default unknownをdefault観測だけでrecheckする。
     # 期待値: 対象一致または対象非defaultを確認できた段階だけconfirmedにする。
     def test_set_and_clear_unknown_use_default_observation_only(self):
-        candidate = target(
-            line_id="candidate-id", origin_operation_id=SUBJECT_OPERATION_ID
-        )
+        candidate = target(line_id="candidate-id", origin_operation_id=SUBJECT_OPERATION_ID)
         self.gateway.default = RichMenuDefaultPresent("candidate-id")
         set_result = self.reconciler.recheck_operation(
             RecheckContext(
@@ -397,9 +390,7 @@ class RecheckObservationTests(SimpleTestCase):
             lifecycle=ResourceLifecycle.CLEANUP_REQUIRED,
             origin_operation_id=SUBJECT_OPERATION_ID,
         )
-        self.gateway.resource = ResourceObserved(
-            ResourceSummary("cleanup-id", "cleanup-marker")
-        )
+        self.gateway.resource = ResourceObserved(ResourceSummary("cleanup-id", "cleanup-marker"))
 
         confirmed = self.reconciler.recheck_operation(
             RecheckContext(

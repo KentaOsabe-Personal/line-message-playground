@@ -2,8 +2,8 @@ from datetime import timedelta
 from unittest.mock import patch
 from uuid import uuid4
 
-from django.db import transaction
 from django.core.exceptions import ImproperlyConfigured
+from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -47,9 +47,7 @@ class UnlinkAPITests(TestCase):
         with transaction.atomic():
             owner = repository.lock_owner_account()
             identity = repository.upsert_identity(
-                VerifiedLineIdentity(
-                    "0012345678", LineSubject(f"U{uuid4().hex}"), "Owner"
-                )
+                VerifiedLineIdentity("0012345678", LineSubject(f"U{uuid4().hex}"), "Owner")
             )
             owner = repository.bind_owner_identity(owner, identity.public_id)
             self.owner_session = repository.create_owner_session(
@@ -153,9 +151,7 @@ class UnlinkAPITests(TestCase):
             with self.subTest(alias=tuple(alias)):
                 response = self.post(client, "/api/account/unlink/", alias, csrf)
                 self.assertEqual(response.status_code, 400)
-                self.assertEqual(
-                    response.json()["error"]["code"], "validation_error"
-                )
+                self.assertEqual(response.json()["error"]["code"], "validation_error")
 
     # テストケース: serviceがstale confirmationまたは旧generationを検出する。
     # 期待値: raw状態を返さずHTTP 409の安全なcodeへ写像する。

@@ -1,5 +1,5 @@
-from typing import Literal
 from threading import Lock
+from typing import Literal
 from weakref import WeakSet, ref
 
 from django.db import DatabaseError, OperationalError, transaction
@@ -131,8 +131,7 @@ class DjangoFriendshipAuditRepository:
                 and locked.connection is connection
                 and locked.outermost_atomic is connection.atomic_blocks[0]
                 and any(
-                    entry[1] is locked.transaction_invalidator
-                    for entry in connection.run_on_commit
+                    entry[1] is locked.transaction_invalidator for entry in connection.run_on_commit
                 )
                 and locked.channel_public_id == audit.channel_public_id
             ):
@@ -165,6 +164,8 @@ class DjangoFriendshipReferenceProbe:
         self.using = using
 
     def is_referenced(self, channel_public_id) -> bool:
-        return FriendshipSyncAudit.objects.using(self.using).filter(
-            channel_public_id=channel_public_id
-        ).exists()
+        return (
+            FriendshipSyncAudit.objects.using(self.using)
+            .filter(channel_public_id=channel_public_id)
+            .exists()
+        )

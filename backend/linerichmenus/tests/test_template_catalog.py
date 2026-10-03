@@ -131,7 +131,9 @@ class TemplateNormalizationTests(SimpleTestCase):
             with self.subTest(field=field, reason=reason):
                 result = self._normalize_one(display_name, uri)
                 self.assertIsInstance(result, InputRejected)
-                self.assertIn((field, reason), {(item.field, item.reason) for item in result.errors})
+                self.assertIn(
+                    (field, reason), {(item.field, item.reason) for item in result.errors}
+                )
 
     # テストケース: URI actionとして安全でない各URLを入力する。
     # 期待値: absolute HTTPS・host必須、userinfo/control/空白なし以外を拒否する。
@@ -156,9 +158,7 @@ class TemplateNormalizationTests(SimpleTestCase):
     # テストケース: 未知template ID/versionとmapping以外の入力shapeを渡す。
     # 期待値: 既知版へ置換せず安全なfield-level rejectionになる。
     def test_rejects_unknown_template_and_invalid_input_shape(self):
-        unknown = self.catalog.normalize(
-            TemplateInput(TemplateReference("jp-link-one", 2), {})
-        )
+        unknown = self.catalog.normalize(TemplateInput(TemplateReference("jp-link-one", 2), {}))
         malformed = self.catalog.normalize(
             TemplateInput(TemplateReference("jp-link-one", 1), {"area1": "unsafe"})
         )

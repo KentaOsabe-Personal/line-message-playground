@@ -65,6 +65,8 @@ from .views import HealthView
 
 ## テスト
 
+コード・テスト・設定・依存の変更後は、rootから `sh scripts/check.sh backend` を実行し、migrationを含むBackend全体のRuff Lint・整形チェックを通します。準備・修正・対象範囲は [READMEのローカル品質チェック](../README.md#ローカル品質チェック) が正本です。Ruffは静的型検査の代わりにはならず、`--unsafe-fixes`を標準手順に含めません。
+
 - Django test runnerとDRF `APITestCase` を使い、status codeとresponse bodyの両方を検証する。
 - テストは対象Django app内に置く。小規模appは `tests.py`、複数責務のappは `tests/test_<責務>.py` へ分ける。
 - 各テスト定義の直前に日本語コメントで `テストケース:` と `期待値:` を1行ずつ記載し、入力・操作と観測可能な期待結果を示す。

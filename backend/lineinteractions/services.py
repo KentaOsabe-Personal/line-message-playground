@@ -48,7 +48,6 @@ from .types import (
     VerifiedInteractionUser,
 )
 
-
 _MINIMUM_REPLY_START_SECONDS = 0.300
 _MAXIMUM_REPLY_TOTAL_SECONDS = 0.600
 _REPLY_CLEANUP_RESERVE_SECONDS = 0.100
@@ -250,9 +249,7 @@ class DefaultInteractionService:
             return HandlerFailed()
 
         try:
-            credential = self._credential_repository.get_access_token(
-                channel.channel_public_id
-            )
+            credential = self._credential_repository.get_access_token(channel.channel_public_id)
         except Exception:
             return self._finish_command(
                 event=event,
@@ -267,9 +264,8 @@ class DefaultInteractionService:
                 interaction_outcome="credential_unavailable",
                 reserved=reserved,
             )
-        if (
-            not isinstance(credential, CredentialAvailable)
-            or not isinstance(credential.value, AccessToken)
+        if not isinstance(credential, CredentialAvailable) or not isinstance(
+            credential.value, AccessToken
         ):
             return self._finish_command(
                 event=event,
@@ -407,9 +403,6 @@ class DefaultInteractionService:
             "action_succeeded",
             "action_no_change",
             "action_rejected",
-        } or (
-            interaction_outcome == "command_processed"
-            and reply_outcome == "accepted"
-        ):
+        } or (interaction_outcome == "command_processed" and reply_outcome == "accepted"):
             return HandlerSucceeded()
         return HandlerFailed()

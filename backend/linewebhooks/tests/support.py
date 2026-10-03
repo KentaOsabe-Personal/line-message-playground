@@ -10,8 +10,8 @@ from uuid import UUID
 
 from django.utils import timezone
 
-from linechannels.types import ChannelSecret, WebhookChannelAvailable
 from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
+from linechannels.types import ChannelSecret, WebhookChannelAvailable
 from linewebhooks.handlers import StaticHandlerRegistry
 from linewebhooks.repositories import DjangoEventReceiptRepository
 from linewebhooks.services import WebhookIngressService
@@ -22,7 +22,6 @@ from linewebhooks.types import (
     WebhookAuditEntry,
 )
 from linewebhooks.verification import RawSignatureVerifier, WebhookPayloadValidator
-
 
 CHANNEL_ID = UUID("12345678-1234-4234-9234-123456789abc")
 BOT_USER_ID = "U" + "1" * 32
@@ -125,15 +124,11 @@ def build_service(
 ) -> tuple[WebhookIngressService, CapturingAuditLogger]:
     audit = audit_logger or CapturingAuditLogger()
     registrations = (
-        (HandlerRegistration("message", handler, "local"),)
-        if handler is not None
-        else ()
+        (HandlerRegistration("message", handler, "local"),) if handler is not None else ()
     )
     return (
         WebhookIngressService(
-            credential_repository=(
-                credential_repository or FixedCredentialRepository()
-            ),
+            credential_repository=(credential_repository or FixedCredentialRepository()),
             signature_verifier=RawSignatureVerifier(),
             payload_validator=WebhookPayloadValidator(),
             receipt_repository=(

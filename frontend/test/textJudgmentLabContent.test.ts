@@ -24,13 +24,25 @@ describe('text judgment lab fixed content', () => {
   // 期待値: 自由生成なしで一問分だけを取得し、本人の「分からない」と判定要確認を混同しない。
   test('provides one fixed question and closed choices per conversation position', () => {
     expect(getQuestion('topic').choices.map((choice) => choice.id)).toEqual([
-      'missing_notification', 'notification_settings',
+      'missing_notification',
+      'notification_settings',
     ])
-    expect(getQuestion('missing_scope').choices.map((choice) => choice.id)).toEqual(['all', 'specific', 'unknown'])
-    expect(getQuestion('workaround').choices.map((choice) => choice.id)).toEqual(['can_read', 'cannot_read', 'unknown'])
+    expect(getQuestion('missing_scope').choices.map((choice) => choice.id)).toEqual([
+      'all',
+      'specific',
+      'unknown',
+    ])
+    expect(getQuestion('workaround').choices.map((choice) => choice.id)).toEqual([
+      'can_read',
+      'cannot_read',
+      'unknown',
+    ])
     expect(getQuestion('urgency').choices.map((choice) => choice.id)).toEqual(['yes', 'no'])
     expect(getQuestion('missing_result').choices.map((choice) => choice.id)).toEqual([
-      'done', 'not_done', 'not_tried', 'cannot_check',
+      'done',
+      'not_done',
+      'not_tried',
+      'cannot_check',
     ])
   })
 
@@ -38,7 +50,10 @@ describe('text judgment lab fixed content', () => {
   // 期待値: 固定要点・詳細・HTTPS公式リンク・確認日を全案内が持つ。
   test('defines all four iPhone guides with reviewed official links', () => {
     expect(Object.keys(LAB_CONTENT.guides).sort()).toEqual([
-      'missing_all', 'missing_specific', 'settings_all', 'settings_specific',
+      'missing_all',
+      'missing_specific',
+      'settings_all',
+      'settings_specific',
     ])
     for (const guideId of Object.keys(LAB_CONTENT.guides) as (keyof typeof LAB_CONTENT.guides)[]) {
       const guide = getGuide(guideId)
@@ -53,8 +68,12 @@ describe('text judgment lab fixed content', () => {
   // テストケース: 任意URLを公式リンクとして解決しようとする。
   // 期待値: allowlist外やHTTPリンクを拒否し、表示先を入力から作らない。
   test('rejects links outside the fixed HTTPS allowlist', () => {
-    expect(() => getOfficialHelpLink('https://example.com/help')).toThrow('LAB_HELP_LINK_NOT_ALLOWED')
-    expect(() => getOfficialHelpLink('http://help.line.me/line/ios/')).toThrow('LAB_HELP_LINK_NOT_ALLOWED')
+    expect(() => getOfficialHelpLink('https://example.com/help')).toThrow(
+      'LAB_HELP_LINK_NOT_ALLOWED',
+    )
+    expect(() => getOfficialHelpLink('http://help.line.me/line/ios/')).toThrow(
+      'LAB_HELP_LINK_NOT_ALLOWED',
+    )
   })
 
   // テストケース: 終了と範囲外の固定文面を取得する。

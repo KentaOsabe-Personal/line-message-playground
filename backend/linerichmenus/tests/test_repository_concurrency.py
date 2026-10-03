@@ -17,7 +17,6 @@ from linerichmenus.types import OperationKind
 
 from .test_repository_acceptance import LockedFence
 
-
 NOW = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 
 
@@ -40,9 +39,7 @@ class RichMenuRepositoryConcurrencyTests(TransactionTestCase):
                 "version": 1,
                 "templateId": "jp-link-one",
                 "templateVersion": 1,
-                "fields": [
-                    {"displayName": "例", "uri": "https://example.com/"}
-                ],
+                "fields": [{"displayName": "例", "uri": "https://example.com/"}],
             },
             candidate_image_digest="c" * 64,
         )
@@ -61,9 +58,7 @@ class RichMenuRepositoryConcurrencyTests(TransactionTestCase):
         def accept(command):
             close_old_connections()
             try:
-                return DjangoRichMenuRepository(
-                    reference_fence=LockedFence()
-                ).accept(command)
+                return DjangoRichMenuRepository(reference_fence=LockedFence()).accept(command)
             finally:
                 close_old_connections()
 

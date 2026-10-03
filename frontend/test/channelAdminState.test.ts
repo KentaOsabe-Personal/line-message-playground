@@ -1,10 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
 import type { ChannelAdminItem } from '../src/channelAdminDto'
-import {
-  initialChannelAdminState,
-  transitionChannelAdmin,
-} from '../src/channelAdminState'
+import { initialChannelAdminState, transitionChannelAdmin } from '../src/channelAdminState'
 import type { ChannelAdminState } from '../src/channelAdminState'
 
 const channel = (label = '通知チャネル'): ChannelAdminItem => ({
@@ -27,22 +24,36 @@ describe('channel admin state', () => {
   // テストケース: 一覧取得を開始し、空またはチャネルありの応答を受け取る。
   // 期待値: loadingからempty/readyへ排他的に遷移する。
   test('models loading, empty, and ready states exclusively', () => {
-    const loading = transitionChannelAdmin(initialChannelAdminState, { type: 'loadStarted', generation: 1 })
+    const loading = transitionChannelAdmin(initialChannelAdminState, {
+      type: 'loadStarted',
+      generation: 1,
+    })
     expect(loading).toEqual({ state: 'loading', generation: 1 })
-    expect(transitionChannelAdmin(loading, { type: 'loadSucceeded', generation: 1, items: [] }))
-      .toEqual({ state: 'empty', operations: {} })
-    expect(transitionChannelAdmin(loading, { type: 'loadSucceeded', generation: 1, items: [channel()] }))
-      .toEqual({ state: 'ready', items: [channel()], operations: {} })
+    expect(
+      transitionChannelAdmin(loading, { type: 'loadSucceeded', generation: 1, items: [] }),
+    ).toEqual({ state: 'empty', operations: {} })
+    expect(
+      transitionChannelAdmin(loading, { type: 'loadSucceeded', generation: 1, items: [channel()] }),
+    ).toEqual({ state: 'ready', items: [channel()], operations: {} })
   })
 
   // テストケース: 新しい取得開始後に古いgenerationの成功・失敗が到着する。
   // 期待値: stale responseを破棄して現在のloadingを維持する。
   test('ignores stale load generations', () => {
-    const first = transitionChannelAdmin(initialChannelAdminState, { type: 'loadStarted', generation: 1 })
+    const first = transitionChannelAdmin(initialChannelAdminState, {
+      type: 'loadStarted',
+      generation: 1,
+    })
     const latest = transitionChannelAdmin(first, { type: 'loadStarted', generation: 2 })
-    const staleSuccess = transitionChannelAdmin(latest, { type: 'loadSucceeded', generation: 1, items: [channel()] })
+    const staleSuccess = transitionChannelAdmin(latest, {
+      type: 'loadSucceeded',
+      generation: 1,
+      items: [channel()],
+    })
     const staleFailure = transitionChannelAdmin(latest, {
-      type: 'loadFailed', generation: 1, error: { code: 'network_error', summary: '失敗' },
+      type: 'loadFailed',
+      generation: 1,
+      error: { code: 'network_error', summary: '失敗' },
     })
     expect(staleSuccess).toBe(latest)
     expect(staleFailure).toBe(latest)
@@ -51,12 +62,17 @@ describe('channel admin state', () => {
   // テストケース: 現在generationの一覧取得が安全なerrorで失敗する。
   // 期待値: 古い一覧を持たず、明示再取得可能なload_failedへ遷移する。
   test('moves the current load failure to an exclusive safe error state', () => {
-    const loading = transitionChannelAdmin(initialChannelAdminState, { type: 'loadStarted', generation: 1 })
-    expect(transitionChannelAdmin(loading, {
-      type: 'loadFailed',
+    const loading = transitionChannelAdmin(initialChannelAdminState, {
+      type: 'loadStarted',
       generation: 1,
-      error: { code: 'storage_unavailable', summary: '取得できません。' },
-    })).toEqual({
+    })
+    expect(
+      transitionChannelAdmin(loading, {
+        type: 'loadFailed',
+        generation: 1,
+        error: { code: 'storage_unavailable', summary: '取得できません。' },
+      }),
+    ).toEqual({
       state: 'load_failed',
       error: { code: 'storage_unavailable', summary: '取得できません。' },
     })
@@ -66,9 +82,18 @@ describe('channel admin state', () => {
   // 期待値: 二重開始だけを拒否し、一覧と独立操作を維持する。
   test('suppresses duplicate operation keys without hiding read-only data', () => {
     const ready: ChannelAdminState = { state: 'ready', items: [channel()], operations: {} }
-    const first = transitionChannelAdmin(ready, { type: 'operationStarted', key: `${channel().channelId}:update` })
-    const duplicate = transitionChannelAdmin(first, { type: 'operationStarted', key: `${channel().channelId}:update` })
-    const independent = transitionChannelAdmin(first, { type: 'operationStarted', key: `${channel().channelId}:check` })
+    const first = transitionChannelAdmin(ready, {
+      type: 'operationStarted',
+      key: `${channel().channelId}:update`,
+    })
+    const duplicate = transitionChannelAdmin(first, {
+      type: 'operationStarted',
+      key: `${channel().channelId}:update`,
+    })
+    const independent = transitionChannelAdmin(first, {
+      type: 'operationStarted',
+      key: `${channel().channelId}:check`,
+    })
     expect(duplicate).toBe(first)
     expect(independent.state === 'ready' && Object.keys(independent.operations)).toHaveLength(2)
     expect(independent.state === 'ready' && independent.items).toEqual([channel()])
@@ -78,7 +103,11 @@ describe('channel admin state', () => {
   // 期待値: server DTOだけで対象itemを置換し、操作中状態を解除する。
   test('updates items only from a successful server DTO', () => {
     const key = `${channel().channelId}:update`
-    const ready: ChannelAdminState = { state: 'ready', items: [channel()], operations: { [key]: 'pending' } }
+    const ready: ChannelAdminState = {
+      state: 'ready',
+      items: [channel()],
+      operations: { [key]: 'pending' },
+    }
     const updated = channel('サーバー確定名')
     const next = transitionChannelAdmin(ready, { type: 'mutationSucceeded', key, item: updated })
     expect(next).toEqual({ state: 'ready', items: [updated], operations: {} })
@@ -88,13 +117,25 @@ describe('channel admin state', () => {
   // 期待値: 成功を推測せず明示refresh必須へ遷移する。
   test('requires explicit refresh for unknown and stale mutation results', () => {
     const key = `${channel().channelId}:state`
-    const ready: ChannelAdminState = { state: 'ready', items: [channel()], operations: { [key]: 'pending' } }
-    expect(transitionChannelAdmin(ready, {
-      type: 'operationFailed', key, error: { code: 'network_error', summary: '不明' },
-    })).toEqual({ state: 'refresh_required', reason: 'unknown_result' })
-    expect(transitionChannelAdmin(ready, {
-      type: 'operationFailed', key, error: { code: 'stale_channel', summary: '競合' },
-    })).toEqual({ state: 'refresh_required', reason: 'stale_channel' })
+    const ready: ChannelAdminState = {
+      state: 'ready',
+      items: [channel()],
+      operations: { [key]: 'pending' },
+    }
+    expect(
+      transitionChannelAdmin(ready, {
+        type: 'operationFailed',
+        key,
+        error: { code: 'network_error', summary: '不明' },
+      }),
+    ).toEqual({ state: 'refresh_required', reason: 'unknown_result' })
+    expect(
+      transitionChannelAdmin(ready, {
+        type: 'operationFailed',
+        key,
+        error: { code: 'stale_channel', summary: '競合' },
+      }),
+    ).toEqual({ state: 'refresh_required', reason: 'stale_channel' })
   })
 
   // テストケース: 結果が確定したsafe operation errorを受け取る。
@@ -107,11 +148,13 @@ describe('channel admin state', () => {
       items: [channel()],
       operations: { [failedKey]: 'pending', [otherKey]: 'pending' },
     }
-    expect(transitionChannelAdmin(ready, {
-      type: 'operationFailed',
-      key: failedKey,
-      error: { code: 'validation_error', summary: '入力を確認してください。' },
-    })).toEqual({ state: 'ready', items: [channel()], operations: { [otherKey]: 'pending' } })
+    expect(
+      transitionChannelAdmin(ready, {
+        type: 'operationFailed',
+        key: failedKey,
+        error: { code: 'validation_error', summary: '入力を確認してください。' },
+      }),
+    ).toEqual({ state: 'ready', items: [channel()], operations: { [otherKey]: 'pending' } })
   })
 
   // テストケース: 一覧最後のチャネル削除がserverで確定する。
@@ -119,11 +162,17 @@ describe('channel admin state', () => {
   test('removes a server-confirmed deletion and reaches empty', () => {
     const key = `${channel().channelId}:delete`
     const ready: ChannelAdminState = {
-      state: 'ready', items: [channel()], operations: { [key]: 'pending' },
+      state: 'ready',
+      items: [channel()],
+      operations: { [key]: 'pending' },
     }
-    expect(transitionChannelAdmin(ready, {
-      type: 'deleteSucceeded', key, channelId: channel().channelId,
-    })).toEqual({ state: 'empty', operations: {} })
+    expect(
+      transitionChannelAdmin(ready, {
+        type: 'deleteSucceeded',
+        key,
+        channelId: channel().channelId,
+      }),
+    ).toEqual({ state: 'empty', operations: {} })
   })
 
   // テストケース: 接続確認などDTO更新を伴わない操作が完了する。
@@ -131,17 +180,24 @@ describe('channel admin state', () => {
   test('completes a read-only operation without changing channel items', () => {
     const key = `${channel().channelId}:check`
     const ready: ChannelAdminState = {
-      state: 'ready', items: [channel()], operations: { [key]: 'pending' },
+      state: 'ready',
+      items: [channel()],
+      operations: { [key]: 'pending' },
     }
-    expect(transitionChannelAdmin(ready, { type: 'operationCompleted', key }))
-      .toEqual({ state: 'ready', items: [channel()], operations: {} })
+    expect(transitionChannelAdmin(ready, { type: 'operationCompleted', key })).toEqual({
+      state: 'ready',
+      items: [channel()],
+      operations: {},
+    })
   })
 
   // テストケース: refresh_requiredからownerが明示的に再取得する。
   // 期待値: 自動再実行情報を持たず、新generationのloadingへ移る。
   test('refreshes only through an explicit load action', () => {
     const required = { state: 'refresh_required', reason: 'unknown_result' } as const
-    expect(transitionChannelAdmin(required, { type: 'loadStarted', generation: 3 }))
-      .toEqual({ state: 'loading', generation: 3 })
+    expect(transitionChannelAdmin(required, { type: 'loadStarted', generation: 3 })).toEqual({
+      state: 'loading',
+      generation: 3,
+    })
   })
 })

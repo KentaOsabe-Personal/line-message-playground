@@ -30,9 +30,7 @@ class RichMenuModelConstraintTests(TransactionTestCase):
     # テストケース: operation kindごとのsubject/target relationをDBへ保存する。
     # 期待値: apply・unlink・release・recheck・cleanupの正しいrelationだけが受理される。
     def test_operation_relations_accept_only_valid_shapes(self):
-        recheck = self._create_operation(
-            kind="recheck", subject_operation=self.apply_operation
-        )
+        recheck = self._create_operation(kind="recheck", subject_operation=self.apply_operation)
         self._create_operation(kind="unlink", target_resource=self.resource)
         self._create_operation(kind="release", target_resource=self.resource)
         self._create_operation(
@@ -57,9 +55,7 @@ class RichMenuModelConstraintTests(TransactionTestCase):
     def test_operation_stage_is_constrained(self):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                self._create_operation(
-                    kind="apply", status="processing", stage="unexpected"
-                )
+                self._create_operation(kind="apply", status="processing", stage="unexpected")
 
     # テストケース: resource lifecycleとLINE ID・ownership markerの一意性をDBで検証する。
     # 期待値: 未定義lifecycleと重複識別値がCHECK/UNIQUE制約で拒否される。
@@ -112,7 +108,11 @@ class RichMenuModelConstraintTests(TransactionTestCase):
         invalid_cases = (
             {"lifecycle": "candidate", "replacement_operation": replacement},
             {"lifecycle": "applied", "replacement_operation": replacement},
-            {"lifecycle": "released", "replacement_operation": replacement, "released_at": timezone.now()},
+            {
+                "lifecycle": "released",
+                "replacement_operation": replacement,
+                "released_at": timezone.now(),
+            },
         )
         for index, values in enumerate(invalid_cases):
             with self.subTest(values=values), self.assertRaises(IntegrityError):
@@ -152,9 +152,7 @@ class RichMenuModelConstraintTests(TransactionTestCase):
     def test_channel_and_transition_uniqueness(self):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                RichMenuChannelState.objects.create(
-                    channel_public_id=self.state.channel_public_id
-                )
+                RichMenuChannelState.objects.create(channel_public_id=self.state.channel_public_id)
 
         transition = RichMenuOperationTransition.objects.create(
             operation=self.apply_operation,

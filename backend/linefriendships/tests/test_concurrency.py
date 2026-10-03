@@ -251,12 +251,8 @@ class FriendshipProviderConcurrencyIntegrationTests(TransactionTestCase):
             )
             results = tuple(future.result(timeout=10) for future in futures)
 
-        self.assertTrue(
-            all(isinstance(result, IngressAccepted) for result in results)
-        )
-        receipts = dict(
-            WebhookEventReceipt.objects.values_list("webhook_event_id", "status")
-        )
+        self.assertTrue(all(isinstance(result, IngressAccepted) for result in results))
+        receipts = dict(WebhookEventReceipt.objects.values_list("webhook_event_id", "status"))
         self.assertEqual(len(receipts), 2)
         self.assertEqual(
             receipts,
@@ -284,9 +280,7 @@ class FriendshipProviderConcurrencyIntegrationTests(TransactionTestCase):
         release_channel = threading.Event()
         webhook_started = threading.Event()
         first_service = build_webhook_ingress_service()
-        first_body, first_signature, first_time = self._signed_follow(
-            "01ARZ3NDEKTSV4RRFFQ69G5FBA"
-        )
+        first_body, first_signature, first_time = self._signed_follow("01ARZ3NDEKTSV4RRFFQ69G5FBA")
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             update_future = executor.submit(
@@ -515,9 +509,7 @@ class FriendshipProviderConcurrencyIntegrationTests(TransactionTestCase):
         )
         self.assertTrue(LineIdentity.objects.filter(pk=self.identity.pk).exists())
         self.assertEqual(
-            FriendshipSyncAudit.objects.get(
-                webhook_event_id="01ARZ3NDEKTSV4RRFFQ69G5FBG"
-            ).outcome,
+            FriendshipSyncAudit.objects.get(webhook_event_id="01ARZ3NDEKTSV4RRFFQ69G5FBG").outcome,
             "applied",
         )
 
@@ -588,9 +580,7 @@ class FriendshipProviderConcurrencyIntegrationTests(TransactionTestCase):
         self.assertIsNone(owner.identity_id)
         self.assertFalse(LineIdentity.objects.filter(pk=self.identity.pk).exists())
         self.assertFalse(
-            DeliveryRecipient.objects.filter(
-                public_id=finalized_recipient.public_id
-            ).exists()
+            DeliveryRecipient.objects.filter(public_id=finalized_recipient.public_id).exists()
         )
         self.assertTrue(
             DeliveryRecipient.objects.filter(
@@ -601,9 +591,7 @@ class FriendshipProviderConcurrencyIntegrationTests(TransactionTestCase):
         )
         self.assertFalse(OwnerSession.objects.filter(pk=session.pk).exists())
         self.assertEqual(
-            FriendshipSyncAudit.objects.get(
-                webhook_event_id="01ARZ3NDEKTSV4RRFFQ69G5FBH"
-            ).outcome,
+            FriendshipSyncAudit.objects.get(webhook_event_id="01ARZ3NDEKTSV4RRFFQ69G5FBH").outcome,
             "unlinked",
         )
 
@@ -639,12 +627,8 @@ class FriendshipProviderConcurrencyIntegrationTests(TransactionTestCase):
         )
         service = build_webhook_ingress_service()
 
-        old_result = service.ingest(
-            str(self.channel.public_id), old_body, old_signature
-        )
-        new_result = service.ingest(
-            str(self.channel.public_id), new_body, new_signature
-        )
+        old_result = service.ingest(str(self.channel.public_id), old_body, old_signature)
+        new_result = service.ingest(str(self.channel.public_id), new_body, new_signature)
 
         self.assertIsInstance(old_result, IngressAccepted)
         self.assertIsInstance(new_result, IngressAccepted)
@@ -672,9 +656,7 @@ class FriendshipProviderConcurrencyIntegrationTests(TransactionTestCase):
             ),
             ["stale", "applied"],
         )
-        self.assertTrue(
-            LineIdentity.objects.filter(pk=reregistered_identity.pk).exists()
-        )
+        self.assertTrue(LineIdentity.objects.filter(pk=reregistered_identity.pk).exists())
         self.assertEqual(
             DeliveryRecipient.objects.filter(
                 identity=reregistered_identity,

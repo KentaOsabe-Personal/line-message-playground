@@ -13,9 +13,7 @@ from .types import EncryptedCredential, EncryptedCredentialPair
 class RotationCredentialRepository(Protocol):
     def list_credential_public_ids(self) -> tuple[UUID, ...]: ...
 
-    def get_credentials_for_update(
-        self, public_id: UUID
-    ) -> EncryptedCredentialPair | None: ...
+    def get_credentials_for_update(self, public_id: UUID) -> EncryptedCredentialPair | None: ...
 
     def replace_credentials_locked(
         self, public_id: UUID, credentials: EncryptedCredentialPair
@@ -41,9 +39,7 @@ class DjangoRotationCredentialRepository:
         except DatabaseError:
             raise PersistenceError("storage_unavailable") from None
 
-    def get_credentials_for_update(
-        self, public_id: UUID
-    ) -> EncryptedCredentialPair | None:
+    def get_credentials_for_update(self, public_id: UUID) -> EncryptedCredentialPair | None:
         self._require_transaction()
         try:
             credential = (

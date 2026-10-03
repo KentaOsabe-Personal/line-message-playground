@@ -85,8 +85,7 @@ class Migration(migrations.Migration):
                     ),
                     models.CheckConstraint(
                         condition=(
-                            models.Q(event_type="follow")
-                            | models.Q(is_unblocked__isnull=True)
+                            models.Q(event_type="follow") | models.Q(is_unblocked__isnull=True)
                         ),
                         name="linefriend_audit_unfollow_no_unblock",
                     ),

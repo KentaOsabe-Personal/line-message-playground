@@ -6,7 +6,6 @@ import { createLabHttpClient } from '../src/textJudgmentLabApi'
 import { parseJudgmentResponse } from '../src/textJudgmentLabDto'
 import type { JudgmentRequest } from '../src/textJudgmentLabTypes'
 
-
 describe('Frontend・Backend共有契約', () => {
   // テストケース: Backend共有fixtureの成功応答をFrontend DTO境界へ渡す。
   // 期待値: v1のテストデータを旧版の拒否を確認する資料として保持し、応答を会話に反映しない。
@@ -19,13 +18,22 @@ describe('Frontend・Backend共有契約', () => {
   test('maps shared errors and rejects future contract versions', async () => {
     const unavailable = fixture.errors.judgmentUnavailable
     const timeout = fixture.errors.judgmentTimeout
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify(unavailable.body), { status: unavailable.status }))
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(unavailable.body), { status: unavailable.status }),
+      )
       .mockResolvedValueOnce(new Response(JSON.stringify(timeout.body), { status: timeout.status }))
     const client = createLabHttpClient(fetcher)
 
-    await expect(client.judge('id-token', { ...fixture.request, contractVersion: 2 } as JudgmentRequest)).rejects.toMatchObject({ code: 'judgment_failed' })
-    await expect(client.judge('id-token', { ...fixture.request, contractVersion: 2 } as JudgmentRequest)).rejects.toMatchObject({ code: 'judgment_failed' })
-    expect(parseJudgmentResponse({ ...fixture.response, contractVersion: 2 }, v2Request()).ok).toBe(false)
+    await expect(
+      client.judge('id-token', { ...fixture.request, contractVersion: 2 } as JudgmentRequest),
+    ).rejects.toMatchObject({ code: 'judgment_failed' })
+    await expect(
+      client.judge('id-token', { ...fixture.request, contractVersion: 2 } as JudgmentRequest),
+    ).rejects.toMatchObject({ code: 'judgment_failed' })
+    expect(parseJudgmentResponse({ ...fixture.response, contractVersion: 2 }, v2Request()).ok).toBe(
+      false,
+    )
   })
 })

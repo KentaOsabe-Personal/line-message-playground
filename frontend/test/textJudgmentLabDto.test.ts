@@ -8,9 +8,13 @@ describe('text judgment lab DTO', () => {
   // テストケース: accessと完全な判定応答をunknownから解析する。
   // 期待値: closed unionと有限な公開判定だけを会話へ渡す。
   test('parses exact access and judgment responses', () => {
-    expect(parseLabAccessResponse({
-      status: 'authorized', expiresAt: '2026-09-20T12:00:00Z', serverTime: '2026-09-20T11:55:00Z',
-    })).toMatchObject({ ok: true, value: { status: 'authorized' } })
+    expect(
+      parseLabAccessResponse({
+        status: 'authorized',
+        expiresAt: '2026-09-20T12:00:00Z',
+        serverTime: '2026-09-20T11:55:00Z',
+      }),
+    ).toMatchObject({ ok: true, value: { status: 'authorized' } })
 
     expect(parseJudgmentResponse(judgment(), v2Request())).toEqual({ ok: true, value: judgment() })
   })
@@ -26,7 +30,10 @@ describe('text judgment lab DTO', () => {
     delete (incomplete.details.choices as Record<string, unknown>).result
 
     for (const value of [future, extra, unknown, incomplete]) {
-      expect(parseJudgmentResponse(value, v2Request())).toMatchObject({ ok: false, error: { code: 'protocol_error' } })
+      expect(parseJudgmentResponse(value, v2Request())).toMatchObject({
+        ok: false,
+        error: { code: 'protocol_error' },
+      })
     }
   })
 
@@ -58,12 +65,21 @@ describe('text judgment lab DTO', () => {
   // テストケース: access応答にnaive日時や余分な本人情報を含める。
   // 期待値: token・profileを含み得る曖昧な応答を拒否する。
   test('rejects unsafe access response shapes', () => {
-    expect(parseLabAccessResponse({
-      status: 'authorized', expiresAt: '2026-09-20T12:00:00', serverTime: '2026-09-20T11:55:00Z',
-    }).ok).toBe(false)
-    expect(parseLabAccessResponse({
-      status: 'authorized', expiresAt: '2026-09-20T12:00:00Z', serverTime: '2026-09-20T11:55:00Z', profile: {},
-    }).ok).toBe(false)
+    expect(
+      parseLabAccessResponse({
+        status: 'authorized',
+        expiresAt: '2026-09-20T12:00:00',
+        serverTime: '2026-09-20T11:55:00Z',
+      }).ok,
+    ).toBe(false)
+    expect(
+      parseLabAccessResponse({
+        status: 'authorized',
+        expiresAt: '2026-09-20T12:00:00Z',
+        serverTime: '2026-09-20T11:55:00Z',
+        profile: {},
+      }).ok,
+    ).toBe(false)
   })
 })
 
@@ -71,37 +87,88 @@ describe('text judgment lab DTO', () => {
 // 期待値: 閲覧情報を受け入れ、送信要求との一致を確認する。
 test('accepts v2 inspection correlated with its request', () => {
   const request = v2Request()
-  expect(parseJudgmentResponse(judgment(request), request)).toEqual({ ok: true, value: judgment(request) })
+  expect(parseJudgmentResponse(judgment(request), request)).toEqual({
+    ok: true,
+    value: judgment(request),
+  })
 })
 
 // テストケース: 旧版の応答、閲覧情報の欠落、型・候補・理由・状態・比較値の不正を一条件ずつ設定する。
 // 期待値: 応答全体をprotocol_errorとして拒否し、部分的な成功として扱わない。
 test('rejects malformed inspection and v1 responses', () => {
   const mutations: ((value: ReturnType<typeof judgment>) => void)[] = [
-    value => { Object.assign(value, { contractVersion: 1 }) },
-    value => { Reflect.deleteProperty(value, 'inspection') },
-    value => { Object.assign(value.inspection, { questionVersion: 'future' }) },
-    value => { Reflect.deleteProperty(value.inspection.questions, 'topic') },
-    value => { Object.assign(value.inspection.questions.topic, { type: 'score' }) },
-    value => { Object.assign(value.inspection.questions.topic.criteria, { other: '不明' }) },
-    value => { Object.assign(value.inspection.questions.impact, { criteria: ['低', '高'] }) },
-    value => { Object.assign(value.inspection.questions.urgency, { criteria: ['no', 'yes'] }) },
-    value => { Object.assign(value.inspection.policy, { version: 'future' }) },
-    value => { Object.assign(value.inspection.policy.choice, { minConfidence: 0.6 }) },
-    value => { Object.assign(value.inspection.normalization.topic, { reasons: ['unknown'] }) },
-    value => { Object.assign(value.inspection.normalization.topic, { status: 'unknown' }) },
-    value => { Object.assign(value.inspection.normalization.topic.checks[0], { actual: Infinity }) },
-    value => { Object.assign(value.inspection.normalization.topic.checks[0], { passed: 'true' }) },
-    value => { Object.assign(value.inspection.normalization.topic.checks[0], { operator: 'gt' }) },
-    value => { Object.assign(value.inspection.normalization.topic.checks[0], { rule: 'future' }) },
-    value => { Object.assign(value.inspection.state.confirmed, { urgency: 1 }) },
-    value => { Object.assign(value.inspection.state, { currentText: '違う入力' }) },
-    value => { Object.assign(value.inspection.state, { questionId: 'result' }) },
-    value => { Object.assign(value.inspection.state, { impact: 'high' }) },
-    value => { Object.assign(value.inspection.state, { recentUserTexts: ['別の文脈'] }) },
-    value => { Object.assign(value.inspection.state.confirmed, { scope: 'all' }) },
-    value => { Object.assign(value, { requestId: '11111111-1111-4111-8111-111111111111' }) },
-    value => { Object.assign(value, { revision: value.revision + 1 }) },
+    (value) => {
+      Object.assign(value, { contractVersion: 1 })
+    },
+    (value) => {
+      Reflect.deleteProperty(value, 'inspection')
+    },
+    (value) => {
+      Object.assign(value.inspection, { questionVersion: 'future' })
+    },
+    (value) => {
+      Reflect.deleteProperty(value.inspection.questions, 'topic')
+    },
+    (value) => {
+      Object.assign(value.inspection.questions.topic, { type: 'score' })
+    },
+    (value) => {
+      Object.assign(value.inspection.questions.topic.criteria, { other: '不明' })
+    },
+    (value) => {
+      Object.assign(value.inspection.questions.impact, { criteria: ['低', '高'] })
+    },
+    (value) => {
+      Object.assign(value.inspection.questions.urgency, { criteria: ['no', 'yes'] })
+    },
+    (value) => {
+      Object.assign(value.inspection.policy, { version: 'future' })
+    },
+    (value) => {
+      Object.assign(value.inspection.policy.choice, { minConfidence: 0.6 })
+    },
+    (value) => {
+      Object.assign(value.inspection.normalization.topic, { reasons: ['unknown'] })
+    },
+    (value) => {
+      Object.assign(value.inspection.normalization.topic, { status: 'unknown' })
+    },
+    (value) => {
+      Object.assign(value.inspection.normalization.topic.checks[0], { actual: Infinity })
+    },
+    (value) => {
+      Object.assign(value.inspection.normalization.topic.checks[0], { passed: 'true' })
+    },
+    (value) => {
+      Object.assign(value.inspection.normalization.topic.checks[0], { operator: 'gt' })
+    },
+    (value) => {
+      Object.assign(value.inspection.normalization.topic.checks[0], { rule: 'future' })
+    },
+    (value) => {
+      Object.assign(value.inspection.state.confirmed, { urgency: 1 })
+    },
+    (value) => {
+      Object.assign(value.inspection.state, { currentText: '違う入力' })
+    },
+    (value) => {
+      Object.assign(value.inspection.state, { questionId: 'result' })
+    },
+    (value) => {
+      Object.assign(value.inspection.state, { impact: 'high' })
+    },
+    (value) => {
+      Object.assign(value.inspection.state, { recentUserTexts: ['別の文脈'] })
+    },
+    (value) => {
+      Object.assign(value.inspection.state.confirmed, { scope: 'all' })
+    },
+    (value) => {
+      Object.assign(value, { requestId: '11111111-1111-4111-8111-111111111111' })
+    },
+    (value) => {
+      Object.assign(value, { revision: value.revision + 1 })
+    },
   ]
   for (const mutate of mutations) {
     const value = structuredClone(judgment())

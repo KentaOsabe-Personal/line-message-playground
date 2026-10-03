@@ -6,10 +6,13 @@ from django.test import TransactionTestCase
 from django.test.utils import CaptureQueriesContext
 
 from linechannels.models import LineChannel
-from linerichmenus.models import ManagedRichMenu, RichMenuChannelState, RichMenuOperation, RichMenuOperationTransition
+from linerichmenus.models import (
+    ManagedRichMenu,
+    RichMenuChannelState,
+    RichMenuOperation,
+    RichMenuOperationTransition,
+)
 from linerichmenus.repository import DjangoRichMenuRepository, HistoryQuery, OwnerChannelScope
-from linerichmenus.types import OperationStatus
-
 
 NOW = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 
@@ -57,7 +60,9 @@ class RichMenuRepositoryQueryTests(TransactionTestCase):
         self.assertEqual(view.current_resource.lifecycle.value, "applied")
         self.assertEqual(view.latest_observation.fingerprint, "9" * 64)
         self.assertEqual(view.history_summary.total_count, 4)
-        self.assertNotEqual(view.history_summary.latest_operation_id, self.other_operation.operation_id)
+        self.assertNotEqual(
+            view.history_summary.latest_operation_id, self.other_operation.operation_id
+        )
 
     # テストケース: limit付きowner履歴を複数page取得する。
     # 期待値: 新しい順、opaque cursor、重複なしでowner自身の4件だけが返る。
@@ -101,18 +106,24 @@ class RichMenuRepositoryQueryTests(TransactionTestCase):
         self.state.save(update_fields=("active_operation",))
         active_view = self.repository.get_state(self._scope())
         self.assertNotIn("apply", {action.value for action in active_view.next_allowed_actions})
-        self.assertNotIn("new_preview", {action.value for action in active_view.next_allowed_actions})
+        self.assertNotIn(
+            "new_preview", {action.value for action in active_view.next_allowed_actions}
+        )
 
         self.state.active_operation = None
         self.state.save(update_fields=("active_operation",))
         ManagedRichMenu.objects.create(
-            channel_state=self.state, origin_operation=self.operations[0],
+            channel_state=self.state,
+            origin_operation=self.operations[0],
             ownership_marker="lrm:v1:" + uuid4().hex,
-            lifecycle="cleanup_required", image_digest="7" * 64,
+            lifecycle="cleanup_required",
+            image_digest="7" * 64,
         )
         cleanup_view = self.repository.get_state(self._scope())
         self.assertNotIn("apply", {action.value for action in cleanup_view.next_allowed_actions})
-        self.assertNotIn("new_preview", {action.value for action in cleanup_view.next_allowed_actions})
+        self.assertNotIn(
+            "new_preview", {action.value for action in cleanup_view.next_allowed_actions}
+        )
 
     def _scope(self):
         return OwnerChannelScope(
@@ -127,21 +138,34 @@ class RichMenuRepositoryQueryTests(TransactionTestCase):
     def _operation(self, index, owner=None):
         accepted_at = NOW + timedelta(minutes=index)
         operation = RichMenuOperation.objects.create(
-            operation_id=uuid4(), channel_state=self.state,
-            owner_identity_public_id=owner or self.owner, provider_id="0012345678",
-            kind="apply", request_fingerprint=f"{index:x}" * 64,
+            operation_id=uuid4(),
+            channel_state=self.state,
+            owner_identity_public_id=owner or self.owner,
+            provider_id="0012345678",
+            kind="apply",
+            request_fingerprint=f"{index:x}" * 64,
             confirmation_usage_digest=(f"{(index + 1):x}" * 64)[:64],
-            expected_channel_revision=NOW, status="succeeded", stage="verifying",
+            expected_channel_revision=NOW,
+            status="succeeded",
+            stage="verifying",
             result_code="succeeded",
             configuration_snapshot={
-                "version": 1, "templateId": "jp-link-one", "templateVersion": 1,
+                "version": 1,
+                "templateId": "jp-link-one",
+                "templateVersion": 1,
                 "fields": [{"displayName": f"表示{index}", "uri": f"https://example.com/{index}"}],
                 "channelLabel": "履歴用チャネル",
             },
-            accepted_at=accepted_at, completed_at=accepted_at,
+            accepted_at=accepted_at,
+            completed_at=accepted_at,
         )
         RichMenuOperationTransition.objects.create(
-            operation=operation, sequence=1, from_status="processing", to_status="succeeded",
-            stage="verifying", safe_reason="succeeded", observed_at=accepted_at,
+            operation=operation,
+            sequence=1,
+            from_status="processing",
+            to_status="succeeded",
+            stage="verifying",
+            safe_reason="succeeded",
+            observed_at=accepted_at,
         )
         return operation

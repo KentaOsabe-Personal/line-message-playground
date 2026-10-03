@@ -15,9 +15,7 @@ class OperationState:
     stage: OperationStage | None
 
 
-_TERMINAL_OPERATION_STATUSES = frozenset(
-    {OperationStatus.FAILED, OperationStatus.SUCCEEDED}
-)
+_TERMINAL_OPERATION_STATUSES = frozenset({OperationStatus.FAILED, OperationStatus.SUCCEEDED})
 _INITIAL_STAGE_BY_KIND = {
     OperationKind.APPLY: OperationStage.CREATING,
     OperationKind.UNLINK: OperationStage.CLEARING_DEFAULT,
@@ -125,7 +123,8 @@ def transition_operation(
             expected_stage is None
             or current_stage is not expected_stage
             or next_stage is not current_stage
-            or next_status not in {
+            or next_status
+            not in {
                 OperationStatus.SUCCEEDED,
                 OperationStatus.FAILED,
                 OperationStatus.UNKNOWN,

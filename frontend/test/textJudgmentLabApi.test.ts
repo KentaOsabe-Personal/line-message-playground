@@ -3,7 +3,6 @@ import { describe, expect, test, vi } from 'vitest'
 import { createLabHttpClient, LabHttpError } from '../src/textJudgmentLabApi'
 import type { JudgmentRequest } from '../src/textJudgmentLabTypes'
 
-
 const request: JudgmentRequest = {
   contractVersion: 2,
   consultationId: '12345678-1234-4234-8234-123456789012',
@@ -18,29 +17,47 @@ const request: JudgmentRequest = {
   },
 }
 
-
 describe('text judgment lab HTTP client', () => {
   // テストケース: accessとjudgmentをBearer tokenで呼ぶ
   // 期待値: canonical相対path、credentials omit、no-storeを使い、検証済みDTOだけを返す
   test('uses isolated bearer requests without cookies or caching', async () => {
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        status: 'authorized', expiresAt: '2026-09-21T01:00:00Z', serverTime: '2026-09-21T00:00:00Z',
-      }), { status: 200 }))
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            status: 'authorized',
+            expiresAt: '2026-09-21T01:00:00Z',
+            serverTime: '2026-09-21T00:00:00Z',
+          }),
+          { status: 200 },
+        ),
+      )
       .mockResolvedValueOnce(new Response(JSON.stringify({ broken: true }), { status: 200 }))
     const client = createLabHttpClient(fetcher)
 
     await expect(client.checkAccess('id-token')).resolves.toMatchObject({ status: 'authorized' })
-    await expect(client.judge('id-token', request)).rejects.toMatchObject({ code: 'protocol_error' })
+    await expect(client.judge('id-token', request)).rejects.toMatchObject({
+      code: 'protocol_error',
+    })
 
-    expect(fetcher.mock.calls[0]).toEqual(['/api/labs/text-judgment/access', {
-      method: 'POST', credentials: 'omit', cache: 'no-store', redirect: 'error',
-      headers: { Authorization: 'Bearer id-token', 'Content-Type': 'application/json' },
-      body: '{}', signal: undefined,
-    }])
+    expect(fetcher.mock.calls[0]).toEqual([
+      '/api/labs/text-judgment/access',
+      {
+        method: 'POST',
+        credentials: 'omit',
+        cache: 'no-store',
+        redirect: 'error',
+        headers: { Authorization: 'Bearer id-token', 'Content-Type': 'application/json' },
+        body: '{}',
+        signal: undefined,
+      },
+    ])
     expect(fetcher.mock.calls[1][0]).toBe('/api/labs/text-judgment/judgments')
     expect(fetcher.mock.calls[1][1]).toMatchObject({
-      credentials: 'omit', cache: 'no-store', body: JSON.stringify(request),
+      credentials: 'omit',
+      cache: 'no-store',
+      body: JSON.stringify(request),
     })
   })
 
@@ -55,9 +72,14 @@ describe('text judgment lab HTTP client', () => {
     [503, 'configuration_unavailable', 'access_unavailable'],
     [504, 'judge_timeout', 'judgment_failed'],
   ])('maps HTTP %s %s to %s', async (status, backendCode, expected) => {
-    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      error: { code: backendCode, message: 'secret-canary' },
-    }), { status }))
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: { code: backendCode, message: 'secret-canary' },
+        }),
+        { status },
+      ),
+    )
     const client = createLabHttpClient(fetcher)
 
     await expect(client.checkAccess('id-token')).rejects.toMatchObject({ code: expected })
@@ -72,14 +94,18 @@ describe('text judgment lab HTTP client', () => {
   test('maps network failures without automatic retry', async () => {
     const fetcher = vi.fn().mockRejectedValue(new TypeError('token-canary'))
     const client = createLabHttpClient(fetcher)
-    await expect(client.checkAccess('id-token')).rejects.toEqual(new LabHttpError('access_unavailable'))
+    await expect(client.checkAccess('id-token')).rejects.toEqual(
+      new LabHttpError('access_unavailable'),
+    )
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
   test('maps judgment network failures separately from access outages', async () => {
     const fetcher = vi.fn().mockRejectedValue(new TypeError('network'))
     const client = createLabHttpClient(fetcher)
-    await expect(client.judge('id-token', request)).rejects.toMatchObject({ code: 'judgment_failed' })
+    await expect(client.judge('id-token', request)).rejects.toMatchObject({
+      code: 'judgment_failed',
+    })
   })
 })
 
@@ -90,7 +116,8 @@ test('passes the sent request to the v2 success parser', async () => {
   const success = v2Response(request)
   const mismatch = structuredClone(success)
   Object.assign(mismatch.inspection.state, { currentText: '別の入力' })
-  const fetcher = vi.fn()
+  const fetcher = vi
+    .fn()
     .mockResolvedValueOnce(new Response(JSON.stringify(success)))
     .mockResolvedValueOnce(new Response(JSON.stringify(mismatch)))
   const client = createLabHttpClient(fetcher)
@@ -105,11 +132,16 @@ test('retains the sent request when the caller mutates its input', async () => {
   const input = structuredClone(request)
   const success = v2Response(input)
   let finish!: (response: Response) => void
-  const fetcher = vi.fn((_url: RequestInfo | URL, _init?: RequestInit) => new Promise<Response>(resolve => { finish = resolve }))
+  const fetcher = vi.fn(
+    (_url: RequestInfo | URL, _init?: RequestInit) =>
+      new Promise<Response>((resolve) => {
+        finish = resolve
+      }),
+  )
   const pending = createLabHttpClient(fetcher).judge('id-token', input)
   input.text = '変更した入力'
   input.context.confirmed.scope = 'all'
   finish(new Response(JSON.stringify(success)))
   await expect(pending).resolves.toEqual(success)
-  expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual(request)
+  expect(JSON.parse(fetcher.mock.calls[0][1]?.body as string)).toEqual(request)
 })

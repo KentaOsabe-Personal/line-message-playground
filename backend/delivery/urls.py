@@ -8,7 +8,6 @@ from .views import (
     PreviewAPIView,
 )
 
-
 app_name = "delivery"
 
 urlpatterns = [

@@ -2,8 +2,8 @@ from datetime import timedelta
 from unittest.mock import patch
 from uuid import uuid4
 
-from django.db import transaction
 from django.core.exceptions import ImproperlyConfigured
+from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -53,9 +53,7 @@ class RecipientAPITests(TestCase):
         with transaction.atomic():
             owner = self.repository.lock_owner_account()
             self.identity = self.repository.upsert_identity(identity)
-            owner = self.repository.bind_owner_identity(
-                owner, self.identity.public_id
-            )
+            owner = self.repository.bind_owner_identity(owner, self.identity.public_id)
             self.owner_session = self.repository.create_owner_session(
                 owner, timezone.now() + timedelta(hours=8)
             )
@@ -173,9 +171,7 @@ class RecipientAPITests(TestCase):
         )
 
         self.assertEqual(response.status_code, 401)
-        self.assertEqual(
-            response.json()["error"]["code"], "authentication_required"
-        )
+        self.assertEqual(response.json()["error"]["code"], "authentication_required")
         self.assertFalse(DeliveryRecipient.objects.exists())
 
     # テストケース: unlink pending ownerがrecipient一覧を要求する
@@ -255,17 +251,11 @@ class RecipientAPITests(TestCase):
         )
 
         self.assertEqual(unavailable.status_code, 422)
-        self.assertEqual(
-            unavailable.json()["error"]["code"], "channel_unavailable"
-        )
+        self.assertEqual(unavailable.json()["error"]["code"], "channel_unavailable")
         self.assertEqual(missing.status_code, 404)
-        self.assertEqual(
-            missing.json()["error"]["code"], "recipient_not_found"
-        )
+        self.assertEqual(missing.json()["error"]["code"], "recipient_not_found")
         self.assertEqual(provider_mismatch.status_code, 422)
-        self.assertEqual(
-            provider_mismatch.json()["error"]["code"], "provider_mismatch"
-        )
+        self.assertEqual(provider_mismatch.json()["error"]["code"], "provider_mismatch")
 
     # テストケース: recipient DELETEへ未知fieldを含むbodyを送る
     # 期待値: strict empty request境界で400拒否し対象recipientを削除しない
@@ -292,9 +282,7 @@ class RecipientAPITests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "validation_error")
-        self.assertTrue(
-            DeliveryRecipient.objects.filter(public_id=recipient.public_id).exists()
-        )
+        self.assertTrue(DeliveryRecipient.objects.filter(public_id=recipient.public_id).exists())
 
     # テストケース: permission後にunlink fenceが入りrecipient mutationが競合する
     # 期待値: raw owner_not_active/500ではなくunlink_in_progress 409へ収束する
@@ -312,9 +300,7 @@ class RecipientAPITests(TestCase):
             )
 
         self.assertEqual(response.status_code, 409)
-        self.assertEqual(
-            response.json()["error"]["code"], "unlink_in_progress"
-        )
+        self.assertEqual(response.json()["error"]["code"], "unlink_in_progress")
 
     # テストケース: recipient APIのconfig・storage・LINE依存が利用不能になる
     # 期待値: 秘密やraw例外を返さず全てsafe 503へ収束する

@@ -28,9 +28,7 @@ class CredentialCryptoError(RuntimeError):
 class FernetCredentialCipher:
     def __init__(self, keyring: "ValidatedCredentialKeyring") -> None:
         raw_keys = keyring._ValidatedCredentialKeyring__keys
-        self.__fernets = tuple(
-            Fernet(base64.urlsafe_b64encode(raw_key)) for raw_key in raw_keys
-        )
+        self.__fernets = tuple(Fernet(base64.urlsafe_b64encode(raw_key)) for raw_key in raw_keys)
         self.__multi_fernet = MultiFernet(list(self.__fernets))
 
     def rotation_readiness(self) -> RotationReadiness:
@@ -96,7 +94,7 @@ class FernetCredentialCipher:
             if context.kind == "access_token":
                 return AccessToken(plaintext)  # type: ignore[return-value]
             return ChannelSecret(plaintext)  # type: ignore[return-value]
-        except (InvalidToken, AttributeError, TypeError, UnicodeError, ValueError):
+        except InvalidToken, AttributeError, TypeError, UnicodeError, ValueError:
             raise CredentialCryptoError("credential_unreadable") from None
 
     @staticmethod
@@ -193,7 +191,7 @@ def parse_credential_keyring(raw: str | None) -> ValidatedCredentialKeyring:
             if decoded_key in decoded_keys:
                 raise ValueError
             decoded_keys.append(decoded_key)
-    except (UnicodeEncodeError, ValueError, binascii.Error):
+    except UnicodeEncodeError, ValueError, binascii.Error:
         raise CredentialKeyringConfigurationError("credential_keyring_invalid") from None
 
     return ValidatedCredentialKeyring(tuple(decoded_keys))

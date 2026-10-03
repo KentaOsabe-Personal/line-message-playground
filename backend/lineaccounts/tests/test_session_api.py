@@ -1,8 +1,8 @@
 from unittest.mock import patch
 from uuid import uuid4
 
-from django.db import transaction
 from django.contrib.sessions.backends.db import SessionStore
+from django.db import transaction
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -34,9 +34,7 @@ class SessionAPITests(TestCase):
         self.service = DefaultAccountSessionService(
             _GatewayStub(self.identity),
             DjangoAccountRepository(),
-            OwnerEligibilityDigest(
-                derive_owner_digest("0012345678", self.subject)
-            ),
+            OwnerEligibilityDigest(derive_owner_digest("0012345678", self.subject)),
         )
         self.service_patch = patch(
             "lineaccounts.views.build_session_service",
@@ -127,9 +125,7 @@ class SessionAPITests(TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["error"]["code"], "storage_unavailable")
         self.assertEqual(OwnerSession.objects.count(), 1)
-        self.assertEqual(
-            client.get("/api/account/session/").json(), {"state": "anonymous"}
-        )
+        self.assertEqual(client.get("/api/account/session/").json(), {"state": "anonymous"})
 
     # テストケース: session status・login・logoutでrepository障害が発生する
     # 期待値: raw例外を公開せず全endpointでstorage_unavailable 503へ収束する
@@ -153,9 +149,7 @@ class SessionAPITests(TestCase):
 
         for response in (status, login, logout):
             self.assertEqual(response.status_code, 503)
-            self.assertEqual(
-                response.json()["error"]["code"], "storage_unavailable"
-            )
+            self.assertEqual(response.json()["error"]["code"], "storage_unavailable")
 
     # テストケース: owner cookie付きlogoutのauthentication DB参照が失敗する
     # 期待値: handler到達前の障害もunexpected 500ではなくstorage_unavailable 503になる
@@ -176,9 +170,7 @@ class SessionAPITests(TestCase):
             )
 
         self.assertEqual(response.status_code, 503)
-        self.assertEqual(
-            response.json()["error"]["code"], "storage_unavailable"
-        )
+        self.assertEqual(response.json()["error"]["code"], "storage_unavailable")
 
     # テストケース: unlink pending中のowner sessionでstatusを取得する
     # 期待値: 通常操作可能とはせずstage固有の安全な再開actionだけを返す
@@ -213,18 +205,14 @@ class SessionAPITests(TestCase):
         )
 
         self.assertEqual(response.status_code, 401)
-        self.assertEqual(
-            response.json()["error"]["code"], "authentication_required"
-        )
+        self.assertEqual(response.json()["error"]["code"], "authentication_required")
 
     # テストケース: 不正bodyと不正Origin/CSRFを同時にlogin endpointへ送る
     # 期待値: serializerより先にcsrf_failedとなり、有効CSRF時だけvalidation_errorになる
     def test_login_enforces_origin_and_csrf_before_request_validation(self):
         client, token = self.csrf_client()
 
-        missing_origin = client.post(
-            "/api/account/session/line/", {}, format="json"
-        )
+        missing_origin = client.post("/api/account/session/line/", {}, format="json")
         missing_csrf = client.post(
             "/api/account/session/line/",
             {},
@@ -241,13 +229,7 @@ class SessionAPITests(TestCase):
 
         self.assertEqual(missing_origin.status_code, 403)
         self.assertEqual(missing_csrf.status_code, 403)
-        self.assertEqual(
-            missing_origin.json()["error"]["code"], "csrf_failed"
-        )
-        self.assertEqual(
-            missing_csrf.json()["error"]["code"], "csrf_failed"
-        )
+        self.assertEqual(missing_origin.json()["error"]["code"], "csrf_failed")
+        self.assertEqual(missing_csrf.json()["error"]["code"], "csrf_failed")
         self.assertEqual(valid_protection.status_code, 400)
-        self.assertEqual(
-            valid_protection.json()["error"]["code"], "validation_error"
-        )
+        self.assertEqual(valid_protection.json()["error"]["code"], "validation_error")

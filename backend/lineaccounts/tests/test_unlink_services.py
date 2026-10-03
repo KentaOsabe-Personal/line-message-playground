@@ -1,6 +1,6 @@
-from datetime import timedelta
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -8,15 +8,15 @@ from django.db import close_old_connections, transaction
 from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
+from delivery.models import DeliveryAttempt
 from lineaccounts.authentication import OwnerPrincipal
 from lineaccounts.gateway import (
     DeauthorizeSucceeded,
     DeauthorizeUncertain,
     InvalidLineProof,
-    VerifyUserTokenSucceeded,
     VerifiedLineIdentity,
+    VerifyUserTokenSucceeded,
 )
-from delivery.models import DeliveryAttempt
 from lineaccounts.models import DeliveryRecipient, OwnerAccount, OwnerSession
 from lineaccounts.recipient_services import DefaultRecipientService
 from lineaccounts.repositories import (
@@ -25,8 +25,8 @@ from lineaccounts.repositories import (
     DjangoAccountRepository,
     NewRecipient,
 )
-from lineaccounts.unlink_execution_lock import MySQLUnlinkExecutionLock
 from lineaccounts.types import LineSubject, UserAccessToken
+from lineaccounts.unlink_execution_lock import MySQLUnlinkExecutionLock
 from lineaccounts.unlink_services import (
     DefaultAccountUnlinkService,
     UnlinkCompleted,
@@ -230,9 +230,7 @@ class AccountUnlinkServiceTests(TestCase):
             owner = self.repository.lock_owner_account()
             self.repository.create_recipient(
                 owner,
-                NewRecipient(
-                    self.identity.public_id, second_channel.public_id, "unknown"
-                ),
+                NewRecipient(self.identity.public_id, second_channel.public_id, "unknown"),
             )
 
         result = service.execute(
@@ -316,9 +314,7 @@ class AccountUnlinkServiceTests(TestCase):
 
         self.assertEqual(result, UnlinkRejected("unlink_attempt_stale"))
         self.assertEqual(delayed_gateway.deauthorize_calls, 0)
-        self.assertEqual(
-            OwnerAccount.objects.get(slot=1).unlink_generation, new_generation
-        )
+        self.assertEqual(OwnerAccount.objects.get(slot=1).unlink_generation, new_generation)
 
     # テストケース: LINE 204後のmarker commitだけが失敗する
     # 期待値: identityとrecipientを保持してfresh再認証pendingへ戻す
@@ -393,9 +389,7 @@ class AccountUnlinkServiceTests(TestCase):
                 VerifiedLineIdentity("0012345678", self.subject, "Owner")
             )
             owner = self.repository.bind_owner_identity(owner, new_identity.public_id)
-            new_session = self.repository.create_owner_session(
-                owner, now + timedelta(hours=8)
-            )
+            new_session = self.repository.create_owner_session(owner, now + timedelta(hours=8))
             new_recipient = self.repository.create_recipient(
                 owner,
                 NewRecipient(
@@ -417,9 +411,7 @@ class AccountUnlinkServiceTests(TestCase):
             OwnerAccount.objects.get(slot=1).identity.public_id,
             new_identity.public_id,
         )
-        self.assertTrue(
-            OwnerSession.objects.filter(public_id=new_session.public_id).exists()
-        )
+        self.assertTrue(OwnerSession.objects.filter(public_id=new_session.public_id).exists())
         self.assertTrue(
             DeliveryRecipient.objects.filter(public_id=new_recipient.public_id).exists()
         )
@@ -484,9 +476,7 @@ class AccountUnlinkMySQLConcurrencyTests(TransactionTestCase):
             self.identity = self.repository.upsert_identity(
                 VerifiedLineIdentity("0012345678", self.subject, "Owner")
             )
-            owner = self.repository.bind_owner_identity(
-                owner, self.identity.public_id
-            )
+            owner = self.repository.bind_owner_identity(owner, self.identity.public_id)
             self.session = self.repository.create_owner_session(
                 owner, timezone.now() + timedelta(hours=8)
             )
@@ -501,13 +491,9 @@ class AccountUnlinkMySQLConcurrencyTests(TransactionTestCase):
             owner = self.repository.lock_owner_account()
             self.recipient = self.repository.create_recipient(
                 owner,
-                NewRecipient(
-                    self.identity.public_id, self.channel.public_id, "friend"
-                ),
+                NewRecipient(self.identity.public_id, self.channel.public_id, "friend"),
             )
-        self.principal = OwnerPrincipal(
-            self.session.public_id, self.identity.public_id, "active"
-        )
+        self.principal = OwnerPrincipal(self.session.public_id, self.identity.public_id, "active")
 
     @staticmethod
     def independently(operation):

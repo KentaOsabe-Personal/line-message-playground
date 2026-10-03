@@ -26,7 +26,6 @@ from .types import (
     ReceiptUnchanged,
 )
 
-
 _CAPABILITY_ENTROPY_BYTES = 32
 
 
@@ -47,20 +46,11 @@ class ReceiptCapabilityFactory:
         try:
             entropy = self._random_bytes(_CAPABILITY_ENTROPY_BYTES)
         except Exception:
-            raise ValueError(
-                "receipt capability generation failed"
-            ) from None
-        if (
-            not isinstance(entropy, bytes)
-            or len(entropy) != _CAPABILITY_ENTROPY_BYTES
-        ):
+            raise ValueError("receipt capability generation failed") from None
+        if not isinstance(entropy, bytes) or len(entropy) != _CAPABILITY_ENTROPY_BYTES:
             raise ValueError("receipt capability generation failed")
 
-        raw = (
-            urlsafe_b64encode(entropy)
-            .rstrip(b"=")
-            .decode("ascii")
-        )
+        raw = urlsafe_b64encode(entropy).rstrip(b"=").decode("ascii")
         digest = hashlib.sha256(raw.encode("ascii")).hexdigest()
         return ReceiptCapabilityCandidate(
             capability=ReceiptCapability(raw),

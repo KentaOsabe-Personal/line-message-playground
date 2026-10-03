@@ -63,12 +63,8 @@ class DjangoAccountProjectionRepository:
                 recipient_public_id=recipient.public_id,
                 registered_at=recipient.created_at,
                 friendship_state=recipient.friendship_state,
-                last_occurred_at_ms=(
-                    recipient.last_friendship_event_occurred_at_ms
-                ),
-                last_webhook_event_id=(
-                    recipient.last_friendship_webhook_event_id
-                ),
+                last_occurred_at_ms=(recipient.last_friendship_event_occurred_at_ms),
+                last_webhook_event_id=(recipient.last_friendship_webhook_event_id),
             )
 
     def apply_locked(

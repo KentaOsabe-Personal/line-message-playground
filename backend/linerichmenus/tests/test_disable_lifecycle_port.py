@@ -9,18 +9,18 @@ from linechannels.reference_fence import ReferenceFenceResult
 from linerichmenus.headless import (
     DefaultRichMenuLifecyclePort,
     DisableAssessment,
+    DisableRecoveryLookup,
     HeadlessStateCommand,
     HeadlessUnlinkCommand,
     ReassessDisableState,
     ReconcileDisableSubject,
-    DisableRecoveryLookup,
 )
 from linerichmenus.models import ManagedRichMenu, RichMenuChannelState, RichMenuOperation
 from linerichmenus.repository import (
-    DjangoRichMenuRepository,
     DisableUnlinkRejected,
-    ReserveDisableUnlink,
+    DjangoRichMenuRepository,
     ReservedDisableUnlink,
+    ReserveDisableUnlink,
     disable_assessment_proof,
 )
 from linerichmenus.services import OperationSucceeded, StateSucceeded
@@ -35,10 +35,9 @@ from linerichmenus.types import (
     OperationStage,
     OperationStatus,
     OperationView,
-    SafeResultCode,
     ResourceLifecycle,
+    SafeResultCode,
 )
-
 
 NOW = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 
@@ -105,8 +104,14 @@ class DisableLifecycleAssessmentTests(TestCase):
     # 期待値: 各状態が自動外部作用を起こさないclosed resultへ分類される。
     def test_assessment_maps_all_non_mutating_closed_variants(self):
         cases = (
-            (self._state(current=False, observation=ObservationKind.DEFAULT_NONE), "clear_to_disable"),
-            (self._state(current=False, observation=ObservationKind.EXTERNAL_DEFAULT), "external_default_blocked"),
+            (
+                self._state(current=False, observation=ObservationKind.DEFAULT_NONE),
+                "clear_to_disable",
+            ),
+            (
+                self._state(current=False, observation=ObservationKind.EXTERNAL_DEFAULT),
+                "external_default_blocked",
+            ),
             (self._state(current=False, observation=ObservationKind.UNKNOWN), "unavailable"),
             (self._state(cleanup=True), "cleanup_required"),
         )
@@ -156,14 +161,19 @@ class DisableLifecycleAssessmentTests(TestCase):
         subject_id = uuid4()
         recovery_id = uuid4()
         operation = OperationView(
-            recovery_id, OperationKind.RECHECK, OperationStatus.SUCCEEDED,
-            OperationStage.VERIFYING, SafeResultCode.SUCCEEDED, subject_id, None,
-            NOW, NOW, (),
+            recovery_id,
+            OperationKind.RECHECK,
+            OperationStatus.SUCCEEDED,
+            OperationStage.VERIFYING,
+            SafeResultCode.SUCCEEDED,
+            subject_id,
+            None,
+            NOW,
+            NOW,
+            (),
         )
         service.start_operation.return_value = OperationSucceeded(operation)
-        port = DefaultRichMenuLifecyclePort(
-            service, recovery_store=_ChannelOwnedRecoveryStore()
-        )
+        port = DefaultRichMenuLifecyclePort(service, recovery_store=_ChannelOwnedRecoveryStore())
 
         reconciled = port.recover_disable(
             ReconcileDisableSubject(
@@ -211,9 +221,7 @@ class DisableLifecycleAssessmentTests(TestCase):
             recovery_operation_id=uuid4(),
             reason="external_default",
         )
-        port = DefaultRichMenuLifecyclePort(
-            service, recovery_store=_ChannelOwnedRecoveryStore()
-        )
+        port = DefaultRichMenuLifecyclePort(service, recovery_store=_ChannelOwnedRecoveryStore())
 
         first = port.recover_disable(command)
         service.get_state.return_value = StateSucceeded(
@@ -252,19 +260,22 @@ class DisableLifecycleAssessmentTests(TestCase):
         resource = ManagedResourceView(
             self.resource_id, uuid4(), ResourceLifecycle.APPLIED, "b" * 64
         )
-        observed_resource = self.resource_id if observation in {
-            ObservationKind.MANAGED_DEFAULT,
-            ObservationKind.OTHER_MANAGED_DEFAULT,
-        } else None
+        observed_resource = (
+            self.resource_id
+            if observation
+            in {
+                ObservationKind.MANAGED_DEFAULT,
+                ObservationKind.OTHER_MANAGED_DEFAULT,
+            }
+            else None
+        )
         return ChannelStateView(
             channel_public_id=self.channel_id,
             current_resource=resource if current else None,
             blocking_operation=None,
             active_operation=None,
             cleanup_resources=(resource,) if cleanup else (),
-            latest_observation=DefaultObservation(
-                observation, NOW, "c" * 64, observed_resource
-            ),
+            latest_observation=DefaultObservation(observation, NOW, "c" * 64, observed_resource),
             history_summary=HistorySummary(0, None, None),
             next_allowed_actions=(NextAllowedAction.UNLINK,),
         )
@@ -287,7 +298,9 @@ class _MatchedOperationFence:
 class DisableUnlinkReservationTests(TransactionTestCase):
     def setUp(self):
         self.repository = DjangoRichMenuRepository(
-            reference_fence=_LockedFence(), operation_fence=_MatchedOperationFence(), clock=lambda: NOW
+            reference_fence=_LockedFence(),
+            operation_fence=_MatchedOperationFence(),
+            clock=lambda: NOW,
         )
         self.channel_id = uuid4()
         self.owner_id = uuid4()
@@ -299,16 +312,26 @@ class DisableUnlinkReservationTests(TransactionTestCase):
             last_observed_at=NOW,
         )
         origin = RichMenuOperation.objects.create(
-            operation_id=uuid4(), channel_state=self.state,
-            owner_identity_public_id=self.owner_id, provider_id=self.provider_id,
-            kind="apply", request_fingerprint="e" * 64,
-            expected_channel_revision=NOW, status="succeeded", stage="verifying",
-            result_code="succeeded", accepted_at=NOW, completed_at=NOW,
+            operation_id=uuid4(),
+            channel_state=self.state,
+            owner_identity_public_id=self.owner_id,
+            provider_id=self.provider_id,
+            kind="apply",
+            request_fingerprint="e" * 64,
+            expected_channel_revision=NOW,
+            status="succeeded",
+            stage="verifying",
+            result_code="succeeded",
+            accepted_at=NOW,
+            completed_at=NOW,
         )
         self.resource = ManagedRichMenu.objects.create(
-            channel_state=self.state, origin_operation=origin,
-            ownership_marker="lrm:v1:" + uuid4().hex, lifecycle="applied",
-            image_digest="f" * 64, line_rich_menu_id="private-line-id",
+            channel_state=self.state,
+            origin_operation=origin,
+            ownership_marker="lrm:v1:" + uuid4().hex,
+            lifecycle="applied",
+            image_digest="f" * 64,
+            line_rich_menu_id="private-line-id",
         )
         self.state.current_resource = self.resource
         self.state.save(update_fields=("current_resource",))
@@ -351,23 +374,35 @@ class DisableUnlinkReservationTests(TransactionTestCase):
         result = self.repository.reserve_disable_unlink(command)
 
         self.assertEqual(result, DisableUnlinkRejected("stale_assessment"))
-        self.assertFalse(RichMenuOperation.objects.filter(pk=command.deactivation_operation_id).exists())
+        self.assertFalse(
+            RichMenuOperation.objects.filter(pk=command.deactivation_operation_id).exists()
+        )
 
     # テストケース: assessment後にcurrent resourceを別の管理対象へ差し替える。
     # 期待値: 古いproofでは新対象を受付せず、operationもLINE callも発生しない。
     def test_reservation_rejects_current_resource_replacement_before_line_io(self):
         command = self._command()
         replacement_origin = RichMenuOperation.objects.create(
-            operation_id=uuid4(), channel_state=self.state,
-            owner_identity_public_id=self.owner_id, provider_id=self.provider_id,
-            kind="apply", request_fingerprint="1" * 64,
-            expected_channel_revision=NOW, status="succeeded", stage="verifying",
-            result_code="succeeded", accepted_at=NOW, completed_at=NOW,
+            operation_id=uuid4(),
+            channel_state=self.state,
+            owner_identity_public_id=self.owner_id,
+            provider_id=self.provider_id,
+            kind="apply",
+            request_fingerprint="1" * 64,
+            expected_channel_revision=NOW,
+            status="succeeded",
+            stage="verifying",
+            result_code="succeeded",
+            accepted_at=NOW,
+            completed_at=NOW,
         )
         replacement = ManagedRichMenu.objects.create(
-            channel_state=self.state, origin_operation=replacement_origin,
-            ownership_marker="lrm:v1:" + uuid4().hex, lifecycle="applied",
-            image_digest="2" * 64, line_rich_menu_id="replacement-private-id",
+            channel_state=self.state,
+            origin_operation=replacement_origin,
+            ownership_marker="lrm:v1:" + uuid4().hex,
+            lifecycle="applied",
+            image_digest="2" * 64,
+            line_rich_menu_id="replacement-private-id",
         )
         self.state.current_resource = replacement
         self.state.save(update_fields=("current_resource",))
@@ -375,7 +410,9 @@ class DisableUnlinkReservationTests(TransactionTestCase):
         result = self.repository.reserve_disable_unlink(command)
 
         self.assertEqual(result, DisableUnlinkRejected("stale_assessment"))
-        self.assertFalse(RichMenuOperation.objects.filter(pk=command.deactivation_operation_id).exists())
+        self.assertFalse(
+            RichMenuOperation.objects.filter(pk=command.deactivation_operation_id).exists()
+        )
 
     # テストケース: 予約前に外部既定、結果不明、後片付け待ちへ変化する。
     # 期待値: 各closed reasonで外部作用前に拒否しunlink operationを一件も作らない。

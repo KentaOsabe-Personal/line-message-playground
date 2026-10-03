@@ -11,12 +11,25 @@ describe('RouteRegistry', () => {
     ['/liff', 'home', 'LINE Message Playground', 'トップ'],
     ['/liff/channels', 'channels', 'チャネル管理 | LINE Message Playground', 'チャネル管理'],
     ['/liff/account', 'account', 'アカウント管理 | LINE Message Playground', 'アカウント管理'],
-    ['/liff/rich-menus', 'richMenus', 'リッチメニュー管理 | LINE Message Playground', 'リッチメニュー管理'],
-    ['/liff/deliveries', 'deliveries', 'LINEテスト配信 | LINE Message Playground', 'LINEテスト配信'],
-  ] as const)('accepts the exact static route %s with unique metadata', (path, navigationKey, title, heading) => {
-    expect(parseProtectedPath(path)).toBe(path)
-    expect(meta(path)).toEqual({ navigationKey, title, heading })
-  })
+    [
+      '/liff/rich-menus',
+      'richMenus',
+      'リッチメニュー管理 | LINE Message Playground',
+      'リッチメニュー管理',
+    ],
+    [
+      '/liff/deliveries',
+      'deliveries',
+      'LINEテスト配信 | LINE Message Playground',
+      'LINEテスト配信',
+    ],
+  ] as const)(
+    'accepts the exact static route %s with unique metadata',
+    (path, navigationKey, title, heading) => {
+      expect(parseProtectedPath(path)).toBe(path)
+      expect(meta(path)).toEqual({ navigationKey, title, heading })
+    },
+  )
 
   // テストケース: canonical UUIDと非canonical UUIDからrich-menu pathを生成する。
   // 期待値: canonical UUIDだけを安全な動的pathとして生成・解析する。

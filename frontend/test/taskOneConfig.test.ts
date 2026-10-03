@@ -29,7 +29,7 @@ describe('task 1 runtime dependencies and public host', () => {
     expect(configSource).toContain("import tailwindcss from '@tailwindcss/vite'")
     expect(configSource).toContain('plugins: [react(), tailwindcss()]')
     expect(configSource).toContain("appType: 'spa'")
-    expect(stylesheet).toContain('@import "tailwindcss";')
+    expect(stylesheet).toMatch(/@import\s+(['"])tailwindcss\1\s*;/)
   })
 
   // テストケース: 固定した LIFF SDK を module として import する。

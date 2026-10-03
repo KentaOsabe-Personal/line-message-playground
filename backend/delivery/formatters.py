@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from delivery.types import MessageSnapshot
 
-
 FORMATTER_VERSION = 1
 MAX_UTF16_CODE_UNITS = 5_000
 

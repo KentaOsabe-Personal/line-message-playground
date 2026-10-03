@@ -18,7 +18,6 @@ from linerichmenus.repository import (
 )
 from linerichmenus.types import OperationKind, OperationStage, OperationStatus, SafeResultCode
 
-
 NOW = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 
 
@@ -47,11 +46,22 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
             reference_fence=LockedFence(), operation_fence=self.operation_fence, clock=lambda: NOW
         )
         self.apply = AcceptedOperation(
-            operation_id=uuid4(), channel_public_id=uuid4(), owner_identity_public_id=uuid4(),
-            provider_id="0012345678", expected_channel_revision=NOW, kind=OperationKind.APPLY,
-            subject_operation_id=None, target_resource_id=None, request_fingerprint="a" * 64,
+            operation_id=uuid4(),
+            channel_public_id=uuid4(),
+            owner_identity_public_id=uuid4(),
+            provider_id="0012345678",
+            expected_channel_revision=NOW,
+            kind=OperationKind.APPLY,
+            subject_operation_id=None,
+            target_resource_id=None,
+            request_fingerprint="a" * 64,
             confirmation_usage_digest="b" * 64,
-            configuration_snapshot={"version": 1, "templateId": "jp-link-one", "templateVersion": 1, "fields": []},
+            configuration_snapshot={
+                "version": 1,
+                "templateId": "jp-link-one",
+                "templateVersion": 1,
+                "fields": [],
+            },
             candidate_image_digest="c" * 64,
         )
         accepted = self.repository.accept(self.apply)
@@ -60,18 +70,24 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
         self.operation_fence.status = "stale"
         self.repository.complete_stage(
             StageOutcome(
-                operation_id=self.apply.operation_id, expected_stage=OperationStage.CREATING,
-                next_status=OperationStatus.PROCESSING, next_stage=OperationStage.UPLOADING,
+                operation_id=self.apply.operation_id,
+                expected_stage=OperationStage.CREATING,
+                next_status=OperationStatus.PROCESSING,
+                next_stage=OperationStage.UPLOADING,
                 result=SafeResultCode.ACCEPTED,
             )
         )
         self.operation_fence.status = "matched"
         self.recheck = AcceptedOperation(
-            operation_id=uuid4(), channel_public_id=self.apply.channel_public_id,
+            operation_id=uuid4(),
+            channel_public_id=self.apply.channel_public_id,
             owner_identity_public_id=self.apply.owner_identity_public_id,
-            provider_id=self.apply.provider_id, expected_channel_revision=NOW,
-            kind=OperationKind.RECHECK, subject_operation_id=self.apply.operation_id,
-            target_resource_id=None, request_fingerprint="d" * 64,
+            provider_id=self.apply.provider_id,
+            expected_channel_revision=NOW,
+            kind=OperationKind.RECHECK,
+            subject_operation_id=self.apply.operation_id,
+            target_resource_id=None,
+            request_fingerprint="d" * 64,
         )
 
     # テストケース: 現在blockerをsubjectに持つrecheckを受付する。
@@ -132,7 +148,9 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
         )
         wrong = self.repository.accept_recovery(
             replace(
-                self.recheck, operation_id=uuid4(), subject_operation_id=uuid4(),
+                self.recheck,
+                operation_id=uuid4(),
+                subject_operation_id=uuid4(),
                 request_fingerprint="f" * 64,
             )
         )
@@ -144,8 +162,11 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
     # 期待値: kind/subject stage/target originの許可行列により拒否する。
     def test_cleanup_requires_cleanup_blocker_and_related_target(self):
         cleanup_for_unknown = replace(
-            self.recheck, operation_id=uuid4(), kind=OperationKind.CLEANUP,
-            target_resource_id=self.candidate_id, request_fingerprint="2" * 64,
+            self.recheck,
+            operation_id=uuid4(),
+            kind=OperationKind.CLEANUP,
+            target_resource_id=self.candidate_id,
+            request_fingerprint="2" * 64,
         )
         rejected = self.repository.accept_recovery(cleanup_for_unknown)
         self.assertIsInstance(rejected, OperationConflict)
@@ -200,8 +221,11 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
         stored.stage = "cleaning"
         stored.save(update_fields=("status", "stage"))
         cleanup = replace(
-            self.recheck, operation_id=uuid4(), kind=OperationKind.CLEANUP,
-            target_resource_id=self.candidate_id, request_fingerprint="3" * 64,
+            self.recheck,
+            operation_id=uuid4(),
+            kind=OperationKind.CLEANUP,
+            target_resource_id=self.candidate_id,
+            request_fingerprint="3" * 64,
         )
         self.repository.accept_recovery(cleanup)
         self.repository.handoff_recovery(
@@ -215,7 +239,9 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
             )
         )
         second_cleanup = replace(
-            cleanup, operation_id=uuid4(), subject_operation_id=cleanup.operation_id,
+            cleanup,
+            operation_id=uuid4(),
+            subject_operation_id=cleanup.operation_id,
             request_fingerprint="4" * 64,
         )
         rejected = self.repository.accept_recovery(second_cleanup)
@@ -230,8 +256,11 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
         stored.stage = "cleaning"
         stored.save(update_fields=("status", "stage"))
         cleanup = replace(
-            self.recheck, operation_id=uuid4(), kind=OperationKind.CLEANUP,
-            target_resource_id=self.candidate_id, request_fingerprint="5" * 64,
+            self.recheck,
+            operation_id=uuid4(),
+            kind=OperationKind.CLEANUP,
+            target_resource_id=self.candidate_id,
+            request_fingerprint="5" * 64,
         )
         self.repository.accept_recovery(cleanup)
         result = self.repository.handoff_recovery(
@@ -262,23 +291,36 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
         subject.channel_state.current_resource = current
         subject.channel_state.save(update_fields=("current_resource",))
         previous = RichMenuOperation.objects.create(
-            operation_id=uuid4(), channel_state=subject.channel_state,
+            operation_id=uuid4(),
+            channel_state=subject.channel_state,
             owner_identity_public_id=self.apply.owner_identity_public_id,
-            provider_id=self.apply.provider_id, kind="apply",
-            request_fingerprint="6" * 64, confirmation_usage_digest="7" * 64,
-            expected_channel_revision=NOW, status="succeeded", stage="verifying",
-            result_code="succeeded", accepted_at=NOW, completed_at=NOW,
+            provider_id=self.apply.provider_id,
+            kind="apply",
+            request_fingerprint="6" * 64,
+            confirmation_usage_digest="7" * 64,
+            expected_channel_revision=NOW,
+            status="succeeded",
+            stage="verifying",
+            result_code="succeeded",
+            accepted_at=NOW,
+            completed_at=NOW,
         )
         from linerichmenus.models import ManagedRichMenu
+
         old = ManagedRichMenu.objects.create(
-            channel_state=subject.channel_state, origin_operation=previous,
+            channel_state=subject.channel_state,
+            origin_operation=previous,
             replacement_operation=subject,
             ownership_marker="lrm:v1:" + uuid4().hex,
-            lifecycle="old", image_digest="8" * 64,
+            lifecycle="old",
+            image_digest="8" * 64,
         )
         cleanup = replace(
-            self.recheck, operation_id=uuid4(), kind=OperationKind.CLEANUP,
-            target_resource_id=old.public_id, request_fingerprint="9" * 64,
+            self.recheck,
+            operation_id=uuid4(),
+            kind=OperationKind.CLEANUP,
+            target_resource_id=old.public_id,
+            request_fingerprint="9" * 64,
         )
         accepted = self.repository.accept_recovery(cleanup)
         self.assertIsInstance(accepted, RecoveryAccepted)
@@ -291,22 +333,35 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
         subject.stage = "cleaning"
         subject.save(update_fields=("status", "stage"))
         previous = RichMenuOperation.objects.create(
-            operation_id=uuid4(), channel_state=subject.channel_state,
+            operation_id=uuid4(),
+            channel_state=subject.channel_state,
             owner_identity_public_id=self.apply.owner_identity_public_id,
-            provider_id=self.apply.provider_id, kind="apply",
-            request_fingerprint="0" * 64, confirmation_usage_digest="1" * 64,
-            expected_channel_revision=NOW, status="succeeded", stage="verifying",
-            result_code="succeeded", accepted_at=NOW, completed_at=NOW,
+            provider_id=self.apply.provider_id,
+            kind="apply",
+            request_fingerprint="0" * 64,
+            confirmation_usage_digest="1" * 64,
+            expected_channel_revision=NOW,
+            status="succeeded",
+            stage="verifying",
+            result_code="succeeded",
+            accepted_at=NOW,
+            completed_at=NOW,
         )
         from linerichmenus.models import ManagedRichMenu
+
         legacy_old = ManagedRichMenu.objects.create(
-            channel_state=subject.channel_state, origin_operation=previous,
+            channel_state=subject.channel_state,
+            origin_operation=previous,
             ownership_marker="legacy-old-" + uuid4().hex,
-            lifecycle="old", image_digest="2" * 64,
+            lifecycle="old",
+            image_digest="2" * 64,
         )
         cleanup = replace(
-            self.recheck, operation_id=uuid4(), kind=OperationKind.CLEANUP,
-            target_resource_id=legacy_old.public_id, request_fingerprint="3" * 64,
+            self.recheck,
+            operation_id=uuid4(),
+            kind=OperationKind.CLEANUP,
+            target_resource_id=legacy_old.public_id,
+            request_fingerprint="3" * 64,
         )
         rejected = self.repository.accept_recovery(cleanup)
         self.assertIsInstance(rejected, OperationConflict)
@@ -334,7 +389,9 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
         state = RichMenuOperation.objects.get(pk=self.apply.operation_id).channel_state
         self.assertIsNone(state.blocking_operation_id)
         self.assertEqual(state.active_operation_id, self.apply.operation_id)
-        self.assertIsNone(RichMenuOperation.objects.get(pk=self.apply.operation_id).stage_started_at)
+        self.assertIsNone(
+            RichMenuOperation.objects.get(pk=self.apply.operation_id).stage_started_at
+        )
         self.assertEqual(self.operation_fence.calls[-1].expected_channel_revision, NOW)
 
     def test_apply_recheck_can_handoff_to_cleanup_without_leaving_active_operation(self):
@@ -435,9 +492,7 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
             clock=lambda: NOW + timedelta(minutes=6),
         )
 
-        result = expiring_repository.claim_stage(
-            cleanup.operation_id, OperationStage.CLEANING
-        )
+        result = expiring_repository.claim_stage(cleanup.operation_id, OperationStage.CLEANING)
 
         self.assertIsInstance(result, StageExpired)
         self.assertEqual(result.operation.status, OperationStatus.UNKNOWN)
@@ -459,8 +514,10 @@ class RichMenuRepositoryRecoveryTests(TransactionTestCase):
         stored.save(update_fields=("status", "stage"))
         cleanup = replace(
             self.recheck,
-            operation_id=uuid4(), kind=OperationKind.CLEANUP,
-            target_resource_id=self.candidate_id, request_fingerprint="1" * 64,
+            operation_id=uuid4(),
+            kind=OperationKind.CLEANUP,
+            target_resource_id=self.candidate_id,
+            request_fingerprint="1" * 64,
         )
         self.repository.accept_recovery(cleanup)
         result = self.repository.handoff_recovery(

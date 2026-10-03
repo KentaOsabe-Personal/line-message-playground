@@ -3,7 +3,6 @@ from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 from django.test import TestCase
-from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
 from delivery.formatters import format_message_snapshot
 from delivery.models import DeliveryAttempt
@@ -20,10 +19,10 @@ from delivery.types import (
     ConfirmReceiptCommand,
     DeliveryPrePushFailure,
     ExistingAttempt,
-    LinkedTargetSnapshot,
     LinePushAccepted,
     LinePushRejected,
     LinePushUnknown,
+    LinkedTargetSnapshot,
     MessageSnapshot,
     OwnerIdentitySnapshot,
     OwnerPrincipal,
@@ -34,7 +33,7 @@ from delivery.types import (
 )
 from lineaccounts.models import LineIdentity, OwnerAccount
 from linechannels.reference_fence import ReferenceFenceResult
-
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
 NOW = datetime(2026, 7, 26, 12, 0, tzinfo=timezone.utc)
 
@@ -43,15 +42,9 @@ class RequestFingerprintTests(TestCase):
     def setUp(self):
         self.values = {
             "owner": OwnerPrincipal(1),
-            "owner_identity": OwnerIdentitySnapshot(
-                UUID("11111111-1111-4111-8111-111111111111")
-            ),
-            "channel_public_id": UUID(
-                "22222222-2222-4222-8222-222222222222"
-            ),
-            "recipient_public_id": UUID(
-                "33333333-3333-4333-8333-333333333333"
-            ),
+            "owner_identity": OwnerIdentitySnapshot(UUID("11111111-1111-4111-8111-111111111111")),
+            "channel_public_id": UUID("22222222-2222-4222-8222-222222222222"),
+            "recipient_public_id": UUID("33333333-3333-4333-8333-333333333333"),
             "message_fingerprint": "4" * 64,
             "receipt_requested": False,
         }
@@ -82,9 +75,7 @@ class RequestFingerprintTests(TestCase):
             with self.subTest(changes=tuple(changes)):
                 self.assertNotEqual(
                     baseline,
-                    build_request_fingerprint(
-                        **(self.values | changes)
-                    ),
+                    build_request_fingerprint(**(self.values | changes)),
                 )
 
     # テストケース: receipt要求のcommitment候補だけを変更して同じrequestを表す。
@@ -112,26 +103,20 @@ class RequestFingerprintTests(TestCase):
         for changes in invalid_changes:
             with self.subTest(changes=tuple(changes)):
                 with self.assertRaises(ValueError):
-                    build_request_fingerprint(
-                        **(self.values | changes)
-                    )
+                    build_request_fingerprint(**(self.values | changes))
 
 
 class DjangoAttemptRepositoryAcceptTests(TestCase):
     def setUp(self):
-        self.repository = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW)
-        self.owner = OwnerPrincipal(1)
-        self.owner_identity = OwnerIdentitySnapshot(
-            UUID("11111111-1111-4111-8111-111111111111")
+        self.repository = DjangoAttemptRepository(
+            reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW
         )
+        self.owner = OwnerPrincipal(1)
+        self.owner_identity = OwnerIdentitySnapshot(UUID("11111111-1111-4111-8111-111111111111"))
         self.target = LinkedTargetSnapshot(
-            channel_public_id=UUID(
-                "22222222-2222-4222-8222-222222222222"
-            ),
+            channel_public_id=UUID("22222222-2222-4222-8222-222222222222"),
             channel_label="通知チャネル",
-            recipient_public_id=UUID(
-                "33333333-3333-4333-8333-333333333333"
-            ),
+            recipient_public_id=UUID("33333333-3333-4333-8333-333333333333"),
             channel_active=True,
             recipient_enabled=True,
             friendship_state="friend",
@@ -188,9 +173,7 @@ class DjangoAttemptRepositoryAcceptTests(TestCase):
 
             self.assertIsInstance(result, expected_type)
             self.assertEqual(DeliveryAttempt.objects.count(), 0)
-            fence.lock_existing.assert_called_once_with(
-                self.target.channel_public_id
-            )
+            fence.lock_existing.assert_called_once_with(self.target.channel_public_id)
 
     # テストケース: linked recipientへの新しい配信要求を受理する。
     # 期待値: processing行と全snapshotを作り、新規受理結果へ同じcanonical operationを返す。
@@ -274,12 +257,8 @@ class DjangoAttemptRepositoryAcceptTests(TestCase):
             digest="9" * 64,
             expires_at=NOW + timedelta(hours=23),
         )
-        first_command = self.command(
-            receipt_commitment=first_commitment
-        )
-        second_command = self.command(
-            receipt_commitment=losing_commitment
-        )
+        first_command = self.command(receipt_commitment=first_commitment)
+        second_command = self.command(receipt_commitment=losing_commitment)
         first = self.repository.accept(first_command)
 
         second = self.repository.accept(second_command)
@@ -318,21 +297,15 @@ class DjangoAttemptRepositoryAcceptTests(TestCase):
 class DjangoAttemptRepositoryFinalizeAndLookupTests(TestCase):
     def setUp(self):
         self.clock_now = NOW
-        self.repository = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE,
-            clock=lambda: self.clock_now
+        self.repository = DjangoAttemptRepository(
+            reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: self.clock_now
         )
         self.owner = OwnerPrincipal(1)
-        self.owner_identity = OwnerIdentitySnapshot(
-            UUID("11111111-1111-4111-8111-111111111111")
-        )
+        self.owner_identity = OwnerIdentitySnapshot(UUID("11111111-1111-4111-8111-111111111111"))
         self.target = LinkedTargetSnapshot(
-            channel_public_id=UUID(
-                "22222222-2222-4222-8222-222222222222"
-            ),
+            channel_public_id=UUID("22222222-2222-4222-8222-222222222222"),
             channel_label="通知チャネル",
-            recipient_public_id=UUID(
-                "33333333-3333-4333-8333-333333333333"
-            ),
+            recipient_public_id=UUID("33333333-3333-4333-8333-333333333333"),
             channel_active=True,
             recipient_enabled=True,
             friendship_state="friend",
@@ -415,9 +388,7 @@ class DjangoAttemptRepositoryFinalizeAndLookupTests(TestCase):
             )
         ):
             with self.subTest(failure_type=failure_type):
-                accepted = self.accept(
-                    identity=OwnerIdentitySnapshot(uuid4())
-                )
+                accepted = self.accept(identity=OwnerIdentitySnapshot(uuid4()))
                 completed_at = NOW + timedelta(seconds=index + 1)
 
                 snapshot = self.repository.finalize(
@@ -426,16 +397,12 @@ class DjangoAttemptRepositoryFinalizeAndLookupTests(TestCase):
                     completed_at,
                 )
 
-                attempt = DeliveryAttempt.objects.get(
-                    pk=accepted.attempt_id
-                )
+                attempt = DeliveryAttempt.objects.get(pk=accepted.attempt_id)
                 self.assertEqual(snapshot.status, "failed")
                 self.assertEqual(snapshot.failure, failure_type)
                 self.assertEqual(attempt.failed_at, completed_at)
                 self.assertIsNone(attempt.sent_at)
-                self.assertIsNone(
-                    attempt.active_request_fingerprint
-                )
+                self.assertIsNone(attempt.active_request_fingerprint)
 
     # テストケース: LINEとの通信結果不明を確定する。
     # 期待値: unknownとして安全な不明分類を保持し、成功とは推測しない。
@@ -480,13 +447,9 @@ class DjangoAttemptRepositoryFinalizeAndLookupTests(TestCase):
     # テストケース: credential／target事前失敗と既存終端結果が競合する。
     # 期待値: どちらが先でも最初の保存結果だけを返し、要求した失敗へ偽装しない。
     def test_pre_push_failures_converge_to_first_terminal_result(self):
-        for index, failure_type in enumerate(
-            ("configuration", "target_changed")
-        ):
+        for index, failure_type in enumerate(("configuration", "target_changed")):
             with self.subTest(failure_type=failure_type, winner="pre_push"):
-                accepted = self.accept(
-                    identity=OwnerIdentitySnapshot(uuid4())
-                )
+                accepted = self.accept(identity=OwnerIdentitySnapshot(uuid4()))
                 first_at = NOW + timedelta(seconds=index + 1)
                 later_at = NOW + timedelta(seconds=index + 10)
 
@@ -509,9 +472,7 @@ class DjangoAttemptRepositoryFinalizeAndLookupTests(TestCase):
                 self.assertIsNone(later.line_request_id)
 
             with self.subTest(failure_type=failure_type, winner="line"):
-                accepted = self.accept(
-                    identity=OwnerIdentitySnapshot(uuid4())
-                )
+                accepted = self.accept(identity=OwnerIdentitySnapshot(uuid4()))
                 first_at = NOW + timedelta(seconds=index + 20)
                 later_at = NOW + timedelta(seconds=index + 30)
 
@@ -564,9 +525,7 @@ class DjangoAttemptRepositoryFinalizeAndLookupTests(TestCase):
         ):
             with self.subTest(offset=offset):
                 self.clock_now = NOW
-                accepted = self.accept(
-                    identity=OwnerIdentitySnapshot(uuid4())
-                )
+                accepted = self.accept(identity=OwnerIdentitySnapshot(uuid4()))
                 self.clock_now = NOW + timedelta(seconds=30) + offset
 
                 first = self.repository.get_for_owner(
@@ -624,9 +583,7 @@ class DjangoAttemptRepositoryFinalizeAndLookupTests(TestCase):
             owner_principal_slot=self.owner.slot,
             owner_identity_public_id=None,
             status=DeliveryAttempt.Status.FAILED,
-            failure_type=(
-                DeliveryAttempt.FailureType.SERVICE_UNAVAILABLE
-            ),
+            failure_type=(DeliveryAttempt.FailureType.SERVICE_UNAVAILABLE),
             accepted_at=completed_at - timedelta(seconds=1),
             processing_expires_at=completed_at,
             failed_at=completed_at,
@@ -646,13 +603,11 @@ class DjangoAttemptRepositoryFinalizeAndLookupTests(TestCase):
 
 class DjangoAttemptRepositoryReceiptTests(TestCase):
     def setUp(self):
-        self.repository = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW)
-        self.channel_public_id = UUID(
-            "22222222-2222-4222-8222-222222222222"
+        self.repository = DjangoAttemptRepository(
+            reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW
         )
-        self.recipient_public_id = UUID(
-            "33333333-3333-4333-8333-333333333333"
-        )
+        self.channel_public_id = UUID("22222222-2222-4222-8222-222222222222")
+        self.recipient_public_id = UUID("33333333-3333-4333-8333-333333333333")
         self.digest = "6" * 64
         self.expiry = NOW + timedelta(hours=24)
 
@@ -711,12 +666,8 @@ class DjangoAttemptRepositoryReceiptTests(TestCase):
     ):
         return ConfirmReceiptCommand(
             capability_digest=digest or self.digest,
-            channel_public_id=(
-                channel_public_id or self.channel_public_id
-            ),
-            recipient_public_id=(
-                recipient_public_id or self.recipient_public_id
-            ),
+            channel_public_id=(channel_public_id or self.channel_public_id),
+            recipient_public_id=(recipient_public_id or self.recipient_public_id),
             occurred_at=occurred_at or NOW,
             webhook_event_id=webhook_event_id,
         )
@@ -769,14 +720,10 @@ class DjangoAttemptRepositoryReceiptTests(TestCase):
                     NOW + timedelta(seconds=1),
                 )
 
-                receipt = self.repository.confirm_receipt(
-                    self.command(digest=self.digest)
-                )
+                receipt = self.repository.confirm_receipt(self.command(digest=self.digest))
 
                 self.assertIsInstance(receipt, ReceiptRecorded)
-                attempt = DeliveryAttempt.objects.get(
-                    pk=accepted.attempt_id
-                )
+                attempt = DeliveryAttempt.objects.get(pk=accepted.attempt_id)
                 self.assertEqual(attempt.status, receipt.snapshot.status)
                 if result.status == "accepted":
                     self.assertEqual(
@@ -787,14 +734,13 @@ class DjangoAttemptRepositoryReceiptTests(TestCase):
                         attempt.line_accepted_request_id,
                         "accepted-request",
                     )
+
     # テストケース: 同じ配信へ同一または別event IDで再確認する。
     # 期待値: unchangedへ収束し、初回日時と初回event IDを上書きしない。
     def test_confirm_receipt_repeated_events_keep_first_confirmation(self):
         self.accept()
         first_at = NOW + timedelta(minutes=1)
-        first = self.repository.confirm_receipt(
-            self.command(occurred_at=first_at)
-        )
+        first = self.repository.confirm_receipt(self.command(occurred_at=first_at))
 
         same = self.repository.confirm_receipt(
             self.command(
@@ -858,19 +804,13 @@ class DjangoAttemptRepositoryReceiptTests(TestCase):
                         terminal,
                         NOW + timedelta(seconds=1),
                     )
-                before = DeliveryAttempt.objects.values().get(
-                    pk=accepted.attempt_id
-                )
+                before = DeliveryAttempt.objects.values().get(pk=accepted.attempt_id)
 
-                result = self.repository.confirm_receipt(
-                    command_factory()
-                )
+                result = self.repository.confirm_receipt(command_factory())
 
                 self.assertIsInstance(result, ReceiptRejected)
                 self.assertEqual(result.reason, reason)
-                after = DeliveryAttempt.objects.values().get(
-                    pk=accepted.attempt_id
-                )
+                after = DeliveryAttempt.objects.values().get(pk=accepted.attempt_id)
                 self.assertEqual(after, before)
 
     # テストケース: DB列へ保存できない長さのevent IDで確認する。
@@ -878,9 +818,7 @@ class DjangoAttemptRepositoryReceiptTests(TestCase):
     def test_confirm_receipt_rejects_oversized_event_id_safely(self):
         self.accept()
 
-        result = self.repository.confirm_receipt(
-            self.command(webhook_event_id="x" * 27)
-        )
+        result = self.repository.confirm_receipt(self.command(webhook_event_id="x" * 27))
 
         self.assertEqual(result, ReceiptRejected("invalid"))
         attempt = DeliveryAttempt.objects.get()
@@ -901,19 +839,15 @@ class DjangoAttemptRepositoryReceiptTests(TestCase):
 
 class DjangoAttemptRepositoryContractIntegrationTests(TestCase):
     def setUp(self):
-        self.repository = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW)
-        self.owner = OwnerPrincipal(1)
-        self.owner_identity = OwnerIdentitySnapshot(
-            UUID("11111111-1111-4111-8111-111111111111")
+        self.repository = DjangoAttemptRepository(
+            reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW
         )
+        self.owner = OwnerPrincipal(1)
+        self.owner_identity = OwnerIdentitySnapshot(UUID("11111111-1111-4111-8111-111111111111"))
         self.target = LinkedTargetSnapshot(
-            channel_public_id=UUID(
-                "22222222-2222-4222-8222-222222222222"
-            ),
+            channel_public_id=UUID("22222222-2222-4222-8222-222222222222"),
             channel_label="通知チャネル",
-            recipient_public_id=UUID(
-                "33333333-3333-4333-8333-333333333333"
-            ),
+            recipient_public_id=UUID("33333333-3333-4333-8333-333333333333"),
             channel_active=True,
             recipient_enabled=True,
             friendship_state="friend",
@@ -976,9 +910,7 @@ class DjangoAttemptRepositoryContractIntegrationTests(TestCase):
 
         accepted = self.repository.accept(original)
         same_operation = self.repository.accept(original)
-        same_request_new_operation = self.repository.accept(
-            self.command(operation_id=uuid4())
-        )
+        same_request_new_operation = self.repository.accept(self.command(operation_id=uuid4()))
         target_conflict = self.repository.accept(
             self.command(
                 operation_id=operation_id,
@@ -991,12 +923,8 @@ class DjangoAttemptRepositoryContractIntegrationTests(TestCase):
                 receipt_digest="6" * 64,
             )
         )
-        target_variant = self.repository.accept(
-            self.command(target=changed_target)
-        )
-        option_variant = self.repository.accept(
-            self.command(receipt_digest="7" * 64)
-        )
+        target_variant = self.repository.accept(self.command(target=changed_target))
+        option_variant = self.repository.accept(self.command(receipt_digest="7" * 64))
 
         self.assertIsInstance(accepted, AttemptAccepted)
         self.assertIsInstance(same_operation, ExistingAttempt)
@@ -1027,9 +955,7 @@ class DjangoAttemptRepositoryContractIntegrationTests(TestCase):
                 "identity": identity,
             },
         )
-        accepted = self.repository.accept(
-            self.command(receipt_digest="6" * 64)
-        )
+        accepted = self.repository.accept(self.command(receipt_digest="6" * 64))
 
         OwnerAccount.objects.filter(slot=self.owner.slot).update(
             state=OwnerAccount.State.VACANT,

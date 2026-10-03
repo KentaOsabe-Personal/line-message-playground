@@ -17,22 +17,21 @@ from rest_framework.exceptions import (
     ValidationError,
 )
 from rest_framework.parsers import JSONParser
-from rest_framework.response import Response
 from rest_framework.renderers import JSONRenderer
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .authentication import IsLabOwner, LabAccessError, LabBearerAuthentication
 from .container import build_judgment_service
-from .judgment_questions import QUESTION_IDS, state_payload, questions_payload
+from .judgment_questions import QUESTION_IDS, questions_payload, state_payload
 from .runtime import LabRuntimeConfigured
 from .serializers import JudgmentRequestSerializer
 from .types import (
     JudgmentFailure,
+    JudgmentInspection,
     JudgmentSuccess,
     KnownEvidence,
-    JudgmentInspection,
 )
-
 
 _MAX_SUCCESS_BYTES = 256 * 1024
 _MAX_BODY_BYTES = 32 * 1024
@@ -83,7 +82,7 @@ class LabAPIView(APIView):
             authorization = request.headers.get("Authorization", "")
             try:
                 authorization_size = len(authorization.encode("ascii"))
-            except (AttributeError, UnicodeEncodeError):
+            except AttributeError, UnicodeEncodeError:
                 authorization_size = _MAX_AUTHORIZATION_BYTES + 1
             if authorization_size > _MAX_AUTHORIZATION_BYTES:
                 raise LabBoundaryError("reauthentication_required")
@@ -149,10 +148,13 @@ def _choice(value):
 
 def _success_payload(result: JudgmentSuccess) -> dict[str, object]:
     inspection = result.inspection
-    if (result.contract_version != 2 or not isinstance(inspection, JudgmentInspection)
-            or set(inspection.questions) != set(QUESTION_IDS)
-            or set(inspection.normalization) != set(QUESTION_IDS)
-            or set(result.details.choices) != set(QUESTION_IDS[:-2])):
+    if (
+        result.contract_version != 2
+        or not isinstance(inspection, JudgmentInspection)
+        or set(inspection.questions) != set(QUESTION_IDS)
+        or set(inspection.normalization) != set(QUESTION_IDS)
+        or set(result.details.choices) != set(QUESTION_IDS[:-2])
+    ):
         raise ValueError("incomplete judgment success")
     evidence = result.evidence
     details = result.details
@@ -169,19 +171,36 @@ def _success_payload(result: JudgmentSuccess) -> dict[str, object]:
             "questions": questions_payload(inspection.questions),
             "policy": {
                 "version": policy.version,
-                "choice": {"minConfidence": policy.choice.min_confidence,
-                           "minProbability": policy.choice.min_probability,
-                           "requireUniqueMaximum": policy.choice.require_unique_maximum},
-                "score": {"requiredImpactEvidence": policy.score.required_impact_evidence,
-                          "minConfidence": policy.score.min_confidence, "highFrom": policy.score.high_from},
-                "noul": {"urgentFrom": policy.noul.urgent_from,
-                         "notUrgentThrough": policy.noul.not_urgent_through},
+                "choice": {
+                    "minConfidence": policy.choice.min_confidence,
+                    "minProbability": policy.choice.min_probability,
+                    "requireUniqueMaximum": policy.choice.require_unique_maximum,
+                },
+                "score": {
+                    "requiredImpactEvidence": policy.score.required_impact_evidence,
+                    "minConfidence": policy.score.min_confidence,
+                    "highFrom": policy.score.high_from,
+                },
+                "noul": {
+                    "urgentFrom": policy.noul.urgent_from,
+                    "notUrgentThrough": policy.noul.not_urgent_through,
+                },
             },
             "normalization": {
-                key: {"status": decision.status, "reasons": list(decision.reasons),
-                      "checks": [{"rule": check.rule, "actual": check.actual,
-                                  "operator": check.operator, "expected": check.expected,
-                                  "passed": check.passed} for check in decision.checks]}
+                key: {
+                    "status": decision.status,
+                    "reasons": list(decision.reasons),
+                    "checks": [
+                        {
+                            "rule": check.rule,
+                            "actual": check.actual,
+                            "operator": check.operator,
+                            "expected": check.expected,
+                            "passed": check.passed,
+                        }
+                        for check in decision.checks
+                    ],
+                }
                 for key, decision in inspection.normalization.items()
             },
         },
@@ -214,11 +233,13 @@ class LabAccessAPIView(LabAPIView):
     def post(self, request):
         if not isinstance(request.data, dict) or request.data:
             raise ValidationError("invalid access body")
-        return Response({
-            "status": "authorized",
-            "expiresAt": _timestamp(request.user.expires_at),
-            "serverTime": _timestamp(timezone.now()),
-        })
+        return Response(
+            {
+                "status": "authorized",
+                "expiresAt": _timestamp(request.user.expires_at),
+                "serverTime": _timestamp(timezone.now()),
+            }
+        )
 
 
 class LabJudgmentAPIView(LabAPIView):
@@ -234,7 +255,7 @@ class LabJudgmentAPIView(LabAPIView):
                 payload = _success_payload(result)
                 if len(JSONRenderer().render(payload)) > _MAX_SUCCESS_BYTES:
                     return self._error("judgment_failed")
-            except (ValueError, TypeError, AttributeError):
+            except ValueError, TypeError, AttributeError:
                 return self._error("judgment_failed")
             return Response(payload)
         if not isinstance(result, JudgmentFailure):

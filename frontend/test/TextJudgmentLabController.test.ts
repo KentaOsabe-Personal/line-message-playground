@@ -2,9 +2,13 @@ import { inspectionFor, v2Request } from './textJudgmentLabV2Fixture'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createTextJudgmentLabController } from '../src/useTextJudgmentLab'
-import type { JudgmentResponse } from '../src/textJudgmentLabTypes'
+import type { JudgmentRequest, JudgmentResponse } from '../src/textJudgmentLabTypes'
 
-const response = (consultationId: string, requestId: string, revision: number): JudgmentResponse => ({
+const response = (
+  consultationId: string,
+  requestId: string,
+  revision: number,
+): JudgmentResponse => ({
   contractVersion: 2,
   consultationId,
   requestId,
@@ -22,8 +26,22 @@ const response = (consultationId: string, requestId: string, revision: number): 
     urgency: { kind: 'known', value: false },
   },
   details: {
-    choices: Object.fromEntries(['topic', 'relevance', 'change', 'scope', 'workaround', 'result', 'impact_evidence'].map((key) => [key, { type: 'choice', choice: 'x', probabilities: { x: 1 }, confidence: 1 }])) as unknown as JudgmentResponse['details']['choices'],
-    score: { type: 'score', score: 0.2, legend: { '0': '支障なし', '1': '不便だが別の操作で目的を達成できる', '2': '目的を達成できない' }, probabilities: { '0': 0.9, '1': 0.1, '2': 0 }, confidence: 0.9 },
+    choices: Object.fromEntries(
+      ['topic', 'relevance', 'change', 'scope', 'workaround', 'result', 'impact_evidence'].map(
+        (key) => [key, { type: 'choice', choice: 'x', probabilities: { x: 1 }, confidence: 1 }],
+      ),
+    ) as unknown as JudgmentResponse['details']['choices'],
+    score: {
+      type: 'score',
+      score: 0.2,
+      legend: {
+        '0': '支障なし',
+        '1': '不便だが別の操作で目的を達成できる',
+        '2': '目的を達成できない',
+      },
+      probabilities: { '0': 0.9, '1': 0.1, '2': 0 },
+      confidence: 0.9,
+    },
     noul: { type: 'noul', noul: 0.1 },
     jevElapsedMs: 123,
   },
@@ -33,8 +51,19 @@ describe('文章判定ラボcontroller', () => {
   it('期限切れの後着結果を捨て、本文をdraftへ戻して自動再送しない', async () => {
     let finish!: (value: JudgmentResponse) => void
     let now = 0
-    const judge = vi.fn(() => new Promise<JudgmentResponse>((resolve) => { finish = resolve }))
-    const controller = createTextJudgmentLabController({ judge }, { now: () => now, uuid: vi.fn().mockReturnValueOnce('consultation-1').mockReturnValueOnce('request-1') })
+    const judge = vi.fn(
+      () =>
+        new Promise<JudgmentResponse>((resolve) => {
+          finish = resolve
+        }),
+    )
+    const controller = createTextJudgmentLabController(
+      { judge },
+      {
+        now: () => now,
+        uuid: vi.fn().mockReturnValueOnce('consultation-1').mockReturnValueOnce('request-1'),
+      },
+    )
 
     const pending = controller.submit('通知が来ません', 'text', 'token')
     const sent = controller.getState()
@@ -51,11 +80,19 @@ describe('文章判定ラボcontroller', () => {
 
   it('中断と新規開始は通信をabortし、相談IDが異なる後着結果を反映しない', async () => {
     let finish!: (value: JudgmentResponse) => void
-    const judge = vi.fn((_token: string, _request: unknown, signal?: AbortSignal) => new Promise<JudgmentResponse>((resolve) => {
-      finish = resolve
-      expect(signal).toBeInstanceOf(AbortSignal)
-    }))
-    const uuid = vi.fn().mockReturnValueOnce('consultation-1').mockReturnValueOnce('request-1').mockReturnValueOnce('message-1').mockReturnValueOnce('consultation-2')
+    const judge = vi.fn(
+      (_token: string, _request: unknown, signal?: AbortSignal) =>
+        new Promise<JudgmentResponse>((resolve) => {
+          finish = resolve
+          expect(signal).toBeInstanceOf(AbortSignal)
+        }),
+    )
+    const uuid = vi
+      .fn()
+      .mockReturnValueOnce('consultation-1')
+      .mockReturnValueOnce('request-1')
+      .mockReturnValueOnce('message-1')
+      .mockReturnValueOnce('consultation-2')
     const controller = createTextJudgmentLabController({ judge }, { now: () => 1, uuid })
     const pending = controller.submit('相談', 'text', 'token')
     const old = controller.getState()
@@ -68,7 +105,10 @@ describe('文章判定ラボcontroller', () => {
 
   it('選択肢はHTTP通信せず、revision不一致の過去選択肢を拒否する', () => {
     const judge = vi.fn()
-    const controller = createTextJudgmentLabController({ judge }, { now: () => 1, uuid: vi.fn().mockReturnValue('id') })
+    const controller = createTextJudgmentLabController(
+      { judge },
+      { now: () => 1, uuid: vi.fn().mockReturnValue('id') },
+    )
     const revision = controller.getState().core.revision
     expect(controller.choose('topic', 'missing_notification', revision, true)).toBe(true)
     expect(controller.choose('scope', 'all', revision, true)).toBe(false)
@@ -83,7 +123,13 @@ describe('文章判定ラボcontroller', () => {
         signal = value
         return new Promise<JudgmentResponse>(() => undefined)
       })
-      const controller = createTextJudgmentLabController({ judge }, { now: () => Date.now(), uuid: vi.fn().mockReturnValueOnce('c').mockReturnValueOnce('r').mockReturnValueOnce('m') })
+      const controller = createTextJudgmentLabController(
+        { judge },
+        {
+          now: () => Date.now(),
+          uuid: vi.fn().mockReturnValueOnce('c').mockReturnValueOnce('r').mockReturnValueOnce('m'),
+        },
+      )
       void controller.submit('相談', 'text', 'token')
       await vi.advanceTimersByTimeAsync(15_000)
       expect(signal?.aborted).toBe(true)
@@ -96,8 +142,19 @@ describe('文章判定ラボcontroller', () => {
 
   it('認証失効を認証境界へ通知し、判定前snapshotを維持する', async () => {
     const onAccessFailure = vi.fn()
-    const judge = vi.fn(async () => { throw new (await import('../src/textJudgmentLabApi')).LabHttpError('reauthentication_required') })
-    const controller = createTextJudgmentLabController({ judge }, { now: () => 1, uuid: vi.fn().mockReturnValueOnce('c').mockReturnValueOnce('r').mockReturnValueOnce('m'), onAccessFailure })
+    const judge = vi.fn(async () => {
+      throw new (await import('../src/textJudgmentLabApi')).LabHttpError(
+        'reauthentication_required',
+      )
+    })
+    const controller = createTextJudgmentLabController(
+      { judge },
+      {
+        now: () => 1,
+        uuid: vi.fn().mockReturnValueOnce('c').mockReturnValueOnce('r').mockReturnValueOnce('m'),
+        onAccessFailure,
+      },
+    )
     await controller.submit('相談', 'text', 'token')
     expect(onAccessFailure).toHaveBeenCalledWith('auth_expired')
     expect(controller.getState().core.revision).toBe(0)
@@ -109,12 +166,23 @@ describe('文章判定ラボcontroller', () => {
     vi.useFakeTimers()
     try {
       let finishA!: (value: JudgmentResponse) => void
-      const judge = vi.fn()
-        .mockImplementationOnce(() => new Promise<JudgmentResponse>((resolve) => { finishA = resolve }))
+      const judge = vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise<JudgmentResponse>((resolve) => {
+              finishA = resolve
+            }),
+        )
         .mockImplementationOnce(() => new Promise<JudgmentResponse>(() => undefined))
-      const uuid = vi.fn()
-        .mockReturnValueOnce('c1').mockReturnValueOnce('r1').mockReturnValueOnce('m1')
-        .mockReturnValueOnce('c2').mockReturnValueOnce('r2').mockReturnValueOnce('m2')
+      const uuid = vi
+        .fn()
+        .mockReturnValueOnce('c1')
+        .mockReturnValueOnce('r1')
+        .mockReturnValueOnce('m1')
+        .mockReturnValueOnce('c2')
+        .mockReturnValueOnce('r2')
+        .mockReturnValueOnce('m2')
       const controller = createTextJudgmentLabController({ judge }, { now: () => Date.now(), uuid })
       const requestA = controller.submit('A', 'text', 'token')
       const old = controller.getState().pending!
@@ -135,10 +203,24 @@ describe('文章判定ラボcontroller', () => {
   it('一般障害とaccess unavailableを区別して本文を一度だけ復帰する', async () => {
     const { LabHttpError } = await import('../src/textJudgmentLabApi')
     const onAccessFailure = vi.fn()
-    const judge = vi.fn()
+    const judge = vi
+      .fn()
       .mockRejectedValueOnce(new Error('network'))
       .mockRejectedValueOnce(new LabHttpError('access_unavailable'))
-    const controller = createTextJudgmentLabController({ judge }, { now: () => 1, uuid: vi.fn().mockReturnValueOnce('c').mockReturnValueOnce('r1').mockReturnValueOnce('m1').mockReturnValueOnce('r2').mockReturnValueOnce('m2'), onAccessFailure })
+    const controller = createTextJudgmentLabController(
+      { judge },
+      {
+        now: () => 1,
+        uuid: vi
+          .fn()
+          .mockReturnValueOnce('c')
+          .mockReturnValueOnce('r1')
+          .mockReturnValueOnce('m1')
+          .mockReturnValueOnce('r2')
+          .mockReturnValueOnce('m2'),
+        onAccessFailure,
+      },
+    )
     await controller.submit('一回目', 'text', 'token')
     expect(controller.getState().draft).toBe('一回目')
     expect(judge).toHaveBeenCalledTimes(1)
@@ -156,8 +238,19 @@ describe('文章判定ラボcontroller', () => {
     ['revision', (value: JudgmentResponse) => ({ ...value, revision: value.revision + 1 })],
     ['相談ID', (value: JudgmentResponse) => ({ ...value, consultationId: 'different' })],
   ])('%s不一致の応答を捨てる', async (_label, mutate) => {
-    const judge = vi.fn(async (_token: string, request: { consultationId: string; requestId: string; revision: number }) => mutate(response(request.consultationId, request.requestId, request.revision)))
-    const controller = createTextJudgmentLabController({ judge }, { now: () => 1, uuid: vi.fn().mockReturnValueOnce('c').mockReturnValueOnce('r').mockReturnValueOnce('m') })
+    const judge = vi.fn(
+      async (
+        _token: string,
+        request: { consultationId: string; requestId: string; revision: number },
+      ) => mutate(response(request.consultationId, request.requestId, request.revision)),
+    )
+    const controller = createTextJudgmentLabController(
+      { judge },
+      {
+        now: () => 1,
+        uuid: vi.fn().mockReturnValueOnce('c').mockReturnValueOnce('r').mockReturnValueOnce('m'),
+      },
+    )
     await controller.submit('相談', 'text', 'token')
     expect(controller.getState().core.revision).toBe(0)
     expect(controller.getState().messages[0].kind).toBe('failed')
@@ -167,7 +260,10 @@ describe('文章判定ラボcontroller', () => {
   // 期待値: 会話はメモリだけに残り、Web Storageへ書き込まない
   it('page保持中は会話を継続し、storageへ保存しない', () => {
     const storage = vi.spyOn(Storage.prototype, 'setItem')
-    const controller = createTextJudgmentLabController({ judge: vi.fn() }, { now: () => 1, uuid: vi.fn().mockReturnValue('id') })
+    const controller = createTextJudgmentLabController(
+      { judge: vi.fn() },
+      { now: () => 1, uuid: vi.fn().mockReturnValue('id') },
+    )
     controller.setDraft('保持する下書き')
     expect(controller.getState().draft).toBe('保持する下書き')
     expect(storage).not.toHaveBeenCalled()
@@ -180,8 +276,13 @@ describe('task 10.4 発言時の記録', () => {
   // 期待値: 選択肢で回答した発言には、回答時のラベル、回答前の会話状態、適用結果だけを保存し、後から変更しない。
   it('日本語選択ラベルと入力前snapshotを固定する', async () => {
     let sequence = 0
-    const judge = vi.fn(async (_token, request) => response(request.consultationId, request.requestId, request.revision))
-    const controller = createTextJudgmentLabController({ judge }, { now: () => 1, uuid: () => `id-${sequence++}` })
+    const judge = vi.fn(async (_token: string, request: JudgmentRequest) =>
+      response(request.consultationId, request.requestId, request.revision),
+    )
+    const controller = createTextJudgmentLabController(
+      { judge },
+      { now: () => 1, uuid: () => `id-${sequence++}` },
+    )
     controller.choose('topic', 'notification_settings', 0, true)
     controller.choose('scope', 'all', 1, true)
     const choice = controller.getState().messages[1]
@@ -198,7 +299,10 @@ describe('task 10.4 発言時の記録', () => {
     controller.choose('result', 'not_tried', 3, true)
     expect(controller.getState().messages[3].text).toBe('まだ試していない')
     await controller.submit('確認します', 'text', 'token')
-    expect(judge.mock.calls[0][1].context.recentUserTexts).toEqual(['急いでいない', 'まだ試していない'])
+    expect(judge.mock.calls[0][1].context.recentUserTexts).toEqual([
+      '急いでいない',
+      'まだ試していない',
+    ])
     expect(JSON.stringify(choice)).toBe(frozen)
     expect(Object.isFrozen(choice.before.confirmed)).toBe(true)
     expect(Object.isFrozen(choice.application.skipped)).toBe(true)
@@ -209,8 +313,16 @@ describe('task 10.4 発言時の記録', () => {
     let resolve!: (result: JudgmentResponse) => void
     let sequence = 0
     let now = 10
-    const judge = vi.fn(() => new Promise<JudgmentResponse>(finish => { resolve = finish }))
-    const controller = createTextJudgmentLabController({ judge }, { now: () => now, uuid: () => `id-${sequence++}` })
+    const judge = vi.fn(
+      () =>
+        new Promise<JudgmentResponse>((finish) => {
+          resolve = finish
+        }),
+    )
+    const controller = createTextJudgmentLabController(
+      { judge },
+      { now: () => now, uuid: () => `id-${sequence++}` },
+    )
     const work = controller.submit('通知が来ない', 'example', 'token')
     const pending = controller.getState().messages[0]
     expect(pending.kind).toBe('pending')
@@ -219,7 +331,11 @@ describe('task 10.4 発言時の記録', () => {
     if (pending.kind !== 'pending') throw new Error('pending required')
     expect(pending.request.context.confirmed).toEqual(pending.before.confirmed)
     expect(Object.isFrozen(pending.request.context.recentUserTexts)).toBe(true)
-    const result = response(pending.request.consultationId, pending.request.requestId, pending.request.revision)
+    const result = response(
+      pending.request.consultationId,
+      pending.request.requestId,
+      pending.request.revision,
+    )
     now = 60
     resolve(result)
     await work
@@ -243,25 +359,42 @@ describe('task 10.4 発言時の記録', () => {
   it('失敗種別と中断を非適用unionとして固定する', async () => {
     const { LabHttpError } = await import('../src/textJudgmentLabApi')
     let sequence = 0
-    for (const [error, failure] of [[new Error('network'), 'judgment_failed'],
+    for (const [error, failure] of [
+      [new Error('network'), 'judgment_failed'],
       [new LabHttpError('reauthentication_required'), 'auth_expired'],
-      [new LabHttpError('access_unavailable'), 'access_unavailable']] as const) {
-      const controller = createTextJudgmentLabController({ judge: vi.fn().mockRejectedValue(error) }, { uuid: () => `id-${sequence++}` })
+      [new LabHttpError('access_unavailable'), 'access_unavailable'],
+    ] as const) {
+      const controller = createTextJudgmentLabController(
+        { judge: vi.fn().mockRejectedValue(error) },
+        { uuid: () => `id-${sequence++}` },
+      )
       await controller.submit('復帰する入力', 'text', 'token')
       const record = controller.getState().messages[0]
       expect(record).toMatchObject({ kind: 'failed', failure, text: '復帰する入力' })
       expect(controller.getState().core).toEqual(record.before)
       expect(controller.getState().draft).toBe('復帰する入力')
-      for (const key of ['judgment', 'application', 'request', 'uiElapsedMs']) expect(key in record).toBe(false)
+      for (const key of ['judgment', 'application', 'request', 'uiElapsedMs'])
+        expect(key in record).toBe(false)
     }
     let resolve!: (value: JudgmentResponse) => void
-    const controller = createTextJudgmentLabController({ judge: vi.fn(() => new Promise<JudgmentResponse>(finish => { resolve = finish })) }, { uuid: () => `id-${sequence++}` })
+    const controller = createTextJudgmentLabController(
+      {
+        judge: vi.fn(
+          () =>
+            new Promise<JudgmentResponse>((finish) => {
+              resolve = finish
+            }),
+        ),
+      },
+      { uuid: () => `id-${sequence++}` },
+    )
     const pending = controller.submit('中断する入力', 'text', 'token')
     const request = controller.getState().pending!
     controller.interrupt()
     const record = controller.getState().messages[0]
     expect(record.kind).toBe('interrupted')
-    for (const key of ['judgment', 'application', 'request', 'uiElapsedMs']) expect(key in record).toBe(false)
+    for (const key of ['judgment', 'application', 'request', 'uiElapsedMs'])
+      expect(key in record).toBe(false)
     resolve(response(request.consultationId, request.requestId, request.revision))
     await pending
     expect(controller.getState().messages[0]).toBe(record)
@@ -272,12 +405,21 @@ describe('task 10.4 発言時の記録', () => {
   // 期待値: 拒否した操作では発言を作らない。選択肢のみで回答する制約と、1000 Unicodeコードポイントの入力上限も守る。
   it('受付拒否は発言や要求を作らない', async () => {
     let sequence = 0
-    const judge = vi.fn(async (_token, request) => {
+    const judge = vi.fn(async (_token: string, request: JudgmentRequest) => {
       const result = response(request.consultationId, request.requestId, request.revision)
-      result.evidence = { ...result.evidence, scope: { kind: 'needs_review' }, topic: { kind: 'unmentioned' }, urgency: { kind: 'unmentioned' }, workaround: { kind: 'unmentioned' } }
+      result.evidence = {
+        ...result.evidence,
+        scope: { kind: 'needs_review' },
+        topic: { kind: 'unmentioned' },
+        urgency: { kind: 'unmentioned' },
+        workaround: { kind: 'unmentioned' },
+      }
       return result
     })
-    const controller = createTextJudgmentLabController({ judge }, { uuid: () => `id-${sequence++}` })
+    const controller = createTextJudgmentLabController(
+      { judge },
+      { uuid: () => `id-${sequence++}` },
+    )
     expect(controller.choose('topic', 'bad', 0, true)).toBe(false)
     expect(controller.choose('scope', 'all', 0, true)).toBe(false)
     expect(controller.choose('topic', 'missing_notification', 0, false)).toBe(false)

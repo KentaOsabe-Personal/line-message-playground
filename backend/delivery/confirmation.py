@@ -13,19 +13,14 @@ from .types import (
     TargetRevision,
 )
 
-
 LINKED_CONFIRMATION_SALT = "delivery.confirmation.snapshot.v1"
 CONFIRMATION_MAX_AGE = timedelta(minutes=10)
 RECEIPT_MAX_AGE = timedelta(hours=24)
 _UNIX_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
-_VALID_CONFIRMATION_REJECTIONS = frozenset(
-    ("invalid", "expired", "mismatch")
-)
+_VALID_CONFIRMATION_REJECTIONS = frozenset(("invalid", "expired", "mismatch"))
 
 
-ConfirmationRejectionReason: TypeAlias = Literal[
-    "invalid", "expired", "mismatch"
-]
+ConfirmationRejectionReason: TypeAlias = Literal["invalid", "expired", "mismatch"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,9 +62,7 @@ class ConfirmationRejected:
             raise ValueError("invalid confirmation rejection status")
 
 
-ConfirmationVerification: TypeAlias = (
-    ConfirmationVerified | ConfirmationRejected
-)
+ConfirmationVerification: TypeAlias = ConfirmationVerified | ConfirmationRejected
 
 
 class _ClockTimestampSigner(signing.TimestampSigner):
@@ -96,20 +89,12 @@ class _ClockTimestampSigner(signing.TimestampSigner):
         unsigned, timestamp = result.rsplit(self.sep, 1)
         signed_at = signing.b62_decode(timestamp)
         if max_age is not None:
-            max_age_seconds = (
-                max_age.total_seconds()
-                if isinstance(max_age, timedelta)
-                else max_age
-            )
-            age_microseconds = (
-                _clock_microseconds(self._clock) - signed_at
-            )
+            max_age_seconds = max_age.total_seconds() if isinstance(max_age, timedelta) else max_age
+            age_microseconds = _clock_microseconds(self._clock) - signed_at
             max_age_microseconds = max_age_seconds * 1_000_000
             if age_microseconds > max_age_microseconds:
                 raise signing.SignatureExpired(
-                    "Signature age "
-                    f"{age_microseconds / 1_000_000} > "
-                    f"{max_age_seconds} seconds"
+                    f"Signature age {age_microseconds / 1_000_000} > {max_age_seconds} seconds"
                 )
         return unsigned
 
@@ -157,9 +142,7 @@ class ConfirmationService:
         token: str,
         expected: ConfirmationSnapshot,
     ) -> ConfirmationVerification:
-        if not isinstance(token, str) or not isinstance(
-            expected, ConfirmationSnapshot
-        ):
+        if not isinstance(token, str) or not isinstance(expected, ConfirmationSnapshot):
             return ConfirmationRejected("invalid")
         try:
             payload = self._signer.unsign_object(
@@ -168,7 +151,7 @@ class ConfirmationService:
             )
         except signing.SignatureExpired:
             return ConfirmationRejected("expired")
-        except (signing.BadSignature, TypeError, ValueError):
+        except signing.BadSignature, TypeError, ValueError:
             return ConfirmationRejected("invalid")
         if payload != _payload_from_snapshot(expected):
             return ConfirmationRejected("mismatch")
@@ -200,7 +183,7 @@ class ConfirmationService:
             )
         except signing.SignatureExpired:
             return ConfirmationRejected("expired")
-        except (signing.BadSignature, TypeError, ValueError):
+        except signing.BadSignature, TypeError, ValueError:
             return ConfirmationRejected("invalid")
         expected_without_expiry = {
             "v": 1,
@@ -212,12 +195,15 @@ class ConfirmationService:
             "message_fingerprint": message_fingerprint,
             "receipt_requested": receipt_requested,
         }
-        if not isinstance(payload, dict) or {
-            key: payload.get(key) for key in expected_without_expiry
-        } != expected_without_expiry or set(payload) != {
-            *expected_without_expiry,
-            "receipt_expires_at",
-        }:
+        if (
+            not isinstance(payload, dict)
+            or {key: payload.get(key) for key in expected_without_expiry} != expected_without_expiry
+            or set(payload)
+            != {
+                *expected_without_expiry,
+                "receipt_expires_at",
+            }
+        ):
             return ConfirmationRejected("mismatch")
         try:
             raw_expiry = payload["receipt_expires_at"]
@@ -237,7 +223,7 @@ class ConfirmationService:
                 receipt_expires_at=expires_at,
             )
             self._validate_receipt_window(snapshot)
-        except (AttributeError, TypeError, ValueError):
+        except AttributeError, TypeError, ValueError:
             return ConfirmationRejected("mismatch")
         return ConfirmationVerified(snapshot)
 
@@ -252,20 +238,13 @@ class ConfirmationService:
             return
         now = _aware_now(self._clock)
         expires_at = snapshot.receipt_expires_at
-        if (
-            expires_at is None
-            or expires_at <= now
-            or expires_at > now + RECEIPT_MAX_AGE
-        ):
+        if expires_at is None or expires_at <= now or expires_at > now + RECEIPT_MAX_AGE:
             raise ValueError("invalid receipt expiry")
 
 
 def _clock_microseconds(clock: Callable[[], datetime]) -> int:
     elapsed = _aware_now(clock).astimezone(timezone.utc) - _UNIX_EPOCH
-    return (
-        (elapsed.days * 86_400 + elapsed.seconds) * 1_000_000
-        + elapsed.microseconds
-    )
+    return (elapsed.days * 86_400 + elapsed.seconds) * 1_000_000 + elapsed.microseconds
 
 
 def _aware_now(clock: Callable[[], datetime]) -> datetime:
@@ -275,11 +254,7 @@ def _aware_now(clock: Callable[[], datetime]) -> datetime:
 
 
 def _validate_aware_datetime(value: object, label: str) -> None:
-    if (
-        not isinstance(value, datetime)
-        or value.tzinfo is None
-        or value.utcoffset() is None
-    ):
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"invalid {label}")
 
 
@@ -295,17 +270,11 @@ def _payload_from_snapshot(
         "target_revision": snapshot.target_revision.digest,
         "message_fingerprint": snapshot.message_fingerprint,
         "receipt_requested": snapshot.receipt_requested,
-        "receipt_expires_at": _serialize_datetime(
-            snapshot.receipt_expires_at
-        ),
+        "receipt_expires_at": _serialize_datetime(snapshot.receipt_expires_at),
     }
 
 
 def _serialize_datetime(value: datetime | None) -> str | None:
     if value is None:
         return None
-    return (
-        value.astimezone(timezone.utc)
-        .isoformat(timespec="microseconds")
-        .replace("+00:00", "Z")
-    )
+    return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")

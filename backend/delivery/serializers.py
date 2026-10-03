@@ -3,7 +3,6 @@ from uuid import UUID
 
 from rest_framework import serializers
 
-
 _SAFE_FIELD_ERROR = "入力値が不正です。"
 
 
@@ -20,7 +19,7 @@ class CanonicalUUIDField(serializers.UUIDField):
             self.fail("invalid", value=data)
         try:
             value = UUID(data)
-        except (AttributeError, TypeError, ValueError):
+        except AttributeError, TypeError, ValueError:
             self.fail("invalid", value=data)
         if str(value) != data:
             self.fail("invalid", value=data)
@@ -37,14 +36,10 @@ class StrictBooleanField(serializers.BooleanField):
 class StrictRequestSerializer(serializers.Serializer):
     def to_internal_value(self, data):
         if not isinstance(data, Mapping):
-            raise serializers.ValidationError(
-                {"non_field_errors": [_SAFE_FIELD_ERROR]}
-            )
+            raise serializers.ValidationError({"non_field_errors": [_SAFE_FIELD_ERROR]})
         unknown_fields = set(data) - set(self.fields)
         if unknown_fields:
-            raise serializers.ValidationError(
-                {"non_field_errors": [_SAFE_FIELD_ERROR]}
-            )
+            raise serializers.ValidationError({"non_field_errors": [_SAFE_FIELD_ERROR]})
         return super().to_internal_value(data)
 
 

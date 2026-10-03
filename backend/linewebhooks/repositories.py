@@ -11,11 +11,10 @@ from linechannels.reference_fence import (
 from .models import WebhookEventReceipt
 from .types import (
     ReceiptCandidate,
-    ReceiptDecision,
     ReceiptChannelUnavailable,
+    ReceiptDecision,
     ReceiptStorageFailed,
 )
-
 
 FinalizationResult: TypeAlias = Literal["updated", "unchanged", "failed"]
 
@@ -85,6 +84,7 @@ class DjangoEventReceiptRepository:
         except DatabaseError:
             return ReceiptStorageFailed()
         return tuple(decisions)
+
     def _create_receipt(self, candidate: ReceiptCandidate) -> WebhookEventReceipt:
         completed_at: datetime | None = None
         if candidate.initial_status == WebhookEventReceipt.Status.UNSUPPORTED:
@@ -181,6 +181,8 @@ class DjangoWebhookReferenceProbe:
         self.using = using
 
     def is_referenced(self, channel_public_id) -> bool:
-        return WebhookEventReceipt.objects.using(self.using).filter(
-            channel_public_id=channel_public_id
-        ).exists()
+        return (
+            WebhookEventReceipt.objects.using(self.using)
+            .filter(channel_public_id=channel_public_id)
+            .exists()
+        )

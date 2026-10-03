@@ -13,7 +13,9 @@ import type { LinkedDeliveryStatus } from '../src/deliveryDto'
 import type { LinePlatformLiffAdapter } from '../src/liffClient'
 import type { RichMenuAdminApiClient } from '../src/richMenuAdminApi'
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 const authenticatedSession = {
   state: 'authenticated' as const,
@@ -150,12 +152,20 @@ describe('app-screen-separation task 8 integration contracts', () => {
     // 期待値: 中間トップを挟まず`/liff/channels`へREPLACEし、共通shellを表示する。
     test('replaces root history and renders the authenticated channel shell', async () => {
       const api = authApi()
-      const router = createMemoryRouter([
-        {
-          path: '*',
-          element: <><AppRouter authGateProps={authGateProps(api)} featureClients={featureClients()} /><LocationProbe /></>,
-        },
-      ], { initialEntries: ['/'] })
+      const router = createMemoryRouter(
+        [
+          {
+            path: '*',
+            element: (
+              <>
+                <AppRouter authGateProps={authGateProps(api)} featureClients={featureClients()} />
+                <LocationProbe />
+              </>
+            ),
+          },
+        ],
+        { initialEntries: ['/'] },
+      )
 
       await act(async () => root.render(<RouterProvider router={router} />))
 
@@ -171,24 +181,43 @@ describe('app-screen-separation task 8 integration contracts', () => {
     // テストケース: 共通navigationからアカウント管理へpushし、戻る・進むを実行する。
     // 期待値: 各履歴entryに対応する画面、title、現在地、h1 focusへ収束する。
     test('supports link push plus browser back and forward with route focus', async () => {
-      const router = createMemoryRouter([
-        {
-          path: '*',
-          element: <><AppRouter authGateProps={authGateProps(authApi())} featureClients={featureClients()} /><LocationProbe /></>,
-        },
-      ], { initialEntries: ['/liff'] })
+      const router = createMemoryRouter(
+        [
+          {
+            path: '*',
+            element: (
+              <>
+                <AppRouter
+                  authGateProps={authGateProps(authApi())}
+                  featureClients={featureClients()}
+                />
+                <LocationProbe />
+              </>
+            ),
+          },
+        ],
+        { initialEntries: ['/liff'] },
+      )
       await act(async () => root.render(<RouterProvider router={router} />))
 
-      await act(async () => (container.querySelector('nav a[href="/liff/account"]') as HTMLAnchorElement).click())
+      await act(async () =>
+        (container.querySelector('nav a[href="/liff/account"]') as HTMLAnchorElement).click(),
+      )
       expect(router.state.location.pathname).toBe('/liff/account')
       expect(router.state.historyAction).toBe('PUSH')
       expect(document.title).toBe('アカウント管理 | LINE Message Playground')
-      expect(container.querySelector('nav [aria-current="page"]')?.textContent).toBe('アカウント管理')
+      expect(container.querySelector('nav [aria-current="page"]')?.textContent).toBe(
+        'アカウント管理',
+      )
       expect(document.activeElement).toBe(container.querySelector('main'))
 
-      await act(async () => { await router.navigate(-1) })
+      await act(async () => {
+        await router.navigate(-1)
+      })
       expect(container.querySelector('h1')?.textContent).toBe('チャネル管理')
-      await act(async () => { await router.navigate(1) })
+      await act(async () => {
+        await router.navigate(1)
+      })
       expect(container.querySelector('h1')?.textContent).toBe('アカウント管理')
     })
 
@@ -196,12 +225,14 @@ describe('app-screen-separation task 8 integration contracts', () => {
     // 期待値: URLを維持し、共通shellと機能contentをmountせずloginだけを表示する。
     test('keeps the protected URL while authentication hides all protected content', async () => {
       const api = authApi({ bootstrap: vi.fn().mockResolvedValue({ state: 'anonymous' }) })
-      await act(async () => root.render(
-        <MemoryRouter initialEntries={['/liff/deliveries']}>
-          <AppRouter authGateProps={authGateProps(api)} />
-          <LocationProbe />
-        </MemoryRouter>,
-      ))
+      await act(async () =>
+        root.render(
+          <MemoryRouter initialEntries={['/liff/deliveries']}>
+            <AppRouter authGateProps={authGateProps(api)} />
+            <LocationProbe />
+          </MemoryRouter>,
+        ),
+      )
 
       expect(container.querySelector('[data-location]')?.textContent).toBe('/liff/deliveries')
       expect(container.textContent).toContain('LINEでログイン')
@@ -217,42 +248,57 @@ describe('app-screen-separation task 8 integration contracts', () => {
       ['/liff', 1, 0],
       ['/liff/channels', 1, 0],
       ['/liff/account', 0, 1],
-    ] as const)('isolates channel and account reads at %s', async (path, channelReads, accountReads) => {
-      const clients = featureClients()
-      await act(async () => root.render(
-        <MemoryRouter initialEntries={[path]}>
-          <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
-        </MemoryRouter>,
-      ))
+    ] as const)(
+      'isolates channel and account reads at %s',
+      async (path, channelReads, accountReads) => {
+        const clients = featureClients()
+        await act(async () =>
+          root.render(
+            <MemoryRouter initialEntries={[path]}>
+              <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
+            </MemoryRouter>,
+          ),
+        )
 
-      expect(clients.channelApi.listChannels).toHaveBeenCalledTimes(channelReads)
-      expect(clients.accountApi.listChannels).toHaveBeenCalledTimes(accountReads)
-      expect(clients.deliveryApi.listChannels).not.toHaveBeenCalled()
-      expect(clients.deliveryApi.preview).not.toHaveBeenCalled()
-      expect(clients.deliveryApi.send).not.toHaveBeenCalled()
-    })
+        expect(clients.channelApi.listChannels).toHaveBeenCalledTimes(channelReads)
+        expect(clients.accountApi.listChannels).toHaveBeenCalledTimes(accountReads)
+        expect(clients.deliveryApi.listChannels).not.toHaveBeenCalled()
+        expect(clients.deliveryApi.preview).not.toHaveBeenCalled()
+        expect(clients.deliveryApi.send).not.toHaveBeenCalled()
+      },
+    )
 
     // テストケース: チャネル登録formへwrite-only資格情報を入力し、navigationで離脱して再訪する。
     // 期待値: 確認を表示せずformと秘密入力を破棄し、最新チャネルreadから再開する。
     test('discards channel credentials on route leave without a discard confirmation', async () => {
       const clients = featureClients()
       const confirm = vi.spyOn(window, 'confirm')
-      await act(async () => root.render(
-        <MemoryRouter initialEntries={['/liff/channels']}>
-          <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
-        </MemoryRouter>,
-      ))
+      await act(async () =>
+        root.render(
+          <MemoryRouter initialEntries={['/liff/channels']}>
+            <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
+          </MemoryRouter>,
+        ),
+      )
 
-      const open = [...container.querySelectorAll('button')]
-        .find((button) => button.textContent === '新しいチャネルを登録')
+      const open = [...container.querySelectorAll('button')].find(
+        (button) => button.textContent === '新しいチャネルを登録',
+      )
       await act(async () => open?.click())
       const secret = container.querySelector('input[name="channelSecret"]') as HTMLInputElement
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(secret, 'secret-canary')
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        secret,
+        'secret-canary',
+      )
       await act(async () => secret.dispatchEvent(new Event('input', { bubbles: true })))
       expect(secret.value).toBe('secret-canary')
 
-      await act(async () => (container.querySelector('nav a[href="/liff/account"]') as HTMLAnchorElement).click())
-      await act(async () => (container.querySelector('nav a[href="/liff/channels"]') as HTMLAnchorElement).click())
+      await act(async () =>
+        (container.querySelector('nav a[href="/liff/account"]') as HTMLAnchorElement).click(),
+      )
+      await act(async () =>
+        (container.querySelector('nav a[href="/liff/channels"]') as HTMLAnchorElement).click(),
+      )
 
       expect(confirm).not.toHaveBeenCalled()
       expect(container.querySelector('input[name="channelSecret"]')).toBeNull()
@@ -267,10 +313,18 @@ describe('app-screen-separation task 8 integration contracts', () => {
     // 期待値: provider-ready項目だけdetailへ進め、未設定項目は設定導線を示し、mutationを開始しない。
     test('renders every rich-menu selector mode without starting a mutation', async () => {
       const clients = featureClients()
-      vi.mocked(clients.channelApi.listChannels).mockResolvedValue([
+      vi.mocked(clients.channelApi).listChannels.mockResolvedValue([
         channel(),
-        channel({ channelId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', label: '停止bot', active: false }),
-        channel({ channelId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', label: '未設定bot', providerId: null }),
+        channel({
+          channelId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          label: '停止bot',
+          active: false,
+        }),
+        channel({
+          channelId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          label: '未設定bot',
+          providerId: null,
+        }),
         channel({
           channelId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
           label: '回復bot',
@@ -282,11 +336,13 @@ describe('app-screen-separation task 8 integration contracts', () => {
           },
         }),
       ])
-      await act(async () => root.render(
-        <MemoryRouter initialEntries={['/liff/rich-menus']}>
-          <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
-        </MemoryRouter>,
-      ))
+      await act(async () =>
+        root.render(
+          <MemoryRouter initialEntries={['/liff/rich-menus']}>
+            <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
+          </MemoryRouter>,
+        ),
+      )
 
       expect(container.textContent).toContain('管理可能')
       expect(container.textContent).toContain('停止中・読み取り専用')
@@ -303,12 +359,14 @@ describe('app-screen-separation task 8 integration contracts', () => {
     test('keeps dynamic rich-menu metadata while blocking a provider-missing detail', async () => {
       const clients = featureClients()
       const providerMissing = channel({ label: '設定待ちbot', providerId: null })
-      vi.mocked(clients.channelApi.getChannel).mockResolvedValue(providerMissing)
-      await act(async () => root.render(
-        <MemoryRouter initialEntries={[`/liff/rich-menus/${providerMissing.channelId}`]}>
-          <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
-        </MemoryRouter>,
-      ))
+      vi.mocked(clients.channelApi).getChannel.mockResolvedValue(providerMissing)
+      await act(async () =>
+        root.render(
+          <MemoryRouter initialEntries={[`/liff/rich-menus/${providerMissing.channelId}`]}>
+            <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
+          </MemoryRouter>,
+        ),
+      )
 
       expect(document.title).toBe('設定待ちbot | リッチメニュー管理')
       expect(container.querySelector('h1')?.textContent).toBe('リッチメニュー管理')
@@ -322,17 +380,18 @@ describe('app-screen-separation task 8 integration contracts', () => {
     test('resumes a delivery with status-only hydration and no automatic resend', async () => {
       const clients = featureClients()
       window.sessionStorage.setItem('line-owner:delivery-operation-id', deliveryOperationId)
-      vi.mocked(clients.deliveryApi.checkStatus).mockResolvedValue(processingDelivery)
-      await act(async () => root.render(
-        <MemoryRouter initialEntries={['/liff/deliveries']}>
-          <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
-        </MemoryRouter>,
-      ))
-
-      expect(clients.deliveryApi.checkStatus).toHaveBeenCalledWith(
-        deliveryOperationId,
-        { signal: expect.any(AbortSignal) },
+      vi.mocked(clients.deliveryApi).checkStatus.mockResolvedValue(processingDelivery)
+      await act(async () =>
+        root.render(
+          <MemoryRouter initialEntries={['/liff/deliveries']}>
+            <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
+          </MemoryRouter>,
+        ),
       )
+
+      expect(clients.deliveryApi.checkStatus).toHaveBeenCalledWith(deliveryOperationId, {
+        signal: expect.any(AbortSignal) as unknown,
+      })
       expect(clients.deliveryApi.listChannels).not.toHaveBeenCalled()
       expect(clients.deliveryApi.listRecipients).not.toHaveBeenCalled()
       expect(clients.deliveryApi.preview).not.toHaveBeenCalled()
@@ -348,18 +407,25 @@ describe('app-screen-separation task 8 integration contracts', () => {
     test('aborts the leaving route read and fences its late result', async () => {
       const clients = featureClients()
       let resolveChannels!: (items: ChannelAdminItem[]) => void
-      vi.mocked(clients.channelApi.listChannels).mockReturnValue(
-        new Promise((resolve) => { resolveChannels = resolve }),
+      vi.mocked(clients.channelApi).listChannels.mockReturnValue(
+        new Promise((resolve) => {
+          resolveChannels = resolve
+        }),
       )
-      await act(async () => root.render(
-        <MemoryRouter initialEntries={['/liff/channels']}>
-          <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
-        </MemoryRouter>,
-      ))
-      const signal = vi.mocked(clients.channelApi.listChannels).mock.calls[0]?.[0]?.signal as AbortSignal
+      await act(async () =>
+        root.render(
+          <MemoryRouter initialEntries={['/liff/channels']}>
+            <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
+          </MemoryRouter>,
+        ),
+      )
+      const signal = vi.mocked(clients.channelApi).listChannels.mock.calls[0]?.[0]
+        ?.signal as AbortSignal
       expect(signal.aborted).toBe(false)
 
-      await act(async () => (container.querySelector('nav a[href="/liff/account"]') as HTMLAnchorElement).click())
+      await act(async () =>
+        (container.querySelector('nav a[href="/liff/account"]') as HTMLAnchorElement).click(),
+      )
       expect(signal.aborted).toBe(true)
       await act(async () => resolveChannels([channel({ label: '旧画面の後着結果' })]))
 
@@ -373,33 +439,62 @@ describe('app-screen-separation task 8 integration contracts', () => {
     test('lets an accepted mutation finish without replaying it after navigation', async () => {
       const clients = featureClients()
       let resolveRegister!: (item: ChannelAdminItem) => void
-      vi.mocked(clients.channelApi.register).mockReturnValue(
-        new Promise((resolve) => { resolveRegister = resolve }),
+      vi.mocked(clients.channelApi).register.mockReturnValue(
+        new Promise((resolve) => {
+          resolveRegister = resolve
+        }),
       )
-      await act(async () => root.render(
-        <MemoryRouter initialEntries={['/liff/channels']}>
-          <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
-        </MemoryRouter>,
-      ))
-      const open = [...container.querySelectorAll('button')]
-        .find((button) => button.textContent === '新しいチャネルを登録')
+      await act(async () =>
+        root.render(
+          <MemoryRouter initialEntries={['/liff/channels']}>
+            <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
+          </MemoryRouter>,
+        ),
+      )
+      const open = [...container.querySelectorAll('button')].find(
+        (button) => button.textContent === '新しいチャネルを登録',
+      )
       await act(async () => open?.click())
-      await enterInput(container.querySelector('input[name="label"]') as HTMLInputElement, '受付済みbot')
-      await enterInput(container.querySelector('input[name="messagingApiChannelId"]') as HTMLInputElement, '1234567890')
-      await enterInput(container.querySelector('input[name="botUserId"]') as HTMLInputElement, `U${'a'.repeat(32)}`)
-      await enterInput(container.querySelector('input[name="providerId"]') as HTMLInputElement, '456')
-      await enterInput(container.querySelector('input[name="accessToken"]') as HTMLInputElement, 'access-token-canary')
-      await enterInput(container.querySelector('input[name="channelSecret"]') as HTMLInputElement, 'channel-secret-canary')
+      await enterInput(
+        container.querySelector('input[name="label"]') as HTMLInputElement,
+        '受付済みbot',
+      )
+      await enterInput(
+        container.querySelector('input[name="messagingApiChannelId"]') as HTMLInputElement,
+        '1234567890',
+      )
+      await enterInput(
+        container.querySelector('input[name="botUserId"]') as HTMLInputElement,
+        `U${'a'.repeat(32)}`,
+      )
+      await enterInput(
+        container.querySelector('input[name="providerId"]') as HTMLInputElement,
+        '456',
+      )
+      await enterInput(
+        container.querySelector('input[name="accessToken"]') as HTMLInputElement,
+        'access-token-canary',
+      )
+      await enterInput(
+        container.querySelector('input[name="channelSecret"]') as HTMLInputElement,
+        'channel-secret-canary',
+      )
 
       const form = container.querySelector('form.channel-editor') as HTMLFormElement
-      await act(async () => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })))
+      await act(async () =>
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+      )
       expect(clients.channelApi.register).toHaveBeenCalledTimes(1)
 
-      await act(async () => (container.querySelector('nav a[href="/liff/account"]') as HTMLAnchorElement).click())
+      await act(async () =>
+        (container.querySelector('nav a[href="/liff/account"]') as HTMLAnchorElement).click(),
+      )
       await act(async () => resolveRegister(channel({ label: '受付済みbot' })))
       expect(container.textContent).not.toContain('チャネルを登録しました')
 
-      await act(async () => (container.querySelector('nav a[href="/liff/channels"]') as HTMLAnchorElement).click())
+      await act(async () =>
+        (container.querySelector('nav a[href="/liff/channels"]') as HTMLAnchorElement).click(),
+      )
       expect(clients.channelApi.register).toHaveBeenCalledTimes(1)
       expect(clients.channelApi.listChannels).toHaveBeenCalledTimes(2)
       expect(JSON.stringify(window.sessionStorage)).not.toContain('access-token-canary')
@@ -409,19 +504,25 @@ describe('app-screen-separation task 8 integration contracts', () => {
     // テストケース: 認証入口から表示される機能画面の共通shellをkeyboard操作可能なDOMとして確認する。
     // 期待値: header、nav、main、単一h1、label付きdisclosure、24px対象classのLinkを維持する。
     test('exposes the shared landmarks and keyboard-operable navigation contract', async () => {
-      await act(async () => root.render(
-        <MemoryRouter initialEntries={['/liff']}>
-          <AppRouter authGateProps={authGateProps(authApi())} featureClients={featureClients()} />
-        </MemoryRouter>,
-      ))
+      await act(async () =>
+        root.render(
+          <MemoryRouter initialEntries={['/liff']}>
+            <AppRouter authGateProps={authGateProps(authApi())} featureClients={featureClients()} />
+          </MemoryRouter>,
+        ),
+      )
 
       expect(container.querySelector('header')).not.toBeNull()
       expect(container.querySelector('nav[aria-label="機能ナビゲーション"]')).not.toBeNull()
       expect(container.querySelector('main')).not.toBeNull()
       expect(container.querySelectorAll('h1')).toHaveLength(1)
-      const disclosure = container.querySelector('button[aria-controls="application-navigation"]') as HTMLButtonElement
+      const disclosure = container.querySelector(
+        'button[aria-controls="application-navigation"]',
+      ) as HTMLButtonElement
       disclosure.focus()
-      await act(async () => disclosure.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
+      await act(async () =>
+        disclosure.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+      )
       await act(async () => disclosure.click())
       expect(disclosure.getAttribute('aria-expanded')).toBe('true')
       expect(container.querySelectorAll('a[data-home-card]')).toHaveLength(0)

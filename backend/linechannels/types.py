@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Generic, Literal, TypeVar
 from uuid import UUID
 
+
 class _SerializationDisabled:
     __slots__ = ()
 
@@ -202,9 +203,7 @@ class UpdateLineChannel:
             "expected_updated_at",
             "required_provider_id",
         )
-        specified = ", ".join(
-            field for field in fields if getattr(self, field) is not None
-        )
+        specified = ", ".join(field for field in fields if getattr(self, field) is not None)
         return (
             f"<UpdateLineChannel public_id={self.channel_public_id} "
             f"fields=[{specified}] credentials={self.credentials is not None}>"
@@ -217,9 +216,7 @@ class SetLineChannelActive:
     active: bool
 
 
-ManageLineChannelInput = (
-    RegisterLineChannel | UpdateLineChannel | SetLineChannelActive
-)
+ManageLineChannelInput = RegisterLineChannel | UpdateLineChannel | SetLineChannelActive
 
 
 @dataclass(frozen=True, repr=False)

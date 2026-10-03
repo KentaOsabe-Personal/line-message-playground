@@ -17,7 +17,6 @@ from .repositories import (
     OwnerSessionView,
 )
 
-
 OWNER_SESSION_KEY = "owner_session_id"
 
 
@@ -55,7 +54,7 @@ class OwnerSessionAuthentication(BaseAuthentication):
             raise AuthenticationFailed()
         try:
             session_id = UUID(raw_session_id)
-        except (ValueError, AttributeError, TypeError):
+        except ValueError, AttributeError, TypeError:
             raise AuthenticationFailed() from None
         if str(session_id) != raw_session_id:
             raise AuthenticationFailed()

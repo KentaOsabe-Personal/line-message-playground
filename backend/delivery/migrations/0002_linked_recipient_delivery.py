@@ -18,9 +18,11 @@ def backfill_legacy_delivery_scope(apps, schema_editor):
     )
     owner_identity_public_id = None
     if len(active_identity_ids) == 1:
-        owner_identity_public_id = identity_model.objects.filter(
-            id=active_identity_ids[0]
-        ).values_list("public_id", flat=True).first()
+        owner_identity_public_id = (
+            identity_model.objects.filter(id=active_identity_ids[0])
+            .values_list("public_id", flat=True)
+            .first()
+        )
 
     attempt_model.objects.update(
         owner_principal_slot=1,
@@ -39,7 +41,6 @@ def stop_reverse_with_linked_deliveries(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("delivery", "0001_initial"),
         ("lineaccounts", "0002_friendship_order"),

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
@@ -12,20 +12,17 @@ from textjudgmentlab.types import (
     JudgmentDetails,
     JudgmentEvidence,
     JudgmentFailure,
-    JudgmentSuccess,
     JudgmentInspection,
+    JudgmentSuccess,
     KnownEvidence,
     LabPrincipal,
     NeedsReviewEvidence,
     NoulDetail,
     Relevance,
-    Scope,
     ScoreDetail,
     Topic,
     UnmentionedEvidence,
-    Workaround,
 )
-
 
 RUNTIME = LabRuntimeConfigured(
     channel_id="1234567890",
@@ -67,11 +64,13 @@ def _choice(choice: str, candidates: tuple[str, ...]) -> ChoiceDetail:
 
 
 def _inspection():
-    from textjudgmentlab.serializers import JudgmentRequestSerializer
-    from textjudgmentlab.judgment_questions import build_judgment_input
-    from textjudgmentlab.judgment_policy import normalize_judgment
     from textjudgmentlab.jev_gateway import JevTransportSuccess
+    from textjudgmentlab.judgment_policy import normalize_judgment
+    from textjudgmentlab.judgment_questions import build_judgment_input
+    from textjudgmentlab.serializers import JudgmentRequestSerializer
+
     from .test_judgment import _valid_answers
+
     serializer = JudgmentRequestSerializer(data=_request_payload())
     serializer.is_valid(raise_exception=True)
     request = serializer.to_request()
@@ -79,11 +78,18 @@ def _inspection():
     answers = _valid_answers()
     for key, candidate in (("scope", "unmentioned"), ("workaround", "unclear")):
         answers[key]["choice"] = candidate
-        answers[key]["probabilities"] = {k: float(k == candidate) for k in answers[key]["probabilities"]}
-    answers["impact"].update(score=1.75, confidence=0.88, probabilities={"0": 0.05, "1": 0.2, "2": 0.75})
+        answers[key]["probabilities"] = {
+            k: float(k == candidate) for k in answers[key]["probabilities"]
+        }
+    answers["impact"].update(
+        score=1.75, confidence=0.88, probabilities={"0": 0.05, "1": 0.2, "2": 0.75}
+    )
     answers["urgency"]["noul"] = 0.82
-    result = normalize_judgment(request, expected_model="jev-1.13.0",
-        transport=JevTransportSuccess({"model": "jev-1.13.0", "answers": answers}, 321.4))
+    result = normalize_judgment(
+        request,
+        expected_model="jev-1.13.0",
+        transport=JevTransportSuccess({"model": "jev-1.13.0", "answers": answers}, 321.4),
+    )
     return JudgmentInspection(built.state, built.questions, result.policy, result.normalization)
 
 
@@ -106,17 +112,37 @@ def _success() -> JudgmentSuccess:
         inspection=_inspection(),
         details=JudgmentDetails(
             choices={
-                "topic": _choice("missing_notification", ("missing_notification", "notification_settings", "both", "unmentioned", "unclear")),
+                "topic": _choice(
+                    "missing_notification",
+                    (
+                        "missing_notification",
+                        "notification_settings",
+                        "both",
+                        "unmentioned",
+                        "unclear",
+                    ),
+                ),
                 "relevance": _choice("in_scope", ("in_scope", "mixed", "out_of_scope", "unclear")),
                 "change": _choice("keep", ("keep", "restart", "unclear")),
-                "scope": _choice("unmentioned", ("all", "specific", "unknown", "unmentioned", "unclear")),
-                "workaround": _choice("unclear", ("can_read", "cannot_read", "unknown", "unmentioned", "unclear")),
-                "result": _choice("unmentioned", ("done", "not_done", "not_tried", "cannot_check", "unmentioned", "unclear")),
+                "scope": _choice(
+                    "unmentioned", ("all", "specific", "unknown", "unmentioned", "unclear")
+                ),
+                "workaround": _choice(
+                    "unclear", ("can_read", "cannot_read", "unknown", "unmentioned", "unclear")
+                ),
+                "result": _choice(
+                    "unmentioned",
+                    ("done", "not_done", "not_tried", "cannot_check", "unmentioned", "unclear"),
+                ),
                 "impact_evidence": _choice("present", ("present", "absent", "unclear")),
             },
             score=ScoreDetail(
                 1.75,
-                {"0": "支障なし", "1": "不便だが別の操作で目的を達成できる", "2": "目的を達成できない"},
+                {
+                    "0": "支障なし",
+                    "1": "不便だが別の操作で目的を達成できる",
+                    "2": "目的を達成できない",
+                },
                 {"0": 0.05, "1": 0.2, "2": 0.75},
                 0.88,
             ),
@@ -150,20 +176,30 @@ class TextJudgmentLabApiIntegrationTests(SimpleTestCase):
         self.assertEqual(reverse("textjudgmentlab:access"), "/api/labs/text-judgment/access")
         self.assertEqual(reverse("textjudgmentlab:judgments"), "/api/labs/text-judgment/judgments")
         self.assertEqual(resolve("/api/labs/text-judgment/access").url_name, "access")
-        self.assertEqual(self.client.post("/api/labs/text-judgment/access/", {}, format="json", **self.headers).status_code, 404)
+        self.assertEqual(
+            self.client.post(
+                "/api/labs/text-judgment/access/", {}, format="json", **self.headers
+            ).status_code,
+            404,
+        )
 
     # テストケース: 本人principalで空JSONをaccessへ送る。
     # 期待値: token期限とserver時刻を固定schema・no-storeで返す。
     @patch("textjudgmentlab.views.timezone.now", return_value=NOW)
     def test_access_returns_expiry_and_server_time(self, _clock) -> None:
-        response = self.client.post("/api/labs/text-judgment/access", {}, format="json", **self.headers)
+        response = self.client.post(
+            "/api/labs/text-judgment/access", {}, format="json", **self.headers
+        )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data, {
-            "status": "authorized",
-            "expiresAt": "2099-01-01T00:00:00Z",
-            "serverTime": "2026-09-21T01:02:03Z",
-        })
+        self.assertEqual(
+            response.data,
+            {
+                "status": "authorized",
+                "expiresAt": "2099-01-01T00:00:00Z",
+                "serverTime": "2026-09-21T01:02:03Z",
+            },
+        )
         self.assertEqual(response["Cache-Control"], "no-store")
 
     # テストケース: 判定要求を送信しserviceが成功を返す。
@@ -172,13 +208,18 @@ class TextJudgmentLabApiIntegrationTests(SimpleTestCase):
         service = _Service(_success())
         with patch("textjudgmentlab.views.build_judgment_service", return_value=service):
             response = self.client.post(
-                "/api/labs/text-judgment/judgments", _request_payload(), format="json", **self.headers,
+                "/api/labs/text-judgment/judgments",
+                _request_payload(),
+                format="json",
+                **self.headers,
             )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(service.calls), 1)
         self.assertEqual(response.data["contractVersion"], 2)
-        self.assertEqual(response.data["evidence"]["topic"], {"kind": "known", "value": "missing_notification"})
+        self.assertEqual(
+            response.data["evidence"]["topic"], {"kind": "known", "value": "missing_notification"}
+        )
         self.assertEqual(response.data["details"]["score"]["legend"]["2"], "目的を達成できない")
         self.assertEqual(response["Cache-Control"], "no-store")
 
@@ -195,9 +236,15 @@ class TextJudgmentLabApiIntegrationTests(SimpleTestCase):
         )
         for failure, status_code, public_code in cases:
             with self.subTest(failure=failure):
-                with patch("textjudgmentlab.views.build_judgment_service", return_value=_Service(JudgmentFailure(failure))):
+                with patch(
+                    "textjudgmentlab.views.build_judgment_service",
+                    return_value=_Service(JudgmentFailure(failure)),
+                ):
                     response = self.client.post(
-                        "/api/labs/text-judgment/judgments", _request_payload(), format="json", **self.headers,
+                        "/api/labs/text-judgment/judgments",
+                        _request_payload(),
+                        format="json",
+                        **self.headers,
                     )
                 self.assertEqual(response.status_code, status_code)
                 self.assertEqual(response.data["error"]["code"], public_code)
@@ -207,14 +254,20 @@ class TextJudgmentLabApiIntegrationTests(SimpleTestCase):
     # 期待値: serviceを呼ばず400の固定schemaで拒否する。
     def test_rejects_unknown_access_input_and_invalid_judgment(self) -> None:
         access = self.client.post(
-            "/api/labs/text-judgment/access", {"extra": True}, format="json", **self.headers,
+            "/api/labs/text-judgment/access",
+            {"extra": True},
+            format="json",
+            **self.headers,
         )
         service = _Service(_success())
         payload = _request_payload()
         payload["extra"] = True
         with patch("textjudgmentlab.views.build_judgment_service", return_value=service):
             judgment = self.client.post(
-                "/api/labs/text-judgment/judgments", payload, format="json", **self.headers,
+                "/api/labs/text-judgment/judgments",
+                payload,
+                format="json",
+                **self.headers,
             )
 
         self.assertEqual(access.status_code, 400)
@@ -230,18 +283,28 @@ class V2PublicJudgmentTests(SimpleTestCase):
 
     def _post(self, service):
         with patch("textjudgmentlab.views.build_judgment_service", return_value=service):
-            return self.client.post("/api/labs/text-judgment/judgments", _request_payload(),
-                format="json", HTTP_ORIGIN=RUNTIME.origin)
+            return self.client.post(
+                "/api/labs/text-judgment/judgments",
+                _request_payload(),
+                format="json",
+                HTTP_ORIGIN=RUNTIME.origin,
+            )
 
     # テストケース: HTTP経由で判定サービスを呼び、全9質問への回答を公開する。
     # 期待値: 公開する閲覧情報が実際の送信内容と一致し、秘密情報・外部サービスの生応答・利用量を含まない。
     def test_http_inspection_matches_actual_gateway_payload(self):
-        from textjudgmentlab.services import JudgmentService
-        from textjudgmentlab.limits import LabLimits
         from textjudgmentlab.jev_gateway import JevTransportSuccess
-        from .test_services import _Gateway
+        from textjudgmentlab.limits import LabLimits
+        from textjudgmentlab.services import JudgmentService
+
         from .test_judgment import _valid_answers
-        payload = {"model": "jev-1.13.0", "answers": _valid_answers(), "usage": {"secret": "raw-canary"}}
+        from .test_services import _Gateway
+
+        payload = {
+            "model": "jev-1.13.0",
+            "answers": _valid_answers(),
+            "usage": {"secret": "raw-canary"},
+        }
         gateway = _Gateway(JevTransportSuccess(payload, 25))
         service = JudgmentService(model="jev-1.13.0", gateway=gateway, limits=LabLimits())
         response = self._post(service)
@@ -249,8 +312,12 @@ class V2PublicJudgmentTests(SimpleTestCase):
         self.assertEqual(response.data["contractVersion"], 2)
         self.assertEqual(response.data["inspection"]["state"], gateway.payloads[0]["state"])
         self.assertEqual(response.data["inspection"]["questions"], gateway.payloads[0]["questions"])
-        self.assertEqual(set(response.data["inspection"]["normalization"]), set(gateway.payloads[0]["questions"]))
-        self.assertEqual(response.data["inspection"]["questionVersion"], "text-judgment-questions/2")
+        self.assertEqual(
+            set(response.data["inspection"]["normalization"]), set(gateway.payloads[0]["questions"])
+        )
+        self.assertEqual(
+            response.data["inspection"]["questionVersion"], "text-judgment-questions/2"
+        )
         self.assertNotIn("raw-canary", response.content.decode())
         self.assertNotIn("usage", response.content.decode())
         self.assertEqual(response["Cache-Control"], "no-store")
@@ -259,7 +326,9 @@ class V2PublicJudgmentTests(SimpleTestCase):
     # 期待値: 内容を切り詰めたり一部だけ成功としたりせず、HTTP 502とno-storeを返す。
     def test_incomplete_or_oversized_success_fails_whole_response(self):
         from dataclasses import replace
+
         from textjudgmentlab.types import SentChoiceQuestion
+
         success = _success()
         questions = dict(success.inspection.questions)
         questions["scope"] = SentChoiceQuestion("あ" * (256 * 1024), questions["scope"].criteria)
@@ -273,19 +342,22 @@ class V2PublicJudgmentTests(SimpleTestCase):
                 self.assertEqual(set(response.data), {"error"})
                 self.assertEqual(response["Cache-Control"], "no-store")
 
-
     # テストケース: 外部サービスから、9件の回答のうち1件が欠けた応答を判定サービスへ返す。
     # 期待値: 判定結果や閲覧情報を一部だけ公開せず、HTTP 502とno-storeを返す。
     def test_incomplete_gateway_response_is_safe_http_failure(self):
-        from textjudgmentlab.services import JudgmentService
-        from textjudgmentlab.limits import LabLimits
         from textjudgmentlab.jev_gateway import JevTransportSuccess
-        from .test_services import _Gateway
+        from textjudgmentlab.limits import LabLimits
+        from textjudgmentlab.services import JudgmentService
+
         from .test_judgment import _valid_answers
+        from .test_services import _Gateway
+
         answers = _valid_answers()
         del answers["urgency"]
         gateway = _Gateway(JevTransportSuccess({"model": "jev-1.13.0", "answers": answers}, 25))
-        response = self._post(JudgmentService(model="jev-1.13.0", gateway=gateway, limits=LabLimits()))
+        response = self._post(
+            JudgmentService(model="jev-1.13.0", gateway=gateway, limits=LabLimits())
+        )
         self.assertEqual(response.status_code, 502)
         self.assertEqual(set(response.data), {"error"})
         self.assertEqual(response.data["error"]["code"], "judgment_failed")
@@ -295,10 +367,15 @@ class V2PublicJudgmentTests(SimpleTestCase):
     # 期待値: 上限と一致する場合は成功応答を返し、上限を超える場合は応答全体を失敗とする。
     def test_public_size_limit_is_inclusive_and_counts_rendered_utf8_bytes(self):
         from rest_framework.renderers import JSONRenderer
+
         from textjudgmentlab.views import _success_payload
+
         success = _success()
         byte_count = len(JSONRenderer().render(_success_payload(success)))
         for limit, expected in ((byte_count, 200), (byte_count - 1, 502)):
-            with self.subTest(limit=limit), patch("textjudgmentlab.views._MAX_SUCCESS_BYTES", limit):
+            with (
+                self.subTest(limit=limit),
+                patch("textjudgmentlab.views._MAX_SUCCESS_BYTES", limit),
+            ):
                 response = self._post(_Service(success))
                 self.assertEqual(response.status_code, expected)

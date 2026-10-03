@@ -17,7 +17,10 @@ import { createProtectedHttpClient, ProtectedHttpClientError } from './httpApi'
 import type { ProtectedHttpClient, ReadRequestOptions } from './httpApi'
 
 export class DeliveryApiError extends Error {
-  constructor(public readonly error: SafeError, public readonly httpStatus?: number) {
+  constructor(
+    public readonly error: SafeError,
+    public readonly httpStatus?: number,
+  ) {
     super(error.summary)
     this.name = 'DeliveryApiError'
   }
@@ -37,17 +40,21 @@ export type LinkedSendDeliveryRequest = LinkedPreviewRequest & {
 
 export interface LinkedDeliveryApiClient {
   listChannels(options?: ReadRequestOptions): Promise<DeliveryChannelChoice[]>
-  listRecipients(channelId: string, options?: ReadRequestOptions): Promise<DeliveryRecipientChoice[]>
+  listRecipients(
+    channelId: string,
+    options?: ReadRequestOptions,
+  ): Promise<DeliveryRecipientChoice[]>
   preview(input: LinkedPreviewRequest): Promise<LinkedPreviewResponse>
   send(input: LinkedSendDeliveryRequest): Promise<LinkedDeliveryStatus>
   checkStatus(operationId: string, options?: ReadRequestOptions): Promise<LinkedDeliveryStatus>
 }
 
 const canonicalUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-const linkedRequestError = () => new DeliveryApiError({
-  code: 'protocol_error',
-  summary: '要求形式を確認できません。',
-})
+const linkedRequestError = () =>
+  new DeliveryApiError({
+    code: 'protocol_error',
+    summary: '要求形式を確認できません。',
+  })
 
 function hasExactInputKeys(input: object, keys: readonly string[]): boolean {
   const actual = Object.keys(input).sort()
@@ -63,7 +70,13 @@ function assertLinkedPreviewRequest(input: LinkedPreviewRequest): void {
   if (
     typeof input !== 'object' ||
     input === null ||
-    !hasExactInputKeys(input, ['channelId', 'recipientId', 'subject', 'body', 'receiptRequested']) ||
+    !hasExactInputKeys(input, [
+      'channelId',
+      'recipientId',
+      'subject',
+      'body',
+      'receiptRequested',
+    ]) ||
     typeof input.channelId !== 'string' ||
     !canonicalUuidPattern.test(input.channelId) ||
     typeof input.recipientId !== 'string' ||
@@ -71,7 +84,8 @@ function assertLinkedPreviewRequest(input: LinkedPreviewRequest): void {
     typeof input.subject !== 'string' ||
     typeof input.body !== 'string' ||
     typeof input.receiptRequested !== 'boolean'
-  ) throw linkedRequestError()
+  )
+    throw linkedRequestError()
 }
 
 function assertLinkedSendRequest(input: LinkedSendDeliveryRequest): void {
@@ -87,7 +101,8 @@ function assertLinkedSendRequest(input: LinkedSendDeliveryRequest): void {
       'operationId',
       'confirmationToken',
     ])
-  ) throw linkedRequestError()
+  )
+    throw linkedRequestError()
   const previewInput: LinkedPreviewRequest = {
     channelId: input.channelId,
     recipientId: input.recipientId,
@@ -101,7 +116,8 @@ function assertLinkedSendRequest(input: LinkedSendDeliveryRequest): void {
     !canonicalUuidPattern.test(input.operationId) ||
     typeof input.confirmationToken !== 'string' ||
     input.confirmationToken.length === 0
-  ) throw linkedRequestError()
+  )
+    throw linkedRequestError()
 }
 
 export function createLinkedDeliveryApiClient(
@@ -125,13 +141,14 @@ export function createLinkedDeliveryApiClient(
     )
   }
   return Object.freeze({
-    listChannels: (options: ReadRequestOptions = {}) => request(
-      '/api/deliveries/targets/channels/',
-      'GET',
-      parseDeliveryChannelChoices,
-      undefined,
-      options,
-    ),
+    listChannels: (options: ReadRequestOptions = {}) =>
+      request(
+        '/api/deliveries/targets/channels/',
+        'GET',
+        parseDeliveryChannelChoices,
+        undefined,
+        options,
+      ),
     listRecipients: async (channelId: string, options: ReadRequestOptions = {}) => {
       assertCanonicalUuid(channelId)
       return await request(
@@ -193,12 +210,18 @@ async function requestProtected<T>(
   try {
     payload = await response.json()
   } catch {
-    throw new DeliveryApiError({ code: 'protocol_error', summary: '応答形式を確認できません。' }, response.status)
+    throw new DeliveryApiError(
+      { code: 'protocol_error', summary: '応答形式を確認できません。' },
+      response.status,
+    )
   }
 
   if (!response.ok) {
     const parsedError = parseErrorResponse(payload)
-    throw new DeliveryApiError(parsedError.ok ? parsedError.value : parsedError.error, response.status)
+    throw new DeliveryApiError(
+      parsedError.ok ? parsedError.value : parsedError.error,
+      response.status,
+    )
   }
   const parsed = parse(payload)
   if (!parsed.ok) throw new DeliveryApiError(parsed.error, response.status)

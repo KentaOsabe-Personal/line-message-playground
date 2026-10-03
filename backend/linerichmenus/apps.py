@@ -7,7 +7,6 @@ from pathlib import Path
 from django.apps import AppConfig
 from django.core.checks import Error, register
 
-
 EXPECTED_PILLOW_VERSION = "12.3.0"
 EXPECTED_FONT_VERSION = "2.004"
 EXPECTED_FONT_DIGEST = "dff723ba59d57d136764a04b9b2d03205544f7cd785a711442d6d2d085ac5073"
@@ -76,10 +75,7 @@ def validate_runtime_prerequisites(
             )
 
     license_bytes = _read_asset(asset_dir / "OFL-1.1.txt")
-    if (
-        license_bytes is None
-        or sha256(license_bytes).hexdigest() != EXPECTED_LICENSE_DIGEST
-    ):
+    if license_bytes is None or sha256(license_bytes).hexdigest() != EXPECTED_LICENSE_DIGEST:
         failures.append(
             RuntimePrerequisiteFailure(
                 code="font_license",
@@ -135,7 +131,7 @@ def check_mutation_readiness(app_configs=None, **kwargs):
 def _read_asset(path: Path) -> bytes | None:
     try:
         return path.read_bytes()
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
 
 

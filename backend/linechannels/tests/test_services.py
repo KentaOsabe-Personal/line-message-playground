@@ -83,7 +83,9 @@ class DefaultLineChannelServiceRegisterTests(TransactionTestCase):
         credential = LineChannelCredential.objects.get()
         self.assertEqual(bytes(credential.access_token_ciphertext), b"cipher-access_token")
         self.assertEqual(bytes(credential.channel_secret_ciphertext), b"cipher-channel_secret")
-        self.assertEqual([call[1].kind for call in self.cipher.calls], ["access_token", "channel_secret"])
+        self.assertEqual(
+            [call[1].kind for call in self.cipher.calls], ["access_token", "channel_secret"]
+        )
 
     # テストケース: 2件目の秘密の暗号化で失敗する
     # 期待値: 安全な暗号化失敗を返し、どちらのテーブルにも部分行を残さない
@@ -106,9 +108,7 @@ class DefaultLineChannelServiceRegisterTests(TransactionTestCase):
     # 期待値: 安全な重複結果を返し、既存aggregateを上書きせず部分行も作らない
     def test_duplicate_is_safe_and_does_not_create_partial_credentials(self):
         first = self.service.register(self.command())
-        duplicate = self.service.register(
-            self.command(bot_user_id="U" + "2" * 32)
-        )
+        duplicate = self.service.register(self.command(bot_user_id="U" + "2" * 32))
 
         self.assertEqual(first.status, "succeeded")
         self.assertEqual((duplicate.status, duplicate.code), ("failed", "duplicate_channel"))
@@ -160,9 +160,7 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
             bytes(credential.channel_secret_ciphertext),
         )
 
-        result = self.service.update(
-            UpdateLineChannel(self.public_id, label="更新後名称")
-        )
+        result = self.service.update(UpdateLineChannel(self.public_id, label="更新後名称"))
 
         after = LineChannel.objects.get(public_id=self.public_id)
         credential.refresh_from_db()
@@ -174,7 +172,10 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
         self.assertEqual(after.provider_id, "000123")
         self.assertGreater(after.updated_at, before.updated_at)
         self.assertEqual(
-            (bytes(credential.access_token_ciphertext), bytes(credential.channel_secret_ciphertext)),
+            (
+                bytes(credential.access_token_ciphertext),
+                bytes(credential.channel_secret_ciphertext),
+            ),
             ciphertexts,
         )
 
@@ -195,9 +196,7 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
         channel.provider_id = None
         channel.save(update_fields=("provider_id",))
 
-        backfilled = self.service.update(
-            UpdateLineChannel(self.public_id, provider_id="000456")
-        )
+        backfilled = self.service.update(UpdateLineChannel(self.public_id, provider_id="000456"))
 
         channel.refresh_from_db()
         self.assertEqual(
@@ -210,9 +209,7 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
     # テストケース: 設定済みproviderと同じproviderを再指定する
     # 期待値: 冪等な更新として成功し、providerと他属性を維持する
     def test_same_provider_update_is_idempotent(self):
-        result = self.service.update(
-            UpdateLineChannel(self.public_id, provider_id="000123")
-        )
+        result = self.service.update(UpdateLineChannel(self.public_id, provider_id="000123"))
 
         channel = LineChannel.objects.get(public_id=self.public_id)
         self.assertEqual(result.status, "succeeded")
@@ -236,9 +233,7 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
                 provider_id="000456",
                 label="保存してはいけない",
                 is_active=False,
-                credentials=build_credential_pair(
-                    "replacement-token", "replacement-secret"
-                ),
+                credentials=build_credential_pair("replacement-token", "replacement-secret"),
             )
         )
 
@@ -278,10 +273,15 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
         self.assertEqual(enabled.status, "succeeded")
         self.assertTrue(channel.is_active)
         self.assertEqual(
-            (bytes(credential.access_token_ciphertext), bytes(credential.channel_secret_ciphertext)),
+            (
+                bytes(credential.access_token_ciphertext),
+                bytes(credential.channel_secret_ciphertext),
+            ),
             ciphertexts,
         )
-        self.assertEqual([call[1].kind for call in self.cipher.calls], ["access_token", "channel_secret"])
+        self.assertEqual(
+            [call[1].kind for call in self.cipher.calls], ["access_token", "channel_secret"]
+        )
 
     # テストケース: 読み取れない保存済み資格情報で名称更新と有効化を同時指定する
     # 期待値: 安全な読取不能結果を返し、名称と有効状態の変更をすべてrollbackする
@@ -314,9 +314,7 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
             UpdateLineChannel(
                 self.public_id,
                 label="復旧後",
-                credentials=build_credential_pair(
-                    "token-replacement", "secret-replacement"
-                ),
+                credentials=build_credential_pair("token-replacement", "secret-replacement"),
                 is_active=True,
             )
         )
@@ -336,9 +334,7 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
     # テストケース: 存在しない公開UUIDの更新と、変更項目のない更新を要求する
     # 期待値: 暗黙作成や既存チャネル変更を行わず、それぞれ安全な失敗へ分類する
     def test_not_found_and_empty_update_do_not_create_or_change_channels(self):
-        missing = self.service.update(
-            UpdateLineChannel(uuid.uuid4(), label="作成されない")
-        )
+        missing = self.service.update(UpdateLineChannel(uuid.uuid4(), label="作成されない"))
         empty = self.service.update(UpdateLineChannel(self.public_id))
 
         self.assertEqual((missing.status, missing.code), ("failed", "channel_not_found"))
@@ -395,9 +391,7 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
     # 期待値: credential作成とstate変更が同じtransactionで成功する
     def test_missing_credential_row_is_repaired_atomically_with_enable(self):
         self.service.set_active(self.public_id, False)
-        LineChannelCredential.objects.filter(
-            line_channel__public_id=self.public_id
-        ).delete()
+        LineChannelCredential.objects.filter(line_channel__public_id=self.public_id).delete()
         channel = LineChannel.objects.get(public_id=self.public_id)
 
         result = self.service.update(
@@ -420,9 +414,7 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
     # 期待値: metadata、state、作成credential行をすべてrollbackする
     def test_missing_credential_repair_and_enable_roll_back_on_storage_failure(self):
         self.service.set_active(self.public_id, False)
-        LineChannelCredential.objects.filter(
-            line_channel__public_id=self.public_id
-        ).delete()
+        LineChannelCredential.objects.filter(line_channel__public_id=self.public_id).delete()
         channel = LineChannel.objects.get(public_id=self.public_id)
         original_update = self.service._repository.update_locked
 
@@ -432,16 +424,12 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
 
             raise PersistenceError("storage_unavailable")
 
-        with patch.object(
-            self.service._repository, "update_locked", side_effect=fail_after_update
-        ):
+        with patch.object(self.service._repository, "update_locked", side_effect=fail_after_update):
             result = self.service.update(
                 UpdateLineChannel(
                     self.public_id,
                     label="保存されない",
-                    credentials=build_credential_pair(
-                        "token-replacement", "secret-replacement"
-                    ),
+                    credentials=build_credential_pair("token-replacement", "secret-replacement"),
                     is_active=True,
                     expected_updated_at=channel.updated_at,
                     required_provider_id="000123",
@@ -452,9 +440,7 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
         self.assertEqual((result.status, result.code), ("failed", "storage_unavailable"))
         self.assertEqual(channel.label, "登録時名称")
         self.assertFalse(channel.is_active)
-        self.assertFalse(
-            LineChannelCredential.objects.filter(line_channel=channel).exists()
-        )
+        self.assertFalse(LineChannelCredential.objects.filter(line_channel=channel).exists())
 
     # テストケース: DB round-tripしたaware revisionとnaive revisionで更新する
     # 期待値: aware完全一致だけ成功し、naive値はDB変更前に拒否する
@@ -496,9 +482,7 @@ class DefaultLineChannelServiceUpdateTests(TransactionTestCase):
                 required_provider_id="000123",
             )
         )
-        self.assertEqual(
-            (immutable.status, immutable.code), ("failed", "provider_immutable")
-        )
+        self.assertEqual((immutable.status, immutable.code), ("failed", "provider_immutable"))
 
         LineChannel.objects.filter(public_id=self.public_id).update(provider_id=None)
         channel.refresh_from_db()

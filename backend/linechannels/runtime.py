@@ -7,7 +7,6 @@ from .crypto import (
     parse_credential_keyring,
 )
 
-
 _state_lock = RLock()
 _validated_keyring: ValidatedCredentialKeyring | None = None
 
@@ -20,17 +19,13 @@ def load_credential_keyring() -> None:
             _validated_keyring = candidate
             return
         if not _validated_keyring._same_material(candidate):
-            raise CredentialKeyringConfigurationError(
-                "credential_keyring_already_initialized"
-            )
+            raise CredentialKeyringConfigurationError("credential_keyring_already_initialized")
 
 
 def get_validated_keyring() -> ValidatedCredentialKeyring:
     with _state_lock:
         if _validated_keyring is None:
-            raise CredentialKeyringConfigurationError(
-                "credential_keyring_not_initialized"
-            )
+            raise CredentialKeyringConfigurationError("credential_keyring_not_initialized")
         return _validated_keyring
 
 

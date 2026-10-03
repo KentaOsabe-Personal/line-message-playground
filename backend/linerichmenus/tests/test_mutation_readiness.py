@@ -5,6 +5,7 @@ from uuid import uuid4
 from django.core import checks
 from django.test import SimpleTestCase, override_settings
 
+from lineaccounts.admin_authorization import OwnerOperationContext
 from linerichmenus.container import (
     LIFECYCLE_INTEGRATION_MARKER,
     build_headless_lifecycle_port,
@@ -13,9 +14,11 @@ from linerichmenus.container import (
     build_rich_menu_service,
     validate_mutation_readiness_configuration,
 )
-from linerichmenus.headless import DefaultRichMenuLifecyclePort, DjangoHeadlessReferenceContracts
-from linerichmenus.headless import HeadlessCommand
-from lineaccounts.admin_authorization import OwnerOperationContext
+from linerichmenus.headless import (
+    DefaultRichMenuLifecyclePort,
+    DjangoHeadlessReferenceContracts,
+    HeadlessCommand,
+)
 from linerichmenus.services import DefaultRichMenuService, ServiceFailed
 from linerichmenus.types import (
     EffectiveCapabilities,
@@ -34,15 +37,9 @@ class MutationReadinessTests(SimpleTestCase):
     def test_effective_capabilities_intersect_domain_actions_with_mode(self):
         domain = tuple(NextAllowedAction)
 
-        read_only = build_mutation_readiness(mode="read_only").project(
-            domain, channel_active=True
-        )
-        recovery = self._build_integrated("recovery_only").project(
-            domain, channel_active=True
-        )
-        enabled = self._build_integrated("enabled").project(
-            domain, channel_active=True
-        )
+        read_only = build_mutation_readiness(mode="read_only").project(domain, channel_active=True)
+        recovery = self._build_integrated("recovery_only").project(domain, channel_active=True)
+        enabled = self._build_integrated("enabled").project(domain, channel_active=True)
 
         self.assertEqual(
             read_only,
@@ -69,9 +66,7 @@ class MutationReadinessTests(SimpleTestCase):
     def test_effective_capabilities_fail_closed_for_inactive_or_invalid_config(self):
         domain = (NextAllowedAction.APPLY, NextAllowedAction.GET_STATE)
 
-        inactive = self._build_integrated("enabled").project(
-            domain, channel_active=False
-        )
+        inactive = self._build_integrated("enabled").project(domain, channel_active=False)
         invalid = build_mutation_readiness(
             mode="enabled",
             reference_probe_integrated=True,
@@ -95,6 +90,7 @@ class MutationReadinessTests(SimpleTestCase):
                 unavailable_reason="integration_not_ready",
             ),
         )
+
     # テストケース: runtime composition rootからowner APIとheadless向けconcrete依存を構築する。
     # 期待値: service・lifecycle・reference/purgeが同じfail-closed設定で実体化される。
     def test_composition_root_builds_all_public_contracts(self):

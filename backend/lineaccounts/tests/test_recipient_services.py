@@ -2,10 +2,9 @@ from datetime import timedelta
 from unittest.mock import Mock
 from uuid import uuid4
 
-from django.db import transaction
+from django.db import connection, transaction
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
-from django.db import connection
 from django.utils import timezone
 
 from lineaccounts.gateway import (
@@ -29,8 +28,8 @@ from lineaccounts.repositories import (
 from lineaccounts.runtime import LiffLinkedChannelPolicy
 from lineaccounts.types import LineSubject, UserAccessToken
 from linechannels.models import LineChannel
-from linechannels.repositories import DjangoLineChannelDirectory
 from linechannels.reference_fence import ReferenceFenceResult
+from linechannels.repositories import DjangoLineChannelDirectory
 
 
 class RecipientChannelListingTests(TestCase):
@@ -45,12 +44,8 @@ class RecipientChannelListingTests(TestCase):
         with transaction.atomic():
             owner = self.repository.lock_owner_account()
             self.identity = self.repository.upsert_identity(identity)
-            self.owner = self.repository.bind_owner_identity(
-                owner, self.identity.public_id
-            )
-        self.service = DefaultRecipientService(
-            DjangoLineChannelDirectory(), self.repository
-        )
+            self.owner = self.repository.bind_owner_identity(owner, self.identity.public_id)
+        self.service = DefaultRecipientService(DjangoLineChannelDirectory(), self.repository)
 
     def channel(self, label, *, provider_id=None, active=True):
         return LineChannel.objects.create(
@@ -98,9 +93,11 @@ class RecipientChannelListingTests(TestCase):
             fence.lock_existing.return_value = ReferenceFenceResult(status)
             repository = DjangoAccountRepository(reference_fence=fence)
 
-            with self.subTest(status=status), self.assertRaises(
-                error_type
-            ) as raised, transaction.atomic():
+            with (
+                self.subTest(status=status),
+                self.assertRaises(error_type) as raised,
+                transaction.atomic(),
+            ):
                 owner = repository.lock_owner_account()
                 repository.create_recipient(
                     owner,
@@ -152,8 +149,7 @@ class RecipientChannelListingTests(TestCase):
         )
 
         items = {
-            item.channel_label: item
-            for item in self.service.list_channels(self.identity.public_id)
+            item.channel_label: item for item in self.service.list_channels(self.identity.public_id)
         }
 
         self.assertTrue(items["配信可能"].delivery_available)
@@ -284,9 +280,7 @@ class RecipientRegistrationTests(TestCase):
     def test_registers_non_direct_as_unknown_without_line_call(self):
         channel = self.channel("non-direct")
 
-        result = self.service().register(
-            self.identity.public_id, channel.public_id, None
-        )
+        result = self.service().register(self.identity.public_id, channel.public_id, None)
 
         self.assertIsInstance(result, RecipientMutationSucceeded)
         self.assertEqual(result.recipient.friendship_state, "unknown")
@@ -335,9 +329,7 @@ class RecipientRegistrationTests(TestCase):
         )
 
         for service in services:
-            result = service.register(
-                self.identity.public_id, channel.public_id, None
-            )
+            result = service.register(self.identity.public_id, channel.public_id, None)
             self.assertEqual(result, RecipientMutationFailed("line_unavailable"))
             self.assertEqual(DeliveryRecipient.objects.count(), 0)
 
@@ -354,23 +346,17 @@ class RecipientRegistrationTests(TestCase):
 
         for channel_id, code in cases:
             with self.subTest(code=code):
-                result = self.service().register(
-                    self.identity.public_id, channel_id, None
-                )
+                result = self.service().register(self.identity.public_id, channel_id, None)
                 self.assertEqual(result, RecipientMutationFailed(code))
                 self.assertEqual(DeliveryRecipient.objects.count(), 0)
 
     # テストケース: direct channelへtokenなしまたは無効な本人bindingで登録する
     # 期待値: friendship取得と永続化へ進まずinvalid_line_proofへ収束する
     def test_direct_registration_requires_valid_identity_binding(self):
-        invalid_gateway = _RecipientGatewayStub(
-            self.identity, verification=InvalidLineProof()
-        )
+        invalid_gateway = _RecipientGatewayStub(self.identity, verification=InvalidLineProof())
         service = self.service(invalid_gateway)
 
-        missing = service.register(
-            self.identity.public_id, self.direct.public_id, None
-        )
+        missing = service.register(self.identity.public_id, self.direct.public_id, None)
         invalid = service.register(
             self.identity.public_id,
             self.direct.public_id,
@@ -395,16 +381,12 @@ class RecipientStateMutationTests(TestCase):
         with transaction.atomic():
             owner = self.repository.lock_owner_account()
             self.identity = self.repository.upsert_identity(identity)
-            owner = self.repository.bind_owner_identity(
-                owner, self.identity.public_id
-            )
+            owner = self.repository.bind_owner_identity(owner, self.identity.public_id)
             self.session = self.repository.create_owner_session(
                 owner, timezone.now() + timedelta(hours=8)
             )
         self.directory = DjangoLineChannelDirectory()
-        self.service = DefaultRecipientService(
-            self.directory, self.repository
-        )
+        self.service = DefaultRecipientService(self.directory, self.repository)
 
     def channel(self, label, *, provider_id=None, active=True):
         return LineChannel.objects.create(
@@ -441,12 +423,8 @@ class RecipientStateMutationTests(TestCase):
         channel = self.channel("対象")
         recipient = self.recipient(channel)
 
-        disabled = self.service.set_enabled(
-            self.identity.public_id, recipient.public_id, False
-        )
-        enabled = self.service.set_enabled(
-            self.identity.public_id, recipient.public_id, True
-        )
+        disabled = self.service.set_enabled(self.identity.public_id, recipient.public_id, False)
+        enabled = self.service.set_enabled(self.identity.public_id, recipient.public_id, True)
 
         self.assertIsInstance(disabled, RecipientMutationSucceeded)
         self.assertEqual(disabled.recipient.link_state, "linked_disabled")
@@ -463,9 +441,7 @@ class RecipientStateMutationTests(TestCase):
         channel = self.channel("unknown")
         recipient = self.recipient(channel, friendship="unknown", enabled=False)
 
-        result = self.service.set_enabled(
-            self.identity.public_id, recipient.public_id, True
-        )
+        result = self.service.set_enabled(self.identity.public_id, recipient.public_id, True)
 
         self.assertIsInstance(result, RecipientMutationSucceeded)
         self.assertEqual(result.recipient.link_state, "linked_enabled")
@@ -475,9 +451,7 @@ class RecipientStateMutationTests(TestCase):
     # 期待値: 安全な利用不可分類で拒否しdisabled状態を維持する
     def test_reenable_revalidates_channel_active_and_provider(self):
         inactive_channel = self.channel("inactive", active=False)
-        mismatch_channel = self.channel(
-            "mismatch", provider_id="0099999999"
-        )
+        mismatch_channel = self.channel("mismatch", provider_id="0099999999")
         inactive = self.recipient(inactive_channel, enabled=False)
         mismatch = self.recipient(mismatch_channel, enabled=False)
 
@@ -488,12 +462,8 @@ class RecipientStateMutationTests(TestCase):
             self.identity.public_id, mismatch.public_id, True
         )
 
-        self.assertEqual(
-            inactive_result, RecipientMutationFailed("channel_unavailable")
-        )
-        self.assertEqual(
-            mismatch_result, RecipientMutationFailed("provider_mismatch")
-        )
+        self.assertEqual(inactive_result, RecipientMutationFailed("channel_unavailable"))
+        self.assertEqual(mismatch_result, RecipientMutationFailed("provider_mismatch"))
         self.assertFalse(DeliveryRecipient.objects.get(public_id=inactive.public_id).enabled)
         self.assertFalse(DeliveryRecipient.objects.get(public_id=mismatch.public_id).enabled)
 
@@ -503,14 +473,10 @@ class RecipientStateMutationTests(TestCase):
         channel = self.channel("existing")
         existing = self.recipient(channel)
 
-        result = self.service.set_enabled(
-            self.identity.public_id, uuid4(), False
-        )
+        result = self.service.set_enabled(self.identity.public_id, uuid4(), False)
 
         self.assertEqual(result, RecipientMutationFailed("recipient_not_found"))
-        self.assertTrue(
-            DeliveryRecipient.objects.get(public_id=existing.public_id).enabled
-        )
+        self.assertTrue(DeliveryRecipient.objects.get(public_id=existing.public_id).enabled)
 
 
 class RecipientUnlinkTests(TestCase):
@@ -525,20 +491,12 @@ class RecipientUnlinkTests(TestCase):
         with transaction.atomic():
             owner = self.repository.lock_owner_account()
             self.identity = self.repository.upsert_identity(identity)
-            owner = self.repository.bind_owner_identity(
-                owner, self.identity.public_id
-            )
+            owner = self.repository.bind_owner_identity(owner, self.identity.public_id)
             self.sessions = (
-                self.repository.create_owner_session(
-                    owner, timezone.now() + timedelta(hours=8)
-                ),
-                self.repository.create_owner_session(
-                    owner, timezone.now() + timedelta(hours=8)
-                ),
+                self.repository.create_owner_session(owner, timezone.now() + timedelta(hours=8)),
+                self.repository.create_owner_session(owner, timezone.now() + timedelta(hours=8)),
             )
-        self.service = DefaultRecipientService(
-            DjangoLineChannelDirectory(), self.repository
-        )
+        self.service = DefaultRecipientService(DjangoLineChannelDirectory(), self.repository)
 
     def recipient(self, label):
         channel = LineChannel.objects.create(
@@ -565,23 +523,15 @@ class RecipientUnlinkTests(TestCase):
         selected = self.recipient("解除対象")
         retained = self.recipient("維持対象")
 
-        result = self.service.unlink(
-            self.identity.public_id, selected.public_id
-        )
+        result = self.service.unlink(self.identity.public_id, selected.public_id)
 
         self.assertIsInstance(result, RecipientMutationSucceeded)
         self.assertEqual(result.recipient.channel_id, selected.channel_id)
         self.assertEqual(result.recipient.link_state, "unlinked")
         self.assertIsNone(result.recipient.recipient_id)
-        self.assertFalse(
-            DeliveryRecipient.objects.filter(public_id=selected.public_id).exists()
-        )
-        self.assertTrue(
-            DeliveryRecipient.objects.filter(public_id=retained.public_id).exists()
-        )
-        self.assertTrue(
-            LineIdentity.objects.filter(public_id=self.identity.public_id).exists()
-        )
+        self.assertFalse(DeliveryRecipient.objects.filter(public_id=selected.public_id).exists())
+        self.assertTrue(DeliveryRecipient.objects.filter(public_id=retained.public_id).exists())
+        self.assertTrue(LineIdentity.objects.filter(public_id=self.identity.public_id).exists())
         self.assertEqual(OwnerSession.objects.count(), 2)
 
     # テストケース: 存在しないrecipientのチャネル別解除を要求する
@@ -592,7 +542,5 @@ class RecipientUnlinkTests(TestCase):
         result = self.service.unlink(self.identity.public_id, uuid4())
 
         self.assertEqual(result, RecipientMutationFailed("recipient_not_found"))
-        self.assertTrue(
-            DeliveryRecipient.objects.filter(public_id=retained.public_id).exists()
-        )
+        self.assertTrue(DeliveryRecipient.objects.filter(public_id=retained.public_id).exists())
         self.assertEqual(OwnerSession.objects.count(), 2)

@@ -8,7 +8,6 @@ from uuid import UUID, uuid4
 
 from django.db import close_old_connections
 from django.test import TransactionTestCase
-from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
 from delivery.models import DeliveryAttempt
 from delivery.repositories import (
@@ -20,9 +19,9 @@ from delivery.types import (
     AttemptAccepted,
     ConfirmReceiptCommand,
     ExistingAttempt,
-    LinkedTargetSnapshot,
     LinePushAccepted,
     LinePushRejected,
+    LinkedTargetSnapshot,
     MessageSnapshot,
     OwnerIdentitySnapshot,
     OwnerPrincipal,
@@ -30,7 +29,7 @@ from delivery.types import (
     ReceiptRecorded,
     ReceiptUnchanged,
 )
-
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
 NOW = datetime(2026, 7, 26, 12, 0, tzinfo=timezone.utc)
 _THREAD_TIMEOUT_SECONDS = 10
@@ -48,17 +47,11 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
 
     def setUp(self) -> None:
         self.owner = OwnerPrincipal(1)
-        self.owner_identity = OwnerIdentitySnapshot(
-            UUID("11111111-1111-4111-8111-111111111111")
-        )
+        self.owner_identity = OwnerIdentitySnapshot(UUID("11111111-1111-4111-8111-111111111111"))
         self.target = LinkedTargetSnapshot(
-            channel_public_id=UUID(
-                "22222222-2222-4222-8222-222222222222"
-            ),
+            channel_public_id=UUID("22222222-2222-4222-8222-222222222222"),
             channel_label="通知チャネル",
-            recipient_public_id=UUID(
-                "33333333-3333-4333-8333-333333333333"
-            ),
+            recipient_public_id=UUID("33333333-3333-4333-8333-333333333333"),
             channel_active=True,
             recipient_enabled=True,
             friendship_state="friend",
@@ -102,28 +95,22 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
 
         results = self._run_concurrently(
             tuple(
-                lambda command=command: DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE,
-                    clock=lambda: NOW
+                lambda command=command: DjangoAttemptRepository(
+                    reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW
                 ).accept(command)
                 for command in commands
             )
         )
 
-        accepted = [
-            result for result in results if isinstance(result, AttemptAccepted)
-        ]
-        existing = [
-            result for result in results if isinstance(result, ExistingAttempt)
-        ]
+        accepted = [result for result in results if isinstance(result, AttemptAccepted)]
+        existing = [result for result in results if isinstance(result, ExistingAttempt)]
         self.assertEqual(len(accepted), 1)
         self.assertEqual(len(existing), 1)
         self.assertEqual(DeliveryAttempt.objects.count(), 1)
 
         attempt = DeliveryAttempt.objects.get()
         winner_index = next(
-            index
-            for index, result in enumerate(results)
-            if isinstance(result, AttemptAccepted)
+            index for index, result in enumerate(results) if isinstance(result, AttemptAccepted)
         )
         winning_command = commands[winner_index]
         losing_command = commands[1 - winner_index]
@@ -154,9 +141,7 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
         )
         self.assertFalse(
             DeliveryAttempt.objects.filter(
-                receipt_token_digest=(
-                    losing_command.receipt_commitment.digest
-                )
+                receipt_token_digest=(losing_command.receipt_commitment.digest)
             ).exists()
         )
         self.assertNotEqual(
@@ -177,9 +162,9 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
     def test_finalize_race_keeps_first_terminal_and_callers_converge(
         self,
     ) -> None:
-        accepted = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW).accept(
-            self._command(operation_id=uuid4())
-        )
+        accepted = DjangoAttemptRepository(
+            reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW
+        ).accept(self._command(operation_id=uuid4()))
         self.assertIsInstance(accepted, AttemptAccepted)
         completed_times = (
             NOW + timedelta(seconds=1),
@@ -192,8 +177,9 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
 
         snapshots = self._run_concurrently(
             tuple(
-                lambda result=result, completed_at=completed_at:
-                DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW).finalize(
+                lambda result=result, completed_at=completed_at: DjangoAttemptRepository(
+                    reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW
+                ).finalize(
                     accepted.attempt_id,
                     result,
                     completed_at,
@@ -237,7 +223,9 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
         self,
     ) -> None:
         digest = "6" * 64
-        accepted = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW).accept(
+        accepted = DjangoAttemptRepository(
+            reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW
+        ).accept(
             self._command(
                 operation_id=uuid4(),
                 receipt_digest=digest,
@@ -245,7 +233,9 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
         )
         self.assertIsInstance(accepted, AttemptAccepted)
         completed_at = NOW + timedelta(seconds=30)
-        terminal = DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW).finalize(
+        terminal = DjangoAttemptRepository(
+            reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW
+        ).finalize(
             accepted.attempt_id,
             LinePushAccepted(
                 "receipt-race-request-id",
@@ -269,8 +259,8 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
 
         results = self._run_concurrently(
             tuple(
-                lambda command=command: DjangoAttemptRepository(reference_fence=LOCKED_REFERENCE_FENCE,
-                    clock=lambda: NOW
+                lambda command=command: DjangoAttemptRepository(
+                    reference_fence=LOCKED_REFERENCE_FENCE, clock=lambda: NOW
                 ).confirm_receipt(command)
                 for command in commands
             )
@@ -302,10 +292,7 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
         )
         self.assertIn(
             stored_pair,
-            {
-                (command.webhook_event_id, command.occurred_at)
-                for command in commands
-            },
+            {(command.webhook_event_id, command.occurred_at) for command in commands},
         )
         for result in results:
             self.assertEqual(
@@ -399,8 +386,7 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
             finally:
                 close_old_connections()
                 if all(
-                    outcome.value is not None or outcome.error is not None
-                    for outcome in outcomes
+                    outcome.value is not None or outcome.error is not None for outcome in outcomes
                 ):
                     finished.set()
 
@@ -420,9 +406,7 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
                 thread.start()
             barrier.wait(timeout=_THREAD_TIMEOUT_SECONDS)
             if not finished.wait(timeout=_THREAD_TIMEOUT_SECONDS):
-                main_error = TimeoutError(
-                    "競合workerが制限時間内に完了しませんでした"
-                )
+                main_error = TimeoutError("競合workerが制限時間内に完了しませんでした")
         except BaseException as error:
             main_error = error
         finally:
@@ -431,13 +415,10 @@ class DjangoAttemptRepositoryConcurrencyTests(TransactionTestCase):
             for thread in threads:
                 if thread.ident is not None:
                     thread.join(timeout=_THREAD_TIMEOUT_SECONDS)
-            alive_workers = [
-                thread.name for thread in threads if thread.is_alive()
-            ]
+            alive_workers = [thread.name for thread in threads if thread.is_alive()]
         if alive_workers:
             raise AssertionError(
-                "競合workerが終了せず残っています: "
-                + ", ".join(alive_workers)
+                "競合workerが終了せず残っています: " + ", ".join(alive_workers)
             ) from main_error
         if main_error is not None:
             raise main_error

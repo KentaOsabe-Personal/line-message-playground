@@ -32,9 +32,7 @@ class DeliveryTargetAPITests(TestCase):
                     "Owner display",
                 )
             )
-            owner = self.repository.bind_owner_identity(
-                owner, identity_view.public_id
-            )
+            owner = self.repository.bind_owner_identity(owner, identity_view.public_id)
             self.owner_session = self.repository.create_owner_session(
                 owner, timezone.now() + timedelta(hours=8)
             )
@@ -89,9 +87,7 @@ class DeliveryTargetAPITests(TestCase):
     # テストケース: active ownerがchannel選択肢を取得する
     # 期待値: stable順のstrict safe DTOだけを返し、秘密値と固定env値を含めない
     def test_active_owner_lists_safe_channel_choices_in_stable_order(self):
-        response = self.owner_client().get(
-            "/api/deliveries/targets/channels/"
-        )
+        response = self.owner_client().get("/api/deliveries/targets/channels/")
 
         self.assertEqual(response.status_code, 200)
         items = response.json()["items"]
@@ -146,12 +142,9 @@ class DeliveryTargetAPITests(TestCase):
         for enabled, friendship, available, reason in scenarios:
             self.friend.enabled = enabled
             self.friend.friendship_state = friendship
-            self.friend.save(
-                update_fields=("enabled", "friendship_state", "updated_at")
-            )
+            self.friend.save(update_fields=("enabled", "friendship_state", "updated_at"))
             response = client.get(
-                f"/api/deliveries/targets/channels/{self.active_channel.public_id}/"
-                "recipients/"
+                f"/api/deliveries/targets/channels/{self.active_channel.public_id}/recipients/"
             )
 
             self.assertEqual(response.status_code, 200)
@@ -188,8 +181,7 @@ class DeliveryTargetAPITests(TestCase):
     # 期待値: targetの存在を隠さず空の選択肢として200を返し送信候補を作らない
     def test_channel_without_recipients_returns_empty_items(self):
         response = self.owner_client().get(
-            f"/api/deliveries/targets/channels/{self.no_recipient_channel.public_id}/"
-            "recipients/"
+            f"/api/deliveries/targets/channels/{self.no_recipient_channel.public_id}/recipients/"
         )
 
         self.assertEqual(response.status_code, 200)
@@ -201,9 +193,7 @@ class DeliveryTargetAPITests(TestCase):
         anonymous_client = APIClient()
         anonymous = (
             anonymous_client.get("/api/deliveries/targets/channels/"),
-            anonymous_client.get(
-                "/api/deliveries/targets/channels/not-a-uuid/recipients/"
-            ),
+            anonymous_client.get("/api/deliveries/targets/channels/not-a-uuid/recipients/"),
         )
         pending_client = self.owner_client()
         with transaction.atomic():
@@ -222,16 +212,12 @@ class DeliveryTargetAPITests(TestCase):
         ):
             pending = (
                 pending_client.get("/api/deliveries/targets/channels/"),
-                pending_client.get(
-                    "/api/deliveries/targets/channels/not-a-uuid/recipients/"
-                ),
+                pending_client.get("/api/deliveries/targets/channels/not-a-uuid/recipients/"),
             )
 
         for response in anonymous:
             self.assertEqual(response.status_code, 401)
-            self.assertEqual(
-                response.json()["error"]["code"], "authentication_required"
-            )
+            self.assertEqual(response.json()["error"]["code"], "authentication_required")
         for response in pending:
             self.assertEqual(response.status_code, 403)
             self.assertIn(
@@ -251,21 +237,16 @@ class DeliveryTargetAPITests(TestCase):
             "別provider",
             provider_id="0099999999",
         )
-        missing = client.get(
-            f"/api/deliveries/targets/channels/{uuid4()}/recipients/"
-        )
+        missing = client.get(f"/api/deliveries/targets/channels/{uuid4()}/recipients/")
         mismatched = client.get(
-            f"/api/deliveries/targets/channels/{other_provider.public_id}/"
-            "recipients/"
+            f"/api/deliveries/targets/channels/{other_provider.public_id}/recipients/"
         )
 
         self.assertEqual(invalid.status_code, 400)
         self.assertEqual(invalid.json()["error"]["code"], "validation_error")
         for response in (missing, mismatched):
             self.assertEqual(response.status_code, 404)
-            self.assertEqual(
-                response.json()["error"]["code"], "target_not_available"
-            )
+            self.assertEqual(response.json()["error"]["code"], "target_not_available")
             self.assertEqual(set(response.json()), {"error"})
 
     # テストケース: target adapterのDB読み取りが失敗する
@@ -282,13 +263,10 @@ class DeliveryTargetAPITests(TestCase):
             side_effect=DatabaseError("database-secret-canary"),
         ):
             recipients = client.get(
-                f"/api/deliveries/targets/channels/{self.active_channel.public_id}/"
-                "recipients/"
+                f"/api/deliveries/targets/channels/{self.active_channel.public_id}/recipients/"
             )
 
         for response in (channels, recipients):
             self.assertEqual(response.status_code, 503)
-            self.assertEqual(
-                response.json()["error"]["code"], "storage_unavailable"
-            )
+            self.assertEqual(response.json()["error"]["code"], "storage_unavailable")
             self.assertNotIn("database-secret-canary", str(response.json()))

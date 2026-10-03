@@ -1,8 +1,8 @@
 import json
 import socket
 import uuid
-from urllib.error import URLError
 from unittest.mock import Mock, patch
+from urllib.error import URLError
 
 from django.test import SimpleTestCase
 from linebot.v3.messaging import (
@@ -24,8 +24,14 @@ from delivery.gateway import (
 )
 from delivery.types import (
     LinePushAccepted as LinkedLinePushAccepted,
+)
+from delivery.types import (
     LinePushRejected as LinkedLinePushRejected,
+)
+from delivery.types import (
     LinePushUnknown as LinkedLinePushUnknown,
+)
+from delivery.types import (
     PushLinkedRecipientCommand,
     ReceiptCapability,
 )
@@ -56,9 +62,7 @@ class LINEChannelPushGatewayTests(SimpleTestCase):
         )
         factory = Mock(return_value=api)
 
-        gateway: ChannelPushGateway = LINEChannelPushGateway(
-            api_client_factory=factory
-        )
+        gateway: ChannelPushGateway = LINEChannelPushGateway(api_client_factory=factory)
         result = gateway.push(self._command())
 
         self.assertEqual(
@@ -87,18 +91,16 @@ class LINEChannelPushGatewayTests(SimpleTestCase):
             {"X-Line-Request-Id": "request-id"},
         )
 
-        result = LINEChannelPushGateway(
-            api_client_factory=lambda _: api
-        ).push(self._command(capability))
+        result = LINEChannelPushGateway(api_client_factory=lambda _: api).push(
+            self._command(capability)
+        )
 
         self.assertEqual(
             result,
             LinkedLinePushAccepted("request-id", None),
         )
         api.push_message_with_http_info.assert_called_once()
-        messages = api.push_message_with_http_info.call_args.kwargs[
-            "push_message_request"
-        ].messages
+        messages = api.push_message_with_http_info.call_args.kwargs["push_message_request"].messages
         self.assertEqual(len(messages), 2)
         self.assertIsInstance(messages[0], TextMessage)
         self.assertIsInstance(messages[1], TemplateMessage)
@@ -120,9 +122,7 @@ class LINEChannelPushGatewayTests(SimpleTestCase):
     # テストケース: secret wrapperとcommandを文字列化する。
     # 期待値: token、subject、capabilityの生値をreprへ露出しない。
     def test_command_and_secrets_remain_redacted_outside_request_boundary(self):
-        command = self._command(
-            ReceiptCapability("opaque-capability-canary")
-        )
+        command = self._command(ReceiptCapability("opaque-capability-canary"))
 
         rendered = " ".join(
             (
@@ -158,9 +158,7 @@ class LINEChannelPushGatewayTests(SimpleTestCase):
 
         result = LINEChannelPushGateway._build_api("selected-token")
 
-        configuration_class.assert_called_once_with(
-            access_token="selected-token"
-        )
+        configuration_class.assert_called_once_with(access_token="selected-token")
         self.assertEqual(configuration.retries, 0)
         api_client_class.assert_called_once_with(configuration)
         messaging_api_class.assert_called_once_with(api_client)
@@ -182,9 +180,7 @@ class LINEChannelPushGatewayTests(SimpleTestCase):
             with self.subTest(error=type(error).__name__):
                 api = Mock()
                 api.push_message_with_http_info.side_effect = error
-                gateway = LINEChannelPushGateway(
-                    api_client_factory=lambda _: api
-                )
+                gateway = LINEChannelPushGateway(api_client_factory=lambda _: api)
 
                 result = gateway.push(self._command())
 
@@ -213,9 +209,9 @@ class LINEChannelPushGatewayTests(SimpleTestCase):
                 api = Mock()
                 api.push_message_with_http_info.return_value = response
 
-                result = LINEChannelPushGateway(
-                    api_client_factory=lambda _: api
-                ).push(self._command())
+                result = LINEChannelPushGateway(api_client_factory=lambda _: api).push(
+                    self._command()
+                )
 
                 self.assertEqual(
                     result,
@@ -252,9 +248,9 @@ class LINEChannelPushGatewayTests(SimpleTestCase):
                 )
 
                 with self.assertNoLogs(level="DEBUG"):
-                    result = LINEChannelPushGateway(
-                        api_client_factory=lambda _: api
-                    ).push(self._command())
+                    result = LINEChannelPushGateway(api_client_factory=lambda _: api).push(
+                        self._command()
+                    )
 
                 self.assertEqual(result, expected)
                 rendered = repr(result)
@@ -279,15 +275,11 @@ class LINEChannelPushGatewayTests(SimpleTestCase):
         cases = (
             (api_500, LinkedLinePushUnknown("service_unknown")),
             (
-                ApiException(
-                    reason=TimeoutError("raw-api-timeout-canary")
-                ),
+                ApiException(reason=TimeoutError("raw-api-timeout-canary")),
                 LinkedLinePushUnknown("timeout_unknown"),
             ),
             (
-                ApiException(
-                    reason=ConnectionError("raw-api-connection-canary")
-                ),
+                ApiException(reason=ConnectionError("raw-api-connection-canary")),
                 LinkedLinePushUnknown("service_unknown"),
             ),
             (
@@ -348,9 +340,9 @@ class LINEChannelPushGatewayTests(SimpleTestCase):
                 api.push_message_with_http_info.side_effect = error
 
                 with self.assertNoLogs(level="DEBUG"):
-                    result = LINEChannelPushGateway(
-                        api_client_factory=lambda _: api
-                    ).push(self._command())
+                    result = LINEChannelPushGateway(api_client_factory=lambda _: api).push(
+                        self._command()
+                    )
 
                 self.assertEqual(result, expected)
                 rendered = repr(result)
@@ -380,9 +372,9 @@ class LINEChannelPushGatewayTests(SimpleTestCase):
                 api = Mock()
                 api.push_message_with_http_info.return_value = response
 
-                result = LINEChannelPushGateway(
-                    api_client_factory=lambda _: api
-                ).push(self._command())
+                result = LINEChannelPushGateway(api_client_factory=lambda _: api).push(
+                    self._command()
+                )
 
                 self.assertEqual(result, expected)
                 self.assertNotIn("selected-token-canary", repr(result))

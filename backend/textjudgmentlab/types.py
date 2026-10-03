@@ -179,6 +179,7 @@ class JudgmentDetails:
 @dataclass(frozen=True, slots=True)
 class NormalizedJudgment:
     """検証済みの判定と、同じ処理の分岐で生成した採用可否の記録。HTTP応答はサービスで組み立てる。"""
+
     consultation_id: UUID
     request_id: UUID
     revision: int
@@ -208,12 +209,20 @@ class JudgmentFailure:
 NormalizationResult = NormalizedJudgment | JudgmentFailure
 
 
-ChoiceId = Literal["topic", "relevance", "change", "scope", "workaround", "result", "impact_evidence"]
+ChoiceId = Literal[
+    "topic", "relevance", "change", "scope", "workaround", "result", "impact_evidence"
+]
 JudgmentId = ChoiceId | Literal["impact", "urgency"]
 NormalizationReason = Literal[
-    "eligible", "unmentioned", "unclear", "confidence_below_threshold",
-    "probability_below_threshold", "maximum_not_unique", "impact_evidence_not_adopted",
-    "impact_evidence_absent", "noul_between_thresholds",
+    "eligible",
+    "unmentioned",
+    "unclear",
+    "confidence_below_threshold",
+    "probability_below_threshold",
+    "maximum_not_unique",
+    "impact_evidence_not_adopted",
+    "impact_evidence_absent",
+    "noul_between_thresholds",
 ]
 
 
@@ -276,7 +285,10 @@ class AdoptionPolicySnapshot:
 
 @dataclass(frozen=True, slots=True)
 class PolicyCheck:
-    rule: NormalizationReason | Literal["score_high_boundary", "noul_urgent_boundary", "noul_not_urgent_boundary"]
+    rule: (
+        NormalizationReason
+        | Literal["score_high_boundary", "noul_urgent_boundary", "noul_not_urgent_boundary"]
+    )
     actual: float | str | bool
     operator: Literal["gte", "lte", "eq"]
     expected: float | str | bool

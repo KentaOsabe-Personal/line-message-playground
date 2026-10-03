@@ -85,11 +85,7 @@ class HttpxLineReplyGateway:
                     request = client.build_request(
                         "POST",
                         LINE_REPLY_ENDPOINT,
-                        headers={
-                            "Authorization": (
-                                f"Bearer {access_token.reveal_for_use()}"
-                            )
-                        },
+                        headers={"Authorization": (f"Bearer {access_token.reveal_for_use()}")},
                         json={
                             "replyToken": reply_token.reveal_for_reply(),
                             "messages": [{"type": "text", "text": text}],

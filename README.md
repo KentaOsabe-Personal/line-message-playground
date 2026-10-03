@@ -246,6 +246,68 @@ ngrokの開発用ドメインを使うと、スマートフォンのLINEアプ�
 
 現時点の配信APIはローカル利用を前提として認証がないため、公開URLを共有せず、利用後は`docker compose down`で全サービスとトンネルを停止します。ngrokのauthtokenはLINEのチャネル資格情報とは別の秘密情報として`.env`だけで管理します。
 
+## ローカル品質チェック
+
+BackendはRuffでLint・import整理・整形を行います。FrontendはESLintとtypescript-eslintの`recommendedTypeChecked`で型情報を使うLint、React Hooksの呼び出し規則と依存配列の検査、Prettierで整形、`tsc -b`で型検査を行います。ESLintとPrettierの整形ルールは`eslint-config-prettier`で競合を防ぎます。
+
+設定は`backend/pyproject.toml`、`frontend/eslint.config.mjs`、`frontend/.prettierrc.json`が正本です。Ruffは`backend/requirements-dev.txt`、Frontendのツールは`devDependencies`とlockfileでバージョンを固定します。BackendのDockerイメージはローカル開発用なので開発依存もインストールします。
+
+### 初回・依存更新後の準備
+
+リポジトリ直下で実行します。Frontendの既存`node_modules` volumeにも、更新したlockfileの依存を反映します。
+
+```bash
+docker compose build frontend backend
+docker compose run --rm --no-deps frontend npm ci
+```
+
+### 検査
+
+```bash
+# 両サービスの静的チェック
+sh scripts/check.sh
+
+# サービス単位で検査
+sh scripts/check.sh frontend
+sh scripts/check.sh backend
+```
+
+このスクリプトはファイルを修正せず、不合格なら非ゼロで終了します。DB・アプリサーバー・ngrokは起動しません。LINEの実資格情報は検査に不要です。Composeの通常の設定読込は行うため、未設定の環境変数について警告が出る場合があります。
+
+Frontendでは`npm run check`が`lint`・`format:check`・`typecheck`を順に実行します。各コマンドは`docker compose run --rm --no-deps frontend npm run lint`のように個別実行できます。Backendでは`ruff check .`と`ruff format --check .`を実行します。Pythonの静的型検査はRuffの対象外です。
+
+対象は両サービスのソース・テスト・設定です。Backendのmigrationも検査します。依存パッケージ、ビルド成果物、キャッシュ、coverageは除外し、Frontendのlockfileはnpmに整形を任せます。README、spec、スキルなどのMarkdownは今回の自動整形対象に含めません。
+
+### 修正
+
+```bash
+docker compose run --rm --no-deps frontend npm run lint:fix
+docker compose run --rm --no-deps frontend npm run format
+docker compose run --rm --no-deps backend ruff check --fix .
+docker compose run --rm --no-deps backend ruff format .
+```
+
+修正後は差分を確認して、静的チェックと変更に対応するテストを再実行します。Ruffの`--unsafe-fixes`は標準手順に含めません。Hooksの依存配列やPromiseの指摘は、通信の再実行・エラー処理への影響を確認して修正します。指摘を消すためにルールを一括無効化せず、局所的な例外が必要なら理由をコードへ記載します。
+
+テストに限り、非同期APIのstubの契約を保つため`require-await`を無効にします。`unbound-method`はVitest用ルールへ置き換え、`expect`へ渡す関数参照と誤った非束縛呼出しを区別します。型情報を使う他のルールはテストでも有効です。
+
+### 開発フローへの組み込み
+
+GitHub Actionsは使用せず、ローカルの実行結果を完了・公開の判断に使います。
+
+| 変更範囲 | 必須の静的チェック |
+| --- | --- |
+| Frontendのコード・テスト・設定・依存 | `sh scripts/check.sh frontend` |
+| Backendのコード・テスト・設定・依存 | `sh scripts/check.sh backend` |
+| 両サービス、共通チェックやその運用規則 | `sh scripts/check.sh` |
+| 静的チェックの運用を変えない文書のみ | 実行不要。対象外の理由を記録 |
+
+- `kiro-impl`は実装後、`READY_FOR_REVIEW`を返す前に対象サービス全体を検査します。
+- `kiro-review`は受入前に対象サービスの検査を行います。`kiro-validate-impl`でもfeature全体に対応する結果を確認します。
+- `create-pr`はcommit・push・PR作成前に、公開差分全体に対応する結果を確認します。作業ツリーだけでなく公開予定のcommitも対象です。
+
+結果にはコマンド・終了コード・対象範囲を残します。同じコード状態・設定・依存・対象範囲の実行結果だけ再利用でき、修正後は再検査します。失敗・未実施を合格扱いせず、必要なチェックが通るまで完了・公開へ進みません。静的チェックの合格は、テストやproduction buildの代わりにはなりません。
+
 ## テスト
 
 ```bash

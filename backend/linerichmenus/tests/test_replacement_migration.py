@@ -5,7 +5,6 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
-
 NOW = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 
 
@@ -29,21 +28,31 @@ class RichMenuReplacementMigrationTests(TransactionTestCase):
         Resource = apps.get_model("linerichmenus", "ManagedRichMenu")
         state = State.objects.create(channel_public_id=uuid4())
         operation = Operation.objects.create(
-            operation_id=uuid4(), channel_state=state,
-            owner_identity_public_id=uuid4(), provider_id="0012345678",
-            kind="apply", request_fingerprint="a" * 64,
-            expected_channel_revision=NOW, status="accepted", stage=None,
-            result_code="accepted", accepted_at=NOW,
+            operation_id=uuid4(),
+            channel_state=state,
+            owner_identity_public_id=uuid4(),
+            provider_id="0012345678",
+            kind="apply",
+            request_fingerprint="a" * 64,
+            expected_channel_revision=NOW,
+            status="accepted",
+            stage=None,
+            result_code="accepted",
+            accepted_at=NOW,
         )
         resource = Resource.objects.create(
-            channel_state=state, origin_operation=operation,
+            channel_state=state,
+            origin_operation=operation,
             ownership_marker="existing-" + uuid4().hex,
-            lifecycle="candidate", image_digest="b" * 64,
+            lifecycle="candidate",
+            image_digest="b" * 64,
         )
         legacy_old = Resource.objects.create(
-            channel_state=state, origin_operation=operation,
+            channel_state=state,
+            origin_operation=operation,
             ownership_marker="legacy-old-" + uuid4().hex,
-            lifecycle="old", image_digest="c" * 64,
+            lifecycle="old",
+            image_digest="c" * 64,
         )
 
         executor = MigrationExecutor(connection)

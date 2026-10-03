@@ -3,10 +3,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-
-DeactivationStatus = Literal[
-    "checking", "unlinking", "confirmation_required", "completed"
-]
+DeactivationStatus = Literal["checking", "unlinking", "confirmation_required", "completed"]
 
 
 @dataclass(frozen=True, slots=True)

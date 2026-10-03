@@ -3,8 +3,8 @@ from unittest.mock import patch
 
 from django.db import DatabaseError
 from django.test import TestCase
-from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 from linewebhooks.audit import SafeWebhookAuditLogger
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.repositories import DjangoEventReceiptRepository
@@ -18,7 +18,6 @@ from linewebhooks.tests.support import (
     signed_payload,
 )
 from linewebhooks.views import WebhookAPIView
-
 
 RAW_CANARY = "raw-body-canary"
 SIGNATURE_CANARY = "signature-canary"
@@ -112,9 +111,9 @@ class WebhookSecurityIntegrationTests(TestCase):
             }
             & set(vars(type(envelope)).get("__dataclass_fields__", {}))
         )
-        log_surfaces = [
-            record.getMessage() for record in self.log_handler.records
-        ] + [record.__dict__ for record in self.log_handler.records]
+        log_surfaces = [record.getMessage() for record in self.log_handler.records] + [
+            record.__dict__ for record in self.log_handler.records
+        ]
         self._assert_canaries_absent(
             response.content,
             repr(envelope),
@@ -161,13 +160,9 @@ class WebhookSecurityIntegrationTests(TestCase):
             unavailable = self._post(service, raw_body, valid_signature)
 
         self.assertEqual(rejected.status_code, 401)
-        self.assertEqual(
-            rejected.json(), {"error": {"code": "webhook_rejected"}}
-        )
+        self.assertEqual(rejected.json(), {"error": {"code": "webhook_rejected"}})
         self.assertEqual(unavailable.status_code, 503)
-        self.assertEqual(
-            unavailable.json(), {"error": {"code": "webhook_unavailable"}}
-        )
+        self.assertEqual(unavailable.json(), {"error": {"code": "webhook_unavailable"}})
         self.assertEqual(WebhookEventReceipt.objects.count(), 0)
         self.assertEqual(handler.events, [])
         log_surfaces = [record.__dict__ for record in self.log_handler.records]
@@ -176,6 +171,4 @@ class WebhookSecurityIntegrationTests(TestCase):
             unavailable.content,
             *log_surfaces,
         )
-        self.assertTrue(
-            all(record.exc_info is None for record in self.log_handler.records)
-        )
+        self.assertTrue(all(record.exc_info is None for record in self.log_handler.records))

@@ -13,11 +13,10 @@ from .catalog import DefaultTemplateCatalog
 from .types import (
     InputFieldError,
     NormalizedTemplate,
-    RenderRejected,
     RenderedImage,
+    RenderRejected,
     SafeResultCode,
 )
-
 
 _MAX_FONT_SIZE = 112
 _MIN_FONT_SIZE = 28
@@ -51,7 +50,7 @@ class DefaultDeterministicRenderer:
             return _image_rejected()
         try:
             supported = _font_code_points(self._font_path)
-        except (OSError, ValueError, struct.error):
+        except OSError, ValueError, struct.error:
             return _image_rejected()
 
         glyph_errors = []
@@ -71,9 +70,7 @@ class DefaultDeterministicRenderer:
 
         image = Image.new("RGBA", (descriptor.width, descriptor.height))
         draw = ImageDraw.Draw(image)
-        for index, (area, field) in enumerate(
-            zip(descriptor.areas, template.fields, strict=True)
-        ):
+        for index, (area, field) in enumerate(zip(descriptor.areas, template.fields, strict=True)):
             draw.rectangle(
                 (area.x, area.y, area.x + area.width - 1, area.y + area.height - 1),
                 fill=_PALETTE[index],
@@ -84,7 +81,7 @@ class DefaultDeterministicRenderer:
                     font_path=self._font_path,
                     maximum_width=area.width - 2 * _PADDING,
                 )
-            except (OSError, ValueError):
+            except OSError, ValueError:
                 return _image_rejected()
             draw.multiline_text(
                 (area.x + area.width / 2, area.y + area.height / 2),

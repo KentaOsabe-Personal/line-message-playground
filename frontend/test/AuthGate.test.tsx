@@ -8,7 +8,9 @@ import type { AuthApiClient } from '../src/authApi'
 import type { LinePlatformLiffAdapter } from '../src/liffClient'
 import { createOwnerSessionStorage } from '../src/ownerSessionStorage'
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 let container: HTMLDivElement
 let root: Root
@@ -50,19 +52,32 @@ describe('AuthGate', () => {
   // 期待値: login導線だけを表示し、配信・管理に相当する子Componentをmountしない。
   test('does not mount protected children before authentication', async () => {
     const childMounted = vi.fn()
-    const Protected = () => { childMounted(); return <p>保護画面</p> }
+    const Protected = () => {
+      childMounted()
+      return <p>保護画面</p>
+    }
 
-    await act(async () => root.render(
-      <AuthGate
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={adapter()}
-        authApi={api()}
-      ><Protected /></AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={adapter()}
+          authApi={api()}
+        >
+          <Protected />
+        </AuthGate>,
+      ),
+    )
 
     expect(container.textContent).toContain('LINEでログイン')
-    const loginButton = [...container.querySelectorAll('button')]
-      .find((button) => button.textContent?.includes('LINEでログイン'))
+    const loginButton = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('LINEでログイン'),
+    )
     expect(loginButton?.classList.contains('line-login-button')).toBe(true)
     expect(container.textContent).not.toContain('保護画面')
     expect(childMounted).not.toHaveBeenCalled()
@@ -71,18 +86,38 @@ describe('AuthGate', () => {
   // テストケース: LIFF raw ID tokenをBackendが認証済みsessionへ変換する。
   // 期待値: display name付きconsoleと子Componentを表示し、LINE user IDは表示しない。
   test('mounts protected children only for an authenticated owner', async () => {
-    const liffAdapter = adapter({ isLoggedIn: vi.fn().mockReturnValue(true), getIdToken: vi.fn().mockReturnValue('raw-id-token') })
+    const liffAdapter = adapter({
+      isLoggedIn: vi.fn().mockReturnValue(true),
+      getIdToken: vi.fn().mockReturnValue('raw-id-token'),
+    })
     const authApi = api({
-      login: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }),
+      login: vi.fn().mockResolvedValue({
+        state: 'authenticated',
+        profile: { displayName: 'Owner', linked: true },
+      }),
     })
 
-    await act(async () => root.render(
-      <AuthGate
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={liffAdapter}
-        authApi={authApi}
-      >{({ session }) => <><p>{session.state === 'authenticated' ? session.profile.displayName : ''}</p><p>保護画面</p></>}</AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={liffAdapter}
+          authApi={authApi}
+        >
+          {({ session }) => (
+            <>
+              <p>{session.state === 'authenticated' ? session.profile.displayName : ''}</p>
+              <p>保護画面</p>
+            </>
+          )}
+        </AuthGate>,
+      ),
+    )
 
     expect(authApi.login).toHaveBeenCalledWith('raw-id-token')
     expect(container.textContent).toContain('Owner')
@@ -96,20 +131,37 @@ describe('AuthGate', () => {
     let grantPermission: ((granted: boolean) => void) | undefined
     const liffAdapter = adapter({
       isLoggedIn: vi.fn().mockReturnValue(true),
-      ensureProfilePermission: vi.fn(() => new Promise<boolean>((resolve) => { grantPermission = resolve })),
+      ensureProfilePermission: vi.fn(
+        () =>
+          new Promise<boolean>((resolve) => {
+            grantPermission = resolve
+          }),
+      ),
       getIdToken: vi.fn().mockReturnValue('raw-id-token'),
     })
     const authApi = api({
-      login: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }),
+      login: vi.fn().mockResolvedValue({
+        state: 'authenticated',
+        profile: { displayName: 'Owner', linked: true },
+      }),
     })
 
-    await act(async () => root.render(
-      <AuthGate
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={liffAdapter}
-        authApi={authApi}
-      ><p>保護画面</p></AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={liffAdapter}
+          authApi={authApi}
+        >
+          <p>保護画面</p>
+        </AuthGate>,
+      ),
+    )
 
     expect(liffAdapter.getIdToken).not.toHaveBeenCalled()
     expect(authApi.login).not.toHaveBeenCalled()
@@ -128,13 +180,22 @@ describe('AuthGate', () => {
     })
     const authApi = api()
 
-    await act(async () => root.render(
-      <AuthGate
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={liffAdapter}
-        authApi={authApi}
-      ><p>保護画面</p></AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={liffAdapter}
+          authApi={authApi}
+        >
+          <p>保護画面</p>
+        </AuthGate>,
+      ),
+    )
 
     expect(liffAdapter.getIdToken).not.toHaveBeenCalled()
     expect(authApi.login).not.toHaveBeenCalled()
@@ -145,17 +206,38 @@ describe('AuthGate', () => {
   // 期待値: logout後は子Componentをunmountし、未認証状態へ戻る。
   test('logs out only the current frontend session and closes the gate', async () => {
     const authApi = api({
-      bootstrap: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }),
+      bootstrap: vi.fn().mockResolvedValue({
+        state: 'authenticated',
+        profile: { displayName: 'Owner', linked: true },
+      }),
     })
-    await act(async () => root.render(
-      <AuthGate
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={adapter()}
-        authApi={authApi}
-      >{({ logout }) => <><p>保護画面</p><button type="button" onClick={() => void logout()}>この端末からログアウト</button></>}</AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={adapter()}
+          authApi={authApi}
+        >
+          {({ logout }) => (
+            <>
+              <p>保護画面</p>
+              <button type="button" onClick={() => void logout()}>
+                この端末からログアウト
+              </button>
+            </>
+          )}
+        </AuthGate>,
+      ),
+    )
 
-    const logout = [...container.querySelectorAll('button')].find((button) => button.textContent === 'この端末からログアウト')
+    const logout = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'この端末からログアウト',
+    )
     await act(async () => logout?.click())
 
     expect(authApi.logout).toHaveBeenCalledTimes(1)
@@ -165,20 +247,35 @@ describe('AuthGate', () => {
   // テストケース: StrictModeが初期effectをsetup・cleanup・setupの順で再実行する。
   // 期待値: cleanup済み世代は認証mutationへ進まず、Backend loginを論理的に1回だけ呼ぶ。
   test('suppresses stale authentication work under StrictMode', async () => {
-    const liffAdapter = adapter({ isLoggedIn: vi.fn().mockReturnValue(true), getIdToken: vi.fn().mockReturnValue('raw-id-token') })
+    const liffAdapter = adapter({
+      isLoggedIn: vi.fn().mockReturnValue(true),
+      getIdToken: vi.fn().mockReturnValue('raw-id-token'),
+    })
     const authApi = api({
-      login: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }),
+      login: vi.fn().mockResolvedValue({
+        state: 'authenticated',
+        profile: { displayName: 'Owner', linked: true },
+      }),
     })
 
-    await act(async () => root.render(
-      <StrictMode>
-        <AuthGate
-          config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-          liffAdapter={liffAdapter}
-          authApi={authApi}
-        ><p>保護画面</p></AuthGate>
-      </StrictMode>,
-    ))
+    await act(async () =>
+      root.render(
+        <StrictMode>
+          <AuthGate
+            config={{
+              liffId: '123-a',
+              liffUrl: 'https://liff.line.me/123-a',
+              endpointUrl: 'https://example.com/liff',
+              redirectUri: 'https://example.com/liff',
+            }}
+            liffAdapter={liffAdapter}
+            authApi={authApi}
+          >
+            <p>保護画面</p>
+          </AuthGate>
+        </StrictMode>,
+      ),
+    )
 
     expect(authApi.login).toHaveBeenCalledTimes(1)
     expect(container.textContent).toContain('保護画面')
@@ -188,16 +285,29 @@ describe('AuthGate', () => {
   // 期待値: 汎用初期化errorで上書きせず、再ログイン導線へ収束する。
   test('keeps bootstrap 401 as a session invalidation state', async () => {
     const authApi = api({
-      bootstrap: vi.fn().mockRejectedValue(new AuthApiError({ code: 'not_authenticated', summary: '認証が必要です。' }, 401)),
+      bootstrap: vi
+        .fn()
+        .mockRejectedValue(
+          new AuthApiError({ code: 'not_authenticated', summary: '認証が必要です。' }, 401),
+        ),
     })
 
-    await act(async () => root.render(
-      <AuthGate
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={adapter()}
-        authApi={authApi}
-      ><p>保護画面</p></AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={adapter()}
+          authApi={authApi}
+        >
+          <p>保護画面</p>
+        </AuthGate>,
+      ),
+    )
 
     expect(container.textContent).toContain('LINEでログイン')
     expect(container.textContent).not.toContain('本人確認を完了できません')
@@ -206,18 +316,34 @@ describe('AuthGate', () => {
   // テストケース: raw ID tokenのBackend検証が401を返す。
   // 期待値: verification errorで失効通知を上書きせず、再ログイン導線へ収束する。
   test('keeps login 401 as a session invalidation state', async () => {
-    const liffAdapter = adapter({ isLoggedIn: vi.fn().mockReturnValue(true), getIdToken: vi.fn().mockReturnValue('raw-id-token') })
+    const liffAdapter = adapter({
+      isLoggedIn: vi.fn().mockReturnValue(true),
+      getIdToken: vi.fn().mockReturnValue('raw-id-token'),
+    })
     const authApi = api({
-      login: vi.fn().mockRejectedValue(new AuthApiError({ code: 'invalid_identity', summary: '本人確認に失敗しました。' }, 401)),
+      login: vi
+        .fn()
+        .mockRejectedValue(
+          new AuthApiError({ code: 'invalid_identity', summary: '本人確認に失敗しました。' }, 401),
+        ),
     })
 
-    await act(async () => root.render(
-      <AuthGate
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={liffAdapter}
-        authApi={authApi}
-      ><p>保護画面</p></AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={liffAdapter}
+          authApi={authApi}
+        >
+          <p>保護画面</p>
+        </AuthGate>,
+      ),
+    )
 
     expect(container.textContent).toContain('LINEでログイン')
     expect(container.textContent).not.toContain('本人確認を完了できません')
@@ -227,18 +353,43 @@ describe('AuthGate', () => {
   // 期待値: logout errorで上書きせず、保護画面を閉じて再ログイン導線へ収束する。
   test('keeps logout 401 as a session invalidation state', async () => {
     const authApi = api({
-      bootstrap: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }),
-      logout: vi.fn().mockRejectedValue(new AuthApiError({ code: 'not_authenticated', summary: '認証が必要です。' }, 401)),
+      bootstrap: vi.fn().mockResolvedValue({
+        state: 'authenticated',
+        profile: { displayName: 'Owner', linked: true },
+      }),
+      logout: vi
+        .fn()
+        .mockRejectedValue(
+          new AuthApiError({ code: 'not_authenticated', summary: '認証が必要です。' }, 401),
+        ),
     })
-    await act(async () => root.render(
-      <AuthGate
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={adapter()}
-        authApi={authApi}
-      >{({ logout }) => <><p>保護画面</p><button type="button" onClick={() => void logout()}>この端末からログアウト</button></>}</AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={adapter()}
+          authApi={authApi}
+        >
+          {({ logout }) => (
+            <>
+              <p>保護画面</p>
+              <button type="button" onClick={() => void logout()}>
+                この端末からログアウト
+              </button>
+            </>
+          )}
+        </AuthGate>,
+      ),
+    )
 
-    const logout = [...container.querySelectorAll('button')].find((button) => button.textContent === 'この端末からログアウト')
+    const logout = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'この端末からログアウト',
+    )
     await act(async () => logout?.click())
 
     expect(container.textContent).toContain('LINEでログイン')
@@ -251,16 +402,29 @@ describe('AuthGate', () => {
   test('mounts only render-prop recovery content for an unlinking owner', async () => {
     const authApi = api({
       bootstrap: vi.fn().mockResolvedValue({
-        state: 'unlinking', stage: 'local_deletion_pending', retryAction: 'retry_local_delete',
+        state: 'unlinking',
+        stage: 'local_deletion_pending',
+        retryAction: 'retry_local_delete',
       }),
     })
-    await act(async () => root.render(
-      <AuthGate
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={adapter()}
-        authApi={authApi}
-      >{({ session }) => <p>{session.state === 'unlinking' ? session.retryAction : '通常画面'}</p>}</AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={adapter()}
+          authApi={authApi}
+        >
+          {({ session }) => (
+            <p>{session.state === 'unlinking' ? session.retryAction : '通常画面'}</p>
+          )}
+        </AuthGate>,
+      ),
+    )
 
     expect(container.textContent).toContain('retry_local_delete')
     expect(container.textContent).not.toContain('通常画面')
@@ -270,15 +434,31 @@ describe('AuthGate', () => {
   // 期待値: 認証状態をanonymousへ更新し、通常の保護画面を即座にunmountする。
   test('closes protected content when its render context reports unlink completion', async () => {
     const authApi = api({
-      bootstrap: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }),
+      bootstrap: vi.fn().mockResolvedValue({
+        state: 'authenticated',
+        profile: { displayName: 'Owner', linked: true },
+      }),
     })
-    await act(async () => root.render(
-      <AuthGate
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={adapter()}
-        authApi={authApi}
-      >{({ onSessionReceived }) => <button type="button" onClick={() => onSessionReceived({ state: 'anonymous' })}>解除完了</button>}</AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={adapter()}
+          authApi={authApi}
+        >
+          {({ onSessionReceived }) => (
+            <button type="button" onClick={() => onSessionReceived({ state: 'anonymous' })}>
+              解除完了
+            </button>
+          )}
+        </AuthGate>,
+      ),
+    )
 
     await clickButton(container, '解除完了')
     expect(container.textContent).toContain('LINEでログイン')
@@ -290,15 +470,31 @@ describe('AuthGate', () => {
   test('exposes an explicit LIFF reauthentication action to protected content', async () => {
     const liffAdapter = adapter({ reauthenticate: vi.fn() })
     const authApi = api({
-      bootstrap: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }),
+      bootstrap: vi.fn().mockResolvedValue({
+        state: 'authenticated',
+        profile: { displayName: 'Owner', linked: true },
+      }),
     })
-    await act(async () => root.render(
-      <AuthGate
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={liffAdapter}
-        authApi={authApi}
-      >{({ reauthenticate }) => <button type="button" onClick={reauthenticate}>再認証</button>}</AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={liffAdapter}
+          authApi={authApi}
+        >
+          {({ reauthenticate }) => (
+            <button type="button" onClick={reauthenticate}>
+              再認証
+            </button>
+          )}
+        </AuthGate>,
+      ),
+    )
 
     await clickButton(container, '再認証')
     expect(liffAdapter.reauthenticate).toHaveBeenCalledWith('https://example.com/liff')
@@ -312,16 +508,29 @@ describe('AuthGate', () => {
     window.sessionStorage.setItem('line-owner:unlink-reauthentication-pending', '1')
     const authApi = api({
       bootstrap: vi.fn().mockResolvedValue({
-        state: 'unlinking', stage: 'deauthorization_pending', retryAction: 'reauthenticate',
+        state: 'unlinking',
+        stage: 'deauthorization_pending',
+        retryAction: 'reauthenticate',
       }),
     })
-    await act(async () => root.render(
-      <AuthGate
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={adapter({ getAccessToken: vi.fn().mockReturnValue('new-access-token') })}
-        authApi={authApi}
-      >{({ unlinkReauthenticationReady }) => <p>{unlinkReauthenticationReady ? 'resume-ready' : 'reauth-required'}</p>}</AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={adapter({ getAccessToken: vi.fn().mockReturnValue('new-access-token') })}
+          authApi={authApi}
+        >
+          {({ unlinkReauthenticationReady }) => (
+            <p>{unlinkReauthenticationReady ? 'resume-ready' : 'reauth-required'}</p>
+          )}
+        </AuthGate>,
+      ),
+    )
 
     expect(container.textContent).toContain('resume-ready')
     expect(window.sessionStorage.getItem('line-owner:unlink-reauthentication-pending')).toBeNull()
@@ -332,11 +541,24 @@ describe('AuthGate', () => {
   test('stores a safe subroute and starts login with the fixed LIFF redirect', async () => {
     const liffAdapter = adapter()
     const storage = createOwnerSessionStorage(window.sessionStorage)
-    await act(async () => root.render(
-      <AuthGate currentPathname="/liff/channels" ownerStorage={storage}
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={liffAdapter} authApi={api()}><p>保護画面</p></AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          currentPathname="/liff/channels"
+          ownerStorage={storage}
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={liffAdapter}
+          authApi={api()}
+        >
+          <p>保護画面</p>
+        </AuthGate>,
+      ),
+    )
     await clickButton(container, 'LINEでログイン')
     expect(liffAdapter.login).toHaveBeenCalledWith('https://example.com/liff')
     expect(storage.consumeReturnPath()).toBe('/liff/channels')
@@ -348,13 +570,30 @@ describe('AuthGate', () => {
     const storage = createOwnerSessionStorage(window.sessionStorage)
     storage.saveReturnPath('/liff/deliveries')
     const replacePath = vi.fn()
-    await act(async () => root.render(
-      <AuthGate currentPathname="/liff" replacePath={replacePath} ownerStorage={storage}
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={adapter()} authApi={api({ bootstrap: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }) })}>
-        <p>保護画面</p>
-      </AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          currentPathname="/liff"
+          replacePath={replacePath}
+          ownerStorage={storage}
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={adapter()}
+          authApi={api({
+            bootstrap: vi.fn().mockResolvedValue({
+              state: 'authenticated',
+              profile: { displayName: 'Owner', linked: true },
+            }),
+          })}
+        >
+          <p>保護画面</p>
+        </AuthGate>,
+      ),
+    )
     expect(replacePath).toHaveBeenCalledWith('/liff/deliveries')
     expect(storage.consumeReturnPath()).toBeNull()
   })
@@ -367,13 +606,37 @@ describe('AuthGate', () => {
     storage.saveDeliveryOperationId('123e4567-e89b-42d3-a456-426614174000')
     const replacePath = vi.fn()
     const liffAdapter = adapter()
-    await act(async () => root.render(
-      <AuthGate currentPathname="/liff/account" replacePath={replacePath} ownerStorage={storage}
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={liffAdapter} authApi={api({ bootstrap: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }) })}>
-        {({ logout }) => <><p>保護画面</p><button type="button" onClick={() => void logout()}>この端末からログアウト</button></>}
-      </AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          currentPathname="/liff/account"
+          replacePath={replacePath}
+          ownerStorage={storage}
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={liffAdapter}
+          authApi={api({
+            bootstrap: vi.fn().mockResolvedValue({
+              state: 'authenticated',
+              profile: { displayName: 'Owner', linked: true },
+            }),
+          })}
+        >
+          {({ logout }) => (
+            <>
+              <p>保護画面</p>
+              <button type="button" onClick={() => void logout()}>
+                この端末からログアウト
+              </button>
+            </>
+          )}
+        </AuthGate>,
+      ),
+    )
     await clickButton(container, 'この端末からログアウト')
     expect(liffAdapter.logout).toHaveBeenCalledTimes(1)
     expect(replacePath).toHaveBeenCalledWith('/liff')
@@ -389,26 +652,55 @@ describe('AuthGate', () => {
     storage.saveReturnPath('/liff/channels')
     const replacePath = vi.fn()
     const authApi = api({
-      bootstrap: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }),
-      login: vi.fn().mockResolvedValue({ state: 'authenticated', profile: { displayName: 'Owner', linked: true } }),
+      bootstrap: vi.fn().mockResolvedValue({
+        state: 'authenticated',
+        profile: { displayName: 'Owner', linked: true },
+      }),
+      login: vi.fn().mockResolvedValue({
+        state: 'authenticated',
+        profile: { displayName: 'Owner', linked: true },
+      }),
     })
-    await act(async () => root.render(
-      <AuthGate currentPathname="/liff/channels" replacePath={replacePath} ownerStorage={storage}
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={adapter({
-          logout: vi.fn(() => { throw new Error('sdk logout failed') }),
-          isLoggedIn: vi.fn().mockReturnValue(true), getIdToken: vi.fn().mockReturnValue('old-owner-token'),
-        })}
-        authApi={authApi}>
-        {({ logout }) => <><p>保護画面</p><button type="button" onClick={() => void logout()}>この端末からログアウト</button></>}
-      </AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          currentPathname="/liff/channels"
+          replacePath={replacePath}
+          ownerStorage={storage}
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={adapter({
+            logout: vi.fn(() => {
+              throw new Error('sdk logout failed')
+            }),
+            isLoggedIn: vi.fn().mockReturnValue(true),
+            getIdToken: vi.fn().mockReturnValue('old-owner-token'),
+          })}
+          authApi={authApi}
+        >
+          {({ logout }) => (
+            <>
+              <p>保護画面</p>
+              <button type="button" onClick={() => void logout()}>
+                この端末からログアウト
+              </button>
+            </>
+          )}
+        </AuthGate>,
+      ),
+    )
     await clickButton(container, 'この端末からログアウト')
     expect(replacePath).toHaveBeenCalledWith('/liff')
     expect(storage.consumeReturnPath()).toBeNull()
     expect(container.textContent).not.toContain('保護画面')
     expect(container.textContent).toContain('ログアウトできません')
-    expect([...container.querySelectorAll('button')].some((button) => button.textContent === '再試行')).toBe(false)
+    expect(
+      [...container.querySelectorAll('button')].some((button) => button.textContent === '再試行'),
+    ).toBe(false)
     expect(authApi.login).not.toHaveBeenCalled()
   })
 
@@ -416,19 +708,38 @@ describe('AuthGate', () => {
   // 期待値: `/liff/account`へ履歴置換し、回復contentだけを描画する。
   test('replaces any protected route with account while unlinking', async () => {
     const replacePath = vi.fn()
-    await act(async () => root.render(
-      <AuthGate currentPathname="/liff/deliveries" replacePath={replacePath}
-        config={{ liffId: '123-a', liffUrl: 'https://liff.line.me/123-a', endpointUrl: 'https://example.com/liff', redirectUri: 'https://example.com/liff' }}
-        liffAdapter={adapter()} authApi={api({ bootstrap: vi.fn().mockResolvedValue({ state: 'unlinking', stage: 'local_deletion_pending', retryAction: 'retry_local_delete' }) })}>
-        {({ session }) => <p>{session.state}</p>}
-      </AuthGate>,
-    ))
+    await act(async () =>
+      root.render(
+        <AuthGate
+          currentPathname="/liff/deliveries"
+          replacePath={replacePath}
+          config={{
+            liffId: '123-a',
+            liffUrl: 'https://liff.line.me/123-a',
+            endpointUrl: 'https://example.com/liff',
+            redirectUri: 'https://example.com/liff',
+          }}
+          liffAdapter={adapter()}
+          authApi={api({
+            bootstrap: vi.fn().mockResolvedValue({
+              state: 'unlinking',
+              stage: 'local_deletion_pending',
+              retryAction: 'retry_local_delete',
+            }),
+          })}
+        >
+          {({ session }) => <p>{session.state}</p>}
+        </AuthGate>,
+      ),
+    )
     expect(replacePath).toHaveBeenCalledWith('/liff/account')
     expect(container.textContent).toContain('unlinking')
   })
 })
 
 async function clickButton(target: HTMLElement, label: string) {
-  const button = [...target.querySelectorAll('button')].find((item) => item.textContent?.includes(label))
+  const button = [...target.querySelectorAll('button')].find((item) =>
+    item.textContent?.includes(label),
+  )
   await act(async () => button?.click())
 }

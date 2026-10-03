@@ -10,7 +10,6 @@ from .types import (
     ValidatedFriendshipEvent,
 )
 
-
 _LINE_USER_ID = re.compile(r"U[0-9a-f]{32}\Z")
 
 

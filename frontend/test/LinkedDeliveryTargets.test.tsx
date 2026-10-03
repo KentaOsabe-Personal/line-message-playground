@@ -6,7 +6,9 @@ import { DeliveryApiError } from '../src/deliveryApi'
 import type { LinkedDeliveryApiClient } from '../src/deliveryApi'
 import DeliveryForm from '../src/DeliveryForm'
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 const channelOne = '11111111-1111-4111-8111-111111111111'
 const channelTwo = '22222222-2222-4222-8222-222222222222'
@@ -22,9 +24,7 @@ const renderForm = async (client: LinkedDeliveryApiClient) => {
   })
 }
 
-const clientWith = (
-  overrides: Partial<LinkedDeliveryApiClient> = {},
-): LinkedDeliveryApiClient => ({
+const clientWith = (overrides: Partial<LinkedDeliveryApiClient> = {}): LinkedDeliveryApiClient => ({
   listChannels: vi.fn().mockResolvedValue([]),
   listRecipients: vi.fn().mockResolvedValue([]),
   preview: vi.fn(),
@@ -34,43 +34,38 @@ const clientWith = (
 })
 
 const clickRadio = async (name: string, value: string) => {
-  const radio = container.querySelector(
-    `input[name="${name}"][value="${value}"]`,
-  ) as HTMLInputElement | null
+  const radio = container.querySelector<HTMLInputElement>(`input[name="${name}"][value="${value}"]`)
   if (radio === null) throw new Error(`radio not found: ${name}`)
   await act(async () => radio.click())
 }
 
 const clickButton = async (label: string) => {
-  const button = [...container.querySelectorAll('button')]
-    .find((candidate) => candidate.textContent === label)
+  const button = [...container.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent === label,
+  )
   if (button === undefined) throw new Error(`button not found: ${label}`)
   await act(async () => button.click())
 }
 
 const enterText = async (name: string, value: string) => {
-  const element = container.querySelector(`[name="${name}"]`) as
-    | HTMLInputElement
-    | HTMLTextAreaElement
-    | null
+  const element = container.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+    `[name="${name}"]`,
+  )
   if (element === null) throw new Error(`field not found: ${name}`)
-  const prototype = element instanceof HTMLTextAreaElement
-    ? HTMLTextAreaElement.prototype
-    : HTMLInputElement.prototype
+  const prototype =
+    element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype
   Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(element, value)
   await act(async () => element.dispatchEvent(new Event('input', { bubbles: true })))
 }
 
-const channel = (
-  channelId: string,
-  label: string,
-  deliveryAvailable = true,
-) => ({
+const channel = (channelId: string, label: string, deliveryAvailable = true) => ({
   channelId,
   label,
   active: deliveryAvailable,
   deliveryAvailable,
-  unavailableReason: deliveryAvailable ? null : 'channel_inactive' as const,
+  unavailableReason: deliveryAvailable ? null : ('channel_inactive' as const),
 })
 
 const recipient = (
@@ -80,13 +75,14 @@ const recipient = (
     enabled?: boolean
     friendshipState?: 'friend' | 'not_friend' | 'unknown'
     deliveryAvailable?: boolean
-    unavailableReason?: 'channel_inactive' | 'recipient_disabled' | 'not_friend' | 'friendship_unknown' | null
+    unavailableReason?:
+      'channel_inactive' | 'recipient_disabled' | 'not_friend' | 'friendship_unknown' | null
   } = {},
 ) => ({
   recipientId,
   displayName,
   enabled: overrides.enabled ?? true,
-  friendshipState: overrides.friendshipState ?? 'friend' as const,
+  friendshipState: overrides.friendshipState ?? ('friend' as const),
   deliveryAvailable: overrides.deliveryAvailable ?? true,
   unavailableReason: overrides.unavailableReason ?? null,
 })
@@ -118,10 +114,12 @@ describe('linked delivery target selection', () => {
   // 期待値: safe labelだけの選択肢を表示し、チャネルIDや秘密情報を本文へ表示しない。
   test('loads safe channel summaries', async () => {
     const client = clientWith({
-      listChannels: vi.fn().mockResolvedValue([
-        channel(channelOne, '通知チャネル'),
-        channel(channelTwo, '停止チャネル', false),
-      ]),
+      listChannels: vi
+        .fn()
+        .mockResolvedValue([
+          channel(channelOne, '通知チャネル'),
+          channel(channelTwo, '停止チャネル', false),
+        ]),
     })
 
     await renderForm(client)
@@ -129,9 +127,9 @@ describe('linked delivery target selection', () => {
     expect(client.listChannels).toHaveBeenCalledTimes(1)
     expect(container.textContent).toContain('通知チャネル')
     expect(container.textContent).toContain('チャネルが無効です')
-    expect((container.querySelector(
-      `input[value="${channelTwo}"]`,
-    ) as HTMLInputElement).disabled).toBe(true)
+    expect(
+      (container.querySelector(`input[value="${channelTwo}"]`) as HTMLInputElement).disabled,
+    ).toBe(true)
     expect(container.textContent).not.toContain(channelOne)
     expect(container.textContent).not.toContain('LINE_CHANNEL_ACCESS_TOKEN')
   })
@@ -163,21 +161,23 @@ describe('linked delivery target selection', () => {
     await renderForm(client)
     await clickRadio('channelId', channelOne)
 
-    expect(client.listRecipients).toHaveBeenCalledWith(channelOne, { signal: expect.any(AbortSignal) })
+    expect(client.listRecipients).toHaveBeenCalledWith(channelOne, {
+      signal: expect.any(AbortSignal) as unknown,
+    })
     expect(container.textContent).toContain('recipientが無効です')
     expect(container.textContent).toContain('友だち状態ではありません')
     expect(container.textContent).toContain('友だち状態を確認できません')
-    expect((container.querySelector(
-      `input[value="${recipientTwo}"]`,
-    ) as HTMLInputElement).disabled).toBe(true)
+    expect(
+      (container.querySelector(`input[value="${recipientTwo}"]`) as HTMLInputElement).disabled,
+    ).toBe(true)
 
     await clickRadio('recipientId', recipientOne)
     await enterText('subject', '件名')
     await enterText('body', '本文')
 
-    expect((container.querySelector(
-      'button[type="submit"]',
-    ) as HTMLButtonElement).disabled).toBe(false)
+    expect((container.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(
+      false,
+    )
     expect(container.querySelector('[name="lineUserId"]')).toBeNull()
     expect(container.querySelector('[name="target"]')).toBeNull()
   })
@@ -186,11 +186,14 @@ describe('linked delivery target selection', () => {
   // 期待値: 登録・状態確認の案内を表示し、preview操作を無効のまま維持する。
   test('blocks preview for empty and unavailable recipient lists', async () => {
     const client = clientWith({
-      listChannels: vi.fn().mockResolvedValue([
-        channel(channelOne, '空チャネル'),
-        channel(channelTwo, '状態確認チャネル'),
-      ]),
-      listRecipients: vi.fn()
+      listChannels: vi
+        .fn()
+        .mockResolvedValue([
+          channel(channelOne, '空チャネル'),
+          channel(channelTwo, '状態確認チャネル'),
+        ]),
+      listRecipients: vi
+        .fn()
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([
           recipient(recipientTwo, '受信者B', {
@@ -204,15 +207,15 @@ describe('linked delivery target selection', () => {
     await clickRadio('channelId', channelOne)
 
     expect(container.textContent).toContain('登録済みrecipientがありません')
-    expect((container.querySelector(
-      'button[type="submit"]',
-    ) as HTMLButtonElement).disabled).toBe(true)
+    expect((container.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(
+      true,
+    )
 
     await clickRadio('channelId', channelTwo)
     expect(container.textContent).toContain('配信可能なrecipientがありません')
-    expect((container.querySelector(
-      'button[type="submit"]',
-    ) as HTMLButtonElement).disabled).toBe(true)
+    expect((container.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(
+      true,
+    )
   })
 
   // テストケース: recipient取得中に配信元チャネルを切り替え、旧応答が後から完了する。
@@ -221,11 +224,11 @@ describe('linked delivery target selection', () => {
     const oldRequest = deferred<ReturnType<typeof recipient>[]>()
     const newRequest = deferred<ReturnType<typeof recipient>[]>()
     const client = clientWith({
-      listChannels: vi.fn().mockResolvedValue([
-        channel(channelOne, '旧チャネル'),
-        channel(channelTwo, '新チャネル'),
-      ]),
-      listRecipients: vi.fn()
+      listChannels: vi
+        .fn()
+        .mockResolvedValue([channel(channelOne, '旧チャネル'), channel(channelTwo, '新チャネル')]),
+      listRecipients: vi
+        .fn()
         .mockReturnValueOnce(oldRequest.promise)
         .mockReturnValueOnce(newRequest.promise),
     })
@@ -244,17 +247,22 @@ describe('linked delivery target selection', () => {
   // 期待値: safe errorと再試行buttonを表示し、成功後は選択肢へ回復する。
   test('shows loading and retries safe target errors', async () => {
     const channelRequest = deferred<ReturnType<typeof channel>[]>()
-    const listChannels = vi.fn()
+    const listChannels = vi
+      .fn()
       .mockReturnValueOnce(channelRequest.promise)
       .mockResolvedValueOnce([channel(channelOne, '復旧チャネル')])
     const client = clientWith({ listChannels })
     await renderForm(client)
 
     expect(container.textContent).toContain('チャネルを読み込んでいます')
-    await act(async () => channelRequest.reject(
-      new DeliveryApiError({ code: 'storage_unavailable', summary: '一覧を取得できません。' }),
-    ))
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('一覧を取得できません。')
+    await act(async () =>
+      channelRequest.reject(
+        new DeliveryApiError({ code: 'storage_unavailable', summary: '一覧を取得できません。' }),
+      ),
+    )
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      '一覧を取得できません。',
+    )
 
     await clickButton('チャネルを再読み込み')
     expect(listChannels).toHaveBeenCalledTimes(2)
@@ -264,11 +272,14 @@ describe('linked delivery target selection', () => {
   // テストケース: 選択チャネルのrecipient取得が失敗した後、ownerが再読み込みする。
   // 期待値: safe errorから同じチャネルの一覧取得だけを再試行し、選択可能状態へ回復する。
   test('retries recipient loading for the selected channel', async () => {
-    const listRecipients = vi.fn()
-      .mockRejectedValueOnce(new DeliveryApiError({
-        code: 'storage_unavailable',
-        summary: 'recipient一覧を取得できません。',
-      }))
+    const listRecipients = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new DeliveryApiError({
+          code: 'storage_unavailable',
+          summary: 'recipient一覧を取得できません。',
+        }),
+      )
       .mockResolvedValueOnce([recipient(recipientOne, '復旧した受信者')])
     const client = clientWith({
       listChannels: vi.fn().mockResolvedValue([channel(channelOne, '通知チャネル')]),
@@ -277,12 +288,15 @@ describe('linked delivery target selection', () => {
     await renderForm(client)
     await clickRadio('channelId', channelOne)
 
-    expect(container.querySelector('[role="alert"]')?.textContent)
-      .toContain('recipient一覧を取得できません。')
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'recipient一覧を取得できません。',
+    )
     await clickButton('recipientを再読み込み')
 
     expect(listRecipients).toHaveBeenCalledTimes(2)
-    expect(listRecipients).toHaveBeenLastCalledWith(channelOne, { signal: expect.any(AbortSignal) })
+    expect(listRecipients).toHaveBeenLastCalledWith(channelOne, {
+      signal: expect.any(AbortSignal) as unknown,
+    })
     expect(container.textContent).toContain('復旧した受信者')
   })
 
@@ -291,15 +305,18 @@ describe('linked delivery target selection', () => {
   test('discards preview and ignores its stale response after upstream selection changes', async () => {
     const previewRequest = deferred<Awaited<ReturnType<LinkedDeliveryApiClient['preview']>>>()
     const client = clientWith({
-      listChannels: vi.fn().mockResolvedValue([
-        channel(channelOne, '旧チャネル'),
-        channel(channelTwo, '新チャネル'),
-      ]),
-      listRecipients: vi.fn().mockImplementation((channelId: string) =>
-        Promise.resolve(channelId === channelOne
-          ? [recipient(recipientOne, '旧受信者')]
-          : [recipient(recipientTwo, '新受信者')]),
-      ),
+      listChannels: vi
+        .fn()
+        .mockResolvedValue([channel(channelOne, '旧チャネル'), channel(channelTwo, '新チャネル')]),
+      listRecipients: vi
+        .fn()
+        .mockImplementation((channelId: string) =>
+          Promise.resolve(
+            channelId === channelOne
+              ? [recipient(recipientOne, '旧受信者')]
+              : [recipient(recipientTwo, '新受信者')],
+          ),
+        ),
       preview: vi.fn().mockReturnValue(previewRequest.promise),
     })
     await renderForm(client)
@@ -309,17 +326,19 @@ describe('linked delivery target selection', () => {
     await enterText('body', '本文')
     await clickButton('送信内容を確認')
     await clickRadio('channelId', channelTwo)
-    await act(async () => previewRequest.resolve({
-      channelId: channelOne,
-      channelLabel: '旧チャネル',
-      recipientId: recipientOne,
-      recipientDisplayName: '旧受信者',
-      friendshipState: 'friend',
-      formattedText: '【件名】\n\n本文',
-      receiptRequested: false,
-      receiptExpiresAt: null,
-      confirmationToken: 'secret-confirmation',
-    }))
+    await act(async () =>
+      previewRequest.resolve({
+        channelId: channelOne,
+        channelLabel: '旧チャネル',
+        recipientId: recipientOne,
+        recipientDisplayName: '旧受信者',
+        friendshipState: 'friend',
+        formattedText: '【件名】\n\n本文',
+        receiptRequested: false,
+        receiptExpiresAt: null,
+        confirmationToken: 'secret-confirmation',
+      }),
+    )
 
     expect(container.textContent).not.toContain('実際に送信する内容')
     expect(container.querySelector('input[name="recipientId"]:checked')).toBeNull()
@@ -336,6 +355,8 @@ describe('linked delivery target selection', () => {
     const legends = [...container.querySelectorAll('legend')].map((item) => item.textContent)
     expect(legends).toEqual(['配信元チャネル', '配信先recipient'])
     expect(container.querySelector('[role="status"]')?.textContent).toContain('読み込んでいます')
-    expect((container.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(true)
+    expect((container.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(
+      true,
+    )
   })
 })

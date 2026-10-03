@@ -10,9 +10,11 @@ export function validatePublicHost(value: string | undefined): string {
     value === undefined ||
     value.length === 0 ||
     value.length > 253 ||
+    // HostのASCII範囲を検証するため、制御文字を含む範囲を明示する。
+    // eslint-disable-next-line no-control-regex
     !/^[\x00-\x7F]+$/.test(value) ||
     value.trim() !== value ||
-    /[:/?#*@\[\]\\]/.test(value) ||
+    /[:/?#*@[\]\\]/.test(value) ||
     value.split('.').some((label) => !hostLabel.test(label))
   ) {
     throw new Error('PUBLIC_HOST_INVALID')

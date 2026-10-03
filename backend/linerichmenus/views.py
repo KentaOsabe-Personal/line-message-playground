@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from rest_framework.response import Response
 from rest_framework.exceptions import ParseError, UnsupportedMediaType, ValidationError
+from rest_framework.response import Response
 
 from lineaccounts.admin_authorization import OwnerOperationContext
 from lineaccounts.authentication import OwnerPrincipal
@@ -24,9 +24,7 @@ from .services import (
     StateSucceeded,
     TemplateListSucceeded,
 )
-from .types import SafeResultCode
-from .types import InputFieldError
-
+from .types import InputFieldError, SafeResultCode
 
 _HTTP_STATUS = {
     SafeResultCode.INVALID_INPUT: 400,
@@ -53,9 +51,18 @@ _HTTP_STATUS = {
 
 _SAFE_VALIDATION_FIELDS = frozenset(
     {
-        "request", "templateId", "templateVersion", "channelRevision", "fields",
-        "kind", "operationId", "confirmationToken", "subjectOperationId",
-        "targetResourceId", "cursor", "limit",
+        "request",
+        "templateId",
+        "templateVersion",
+        "channelRevision",
+        "fields",
+        "kind",
+        "operationId",
+        "confirmationToken",
+        "subjectOperationId",
+        "targetResourceId",
+        "cursor",
+        "limit",
     }
 )
 
@@ -166,9 +173,7 @@ class ChannelOperationAPIView(RichMenuAPIView):
     def post(self, request, channel_id):
         serializer = OperationRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        result = self.service().start_operation(
-            _owner(request), serializer.to_command(channel_id)
-        )
+        result = self.service().start_operation(_owner(request), serializer.to_command(channel_id))
         return self.respond(result, OperationSucceeded, self.presenter().operation)
 
 
@@ -182,7 +187,5 @@ class ChannelHistoryAPIView(RichMenuAPIView):
     def get(self, request, channel_id):
         serializer = HistoryQuerySerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
-        result = self.service().list_history(
-            _owner(request), serializer.to_request(channel_id)
-        )
+        result = self.service().list_history(_owner(request), serializer.to_request(channel_id))
         return self.respond(result, HistorySucceeded, self.presenter().history)

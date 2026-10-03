@@ -33,15 +33,26 @@ export const initialAuthState: AuthState = { kind: 'initializing' }
 
 export function transitionAuth(_state: AuthState, event: AuthEvent): AuthState {
   switch (event.type) {
-    case 'restart': return initialAuthState
-    case 'login_required': return { kind: 'login_required' }
-    case 'verification_started': return { kind: 'verifying' }
-    case 'login_cancelled': return { kind: 'anonymous' }
-    case 'session_invalidated': return { kind: 'login_required' }
-    case 'failed': return { kind: 'error', code: event.code, retryable: event.retryable }
+    case 'restart':
+      return initialAuthState
+    case 'login_required':
+      return { kind: 'login_required' }
+    case 'verification_started':
+      return { kind: 'verifying' }
+    case 'login_cancelled':
+      return { kind: 'anonymous' }
+    case 'session_invalidated':
+      return { kind: 'login_required' }
+    case 'failed':
+      return { kind: 'error', code: event.code, retryable: event.retryable }
     case 'session_received':
       if (event.session.state === 'anonymous') return { kind: 'anonymous' }
-      if (event.session.state === 'authenticated') return { kind: 'authenticated', profile: event.session.profile }
-      return { kind: 'unlinking', stage: event.session.stage, retryAction: event.session.retryAction }
+      if (event.session.state === 'authenticated')
+        return { kind: 'authenticated', profile: event.session.profile }
+      return {
+        kind: 'unlinking',
+        stage: event.session.stage,
+        retryAction: event.session.retryAction,
+      }
   }
 }
