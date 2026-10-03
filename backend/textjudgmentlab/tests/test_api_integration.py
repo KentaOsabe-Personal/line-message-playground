@@ -12,7 +12,8 @@ from textjudgmentlab.types import (
     JudgmentDetails,
     JudgmentEvidence,
     JudgmentFailure,
-    LegacyJudgmentSuccess as JudgmentSuccess,
+    JudgmentSuccess,
+    JudgmentInspection,
     KnownEvidence,
     LabPrincipal,
     NeedsReviewEvidence,
@@ -65,6 +66,27 @@ def _choice(choice: str, candidates: tuple[str, ...]) -> ChoiceDetail:
     return ChoiceDetail(choice, probabilities, 1.0)
 
 
+def _inspection():
+    from textjudgmentlab.serializers import JudgmentRequestSerializer
+    from textjudgmentlab.judgment_questions import build_judgment_input
+    from textjudgmentlab.judgment_policy import normalize_judgment
+    from textjudgmentlab.jev_gateway import JevTransportSuccess
+    from .test_judgment import _valid_answers
+    serializer = JudgmentRequestSerializer(data=_request_payload())
+    serializer.is_valid(raise_exception=True)
+    request = serializer.to_request()
+    built = build_judgment_input(request, model="jev-1.13.0")
+    answers = _valid_answers()
+    for key, candidate in (("scope", "unmentioned"), ("workaround", "unclear")):
+        answers[key]["choice"] = candidate
+        answers[key]["probabilities"] = {k: float(k == candidate) for k in answers[key]["probabilities"]}
+    answers["impact"].update(score=1.75, confidence=0.88, probabilities={"0": 0.05, "1": 0.2, "2": 0.75})
+    answers["urgency"]["noul"] = 0.82
+    result = normalize_judgment(request, expected_model="jev-1.13.0",
+        transport=JevTransportSuccess({"model": "jev-1.13.0", "answers": answers}, 321.4))
+    return JudgmentInspection(built.state, built.questions, result.policy, result.normalization)
+
+
 def _success() -> JudgmentSuccess:
     return JudgmentSuccess(
         consultation_id=__import__("uuid").UUID(CONSULTATION_ID),
@@ -81,6 +103,7 @@ def _success() -> JudgmentSuccess:
             impact="high",
             urgency=KnownEvidence(True),
         ),
+        inspection=_inspection(),
         details=JudgmentDetails(
             choices={
                 "topic": _choice("missing_notification", ("missing_notification", "notification_settings", "both", "unmentioned", "unclear")),
@@ -154,7 +177,7 @@ class TextJudgmentLabApiIntegrationTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(service.calls), 1)
-        self.assertEqual(response.data["contractVersion"], 1)
+        self.assertEqual(response.data["contractVersion"], 2)
         self.assertEqual(response.data["evidence"]["topic"], {"kind": "known", "value": "missing_notification"})
         self.assertEqual(response.data["details"]["score"]["legend"]["2"], "目的を達成できない")
         self.assertEqual(response["Cache-Control"], "no-store")
@@ -197,3 +220,85 @@ class TextJudgmentLabApiIntegrationTests(SimpleTestCase):
         self.assertEqual(access.status_code, 400)
         self.assertEqual(judgment.status_code, 400)
         self.assertEqual(service.calls, [])
+
+
+@override_settings(TEXT_JUDGMENT_LAB_RUNTIME=RUNTIME)
+class V2PublicJudgmentTests(SimpleTestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(LabPrincipal(datetime(2099, 1, 1, tzinfo=UTC), "a" * 64))
+
+    def _post(self, service):
+        with patch("textjudgmentlab.views.build_judgment_service", return_value=service):
+            return self.client.post("/api/labs/text-judgment/judgments", _request_payload(),
+                format="json", HTTP_ORIGIN=RUNTIME.origin)
+
+    # テストケース: HTTP経由で判定サービスを呼び、全9質問への回答を公開する。
+    # 期待値: 公開する閲覧情報が実際の送信内容と一致し、秘密情報・外部サービスの生応答・利用量を含まない。
+    def test_http_inspection_matches_actual_gateway_payload(self):
+        from textjudgmentlab.services import JudgmentService
+        from textjudgmentlab.limits import LabLimits
+        from textjudgmentlab.jev_gateway import JevTransportSuccess
+        from .test_services import _Gateway
+        from .test_judgment import _valid_answers
+        payload = {"model": "jev-1.13.0", "answers": _valid_answers(), "usage": {"secret": "raw-canary"}}
+        gateway = _Gateway(JevTransportSuccess(payload, 25))
+        service = JudgmentService(model="jev-1.13.0", gateway=gateway, limits=LabLimits())
+        response = self._post(service)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["contractVersion"], 2)
+        self.assertEqual(response.data["inspection"]["state"], gateway.payloads[0]["state"])
+        self.assertEqual(response.data["inspection"]["questions"], gateway.payloads[0]["questions"])
+        self.assertEqual(set(response.data["inspection"]["normalization"]), set(gateway.payloads[0]["questions"]))
+        self.assertEqual(response.data["inspection"]["questionVersion"], "text-judgment-questions/2")
+        self.assertNotIn("raw-canary", response.content.decode())
+        self.assertNotIn("usage", response.content.decode())
+        self.assertEqual(response["Cache-Control"], "no-store")
+
+    # テストケース: 閲覧情報や採用判断の記録が欠けた成功応答、または256 KiBを超える公開成功応答を返す。
+    # 期待値: 内容を切り詰めたり一部だけ成功としたりせず、HTTP 502とno-storeを返す。
+    def test_incomplete_or_oversized_success_fails_whole_response(self):
+        from dataclasses import replace
+        from textjudgmentlab.types import SentChoiceQuestion
+        success = _success()
+        questions = dict(success.inspection.questions)
+        questions["scope"] = SentChoiceQuestion("あ" * (256 * 1024), questions["scope"].criteria)
+        oversized = replace(success, inspection=replace(success.inspection, questions=questions))
+        incomplete = replace(success, inspection=replace(success.inspection, normalization={}))
+        for result in (replace(success, inspection=None), incomplete, oversized):
+            with self.subTest(kind=type(result.inspection).__name__):
+                response = self._post(_Service(result))
+                self.assertEqual(response.status_code, 502)
+                self.assertEqual(response.data["error"]["code"], "judgment_failed")
+                self.assertEqual(set(response.data), {"error"})
+                self.assertEqual(response["Cache-Control"], "no-store")
+
+
+    # テストケース: 外部サービスから、9件の回答のうち1件が欠けた応答を判定サービスへ返す。
+    # 期待値: 判定結果や閲覧情報を一部だけ公開せず、HTTP 502とno-storeを返す。
+    def test_incomplete_gateway_response_is_safe_http_failure(self):
+        from textjudgmentlab.services import JudgmentService
+        from textjudgmentlab.limits import LabLimits
+        from textjudgmentlab.jev_gateway import JevTransportSuccess
+        from .test_services import _Gateway
+        from .test_judgment import _valid_answers
+        answers = _valid_answers()
+        del answers["urgency"]
+        gateway = _Gateway(JevTransportSuccess({"model": "jev-1.13.0", "answers": answers}, 25))
+        response = self._post(JudgmentService(model="jev-1.13.0", gateway=gateway, limits=LabLimits()))
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(set(response.data), {"error"})
+        self.assertEqual(response.data["error"]["code"], "judgment_failed")
+        self.assertEqual(response["Cache-Control"], "no-store")
+
+    # テストケース: 公開JSONのバイト数が上限と一致する場合と、上限を1バイト超える場合を確認する。
+    # 期待値: 上限と一致する場合は成功応答を返し、上限を超える場合は応答全体を失敗とする。
+    def test_public_size_limit_is_inclusive_and_counts_rendered_utf8_bytes(self):
+        from rest_framework.renderers import JSONRenderer
+        from textjudgmentlab.views import _success_payload
+        success = _success()
+        byte_count = len(JSONRenderer().render(_success_payload(success)))
+        for limit, expected in ((byte_count, 200), (byte_count - 1, 502)):
+            with self.subTest(limit=limit), patch("textjudgmentlab.views._MAX_SUCCESS_BYTES", limit):
+                response = self._post(_Service(success))
+                self.assertEqual(response.status_code, expected)

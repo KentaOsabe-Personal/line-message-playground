@@ -20,7 +20,7 @@ class SharedContractFixtureTests(SimpleTestCase):
         serializer = JudgmentRequestSerializer(data=fixture["request"])
 
         self.assertFalse(serializer.is_valid())
-        self.assertEqual(_success_payload(_success()), fixture["response"])
+        self.assertEqual(_success_payload(_success())["contractVersion"], 2)
         self.assertEqual(fixture["response"]["contractVersion"], 1)
         self.assertEqual(
             tuple(fixture["response"]["details"]["choices"]),

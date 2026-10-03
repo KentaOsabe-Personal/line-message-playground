@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from dataclasses import replace
 from typing import Protocol
+from time import monotonic
 
 from .jev_gateway import JevTransportResult
 from .judgment_policy import normalize_judgment
-from .judgment_questions import build_jev_request
+from .judgment_questions import build_judgment_input
 from .limits import LabLimitRejected, LabLimits
-from .types import JudgmentFailure, JudgmentRequest, JudgmentResult, LabPrincipal
+from .types import (JudgmentFailure, JudgmentRequest, JudgmentResult, LabPrincipal,
+                    JudgmentSuccess, JudgmentInspection)
 
 
 class JudgmentGateway(Protocol):
@@ -40,15 +43,29 @@ class JudgmentService:
             return JudgmentFailure("rate_limited")
 
         with permit:
-            payload = build_jev_request(request, model=self._model)
+            built = build_judgment_input(request, model=self._model)
+            payload = built.to_payload()
+            started_at = monotonic()
             try:
                 transport = await self._gateway.evaluate(payload)
+                normalized = normalize_judgment(
+                    request, expected_model=self._model, transport=transport,
+                )
+                elapsed_ms = max(0.0, (monotonic() - started_at) * 1000.0)
             except Exception:
                 return JudgmentFailure("unexpected")
             if not principal.is_valid_at(self._clock()):
                 return JudgmentFailure("access_expired")
-            return normalize_judgment(
-                request,
-                expected_model=self._model,
-                transport=transport,
+            if isinstance(normalized, JudgmentFailure):
+                return normalized
+            return JudgmentSuccess(
+                consultation_id=request.consultation_id, request_id=request.request_id,
+                revision=request.revision, model=built.model,
+                evidence=normalized.evidence,
+                details=replace(normalized.details, jev_elapsed_ms=elapsed_ms),
+                inspection=JudgmentInspection(
+                    state=built.state, questions=built.questions,
+                    question_version=built.question_version,
+                    policy=normalized.policy, normalization=normalized.normalization,
+                ),
             )

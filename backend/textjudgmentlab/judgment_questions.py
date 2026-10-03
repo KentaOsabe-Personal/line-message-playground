@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from copy import deepcopy
-from typing import Any
+from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Literal, Mapping
 
-from .types import JudgmentRequest, QuestionId, Topic
+from .types import (
+    JudgmentRequest, QuestionId, Topic, JudgmentStateSnapshot, JudgmentId, ChoiceId,
+    SentQuestion, SentChoiceQuestion, SentScoreQuestion, SentNoulQuestion,
+)
 
 
-QUESTION_IDS = (
+QUESTION_IDS: tuple[JudgmentId, ...] = (
     "topic",
     "relevance",
     "change",
@@ -24,7 +28,7 @@ _COMMON_INSTRUCTIONS = (
     "範囲・回避策・結果は現在の対象内相談についてだけ抽出し、対象外の話題の回答を混ぜない。"
 )
 
-_CHOICES: dict[str, dict[str, str]] = {
+_CHOICES: dict[ChoiceId, dict[str, str]] = {
     "topic": {
         "missing_notification": "通知が届かない相談",
         "notification_settings": "通知の設定方法を知りたい相談",
@@ -73,9 +77,8 @@ _CHOICES: dict[str, dict[str, str]] = {
 }
 
 _QUESTION_TEXTS = {
-    QuestionId.START: "通知が届かない、または通知設定について教えてください。",
-    QuestionId.TOPIC: "どちらの相談ですか？",
-    QuestionId.SCOPE: "設定したい範囲はどれですか？",
+    QuestionId.START: "どちらについて相談しますか？",
+    QuestionId.TOPIC: "どちらについて相談しますか？",
     QuestionId.WORKAROUND: "LINEを開けばメッセージを確認できますか？",
     QuestionId.URGENCY: "お急ぎですか？",
     QuestionId.RESULT: "案内を試した結果を教えてください。",
@@ -83,61 +86,82 @@ _QUESTION_TEXTS = {
 
 
 def _question_text(request: JudgmentRequest) -> str:
-    if (
-        request.context.question is QuestionId.SCOPE
-        and request.context.confirmed.topic is Topic.MISSING_NOTIFICATION
-    ):
-        return "通知が届かない範囲はどれですか？"
+    if request.context.question is QuestionId.SCOPE:
+        return ("通知が届かない範囲を教えてください。"
+                if request.context.confirmed.topic is Topic.MISSING_NOTIFICATION
+                else "通知を設定したい範囲を教えてください。")
+    if (request.context.question is QuestionId.RESULT
+            and request.context.confirmed.topic is Topic.NOTIFICATION_SETTINGS):
+        return "設定を試した結果を教えてください。"
     return _QUESTION_TEXTS[request.context.question]
 
 
-def _questions() -> dict[str, dict[str, Any]]:
-    questions: dict[str, dict[str, Any]] = {}
-    for question_id, criteria in _CHOICES.items():
-        questions[question_id] = {
-            "type": "choice",
-            "instructions": _COMMON_INSTRUCTIONS,
-            "criteria": dict(criteria),
-        }
-    questions["impact"] = {
-        "type": "score",
-        "instructions": _COMMON_INSTRUCTIONS
-        + "急ぎの要望とは分けて、目的達成への支障だけを評価する。",
-        "criteria": [
-            "支障なし",
-            "不便だが別の操作で目的を達成できる",
-            "目的を達成できない",
-        ],
-    }
-    questions["urgency"] = {
-        "type": "noul",
-        "instructions": _COMMON_INSTRUCTIONS
-        + "すぐまたは今日中など、急いで対応してほしい要望だけを評価する。",
-    }
-    return {question_id: questions[question_id] for question_id in QUESTION_IDS}
-
-
-def build_jev_request(request: JudgmentRequest, *, model: str) -> dict[str, Any]:
-    confirmed = request.context.confirmed
-    payload = {
-        "model": model,
-        "state": {
-            "currentText": request.text,
-            "questionId": request.context.question.value,
-            "questionText": _question_text(request),
-            "confirmed": {
-                "topic": confirmed.topic.value if confirmed.topic is not None else None,
-                "scope": confirmed.scope.value if confirmed.scope is not None else None,
-                "workaround": (
-                    confirmed.workaround.value
-                    if confirmed.workaround is not None
-                    else None
-                ),
-                "urgency": confirmed.urgency,
-            },
-            "impact": request.context.impact.value,
-            "recentUserTexts": list(request.context.recent_user_texts),
+def state_payload(state: JudgmentStateSnapshot) -> dict[str, object]:
+    confirmed = state.confirmed
+    return {
+        "currentText": state.current_text,
+        "questionId": state.question_id.value,
+        "questionText": state.question_text,
+        "confirmed": {
+            "topic": confirmed.topic.value if confirmed.topic is not None else None,
+            "scope": confirmed.scope.value if confirmed.scope is not None else None,
+            "workaround": confirmed.workaround.value if confirmed.workaround is not None else None,
+            "urgency": confirmed.urgency,
         },
-        "questions": _questions(),
+        "impact": state.impact.value,
+        "recentUserTexts": list(state.recent_user_texts),
     }
-    return deepcopy(payload)
+
+
+def questions_payload(questions: Mapping[JudgmentId, SentQuestion]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, question in questions.items():
+        item: dict[str, object] = {"type": question.type, "instructions": question.instructions}
+        if isinstance(question, SentChoiceQuestion):
+            item["criteria"] = dict(question.criteria)
+        elif isinstance(question, SentScoreQuestion):
+            item["criteria"] = list(question.criteria)
+        result[key] = item
+    return result
+
+
+@dataclass(frozen=True, slots=True)
+class BuiltJudgmentInput:
+    model: str
+    state: JudgmentStateSnapshot
+    questions: Mapping[JudgmentId, SentQuestion]
+    question_version: Literal["text-judgment-questions/2"] = "text-judgment-questions/2"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "questions", MappingProxyType(dict(self.questions)))
+
+    def to_payload(self) -> dict[str, object]:
+        return {"model": self.model, "state": state_payload(self.state),
+                "questions": questions_payload(self.questions)}
+
+
+def build_judgment_input(request: JudgmentRequest, *, model: str) -> BuiltJudgmentInput:
+    questions: dict[JudgmentId, SentQuestion] = {
+        key: SentChoiceQuestion(_COMMON_INSTRUCTIONS, criteria)
+        for key, criteria in _CHOICES.items()
+    }
+    questions["impact"] = SentScoreQuestion(
+        _COMMON_INSTRUCTIONS + "急ぎの要望とは分けて、目的達成への支障だけを評価する。",
+        ("支障なし", "不便だが別の操作で目的を達成できる", "目的を達成できない"),
+    )
+    questions["urgency"] = SentNoulQuestion(
+        _COMMON_INSTRUCTIONS + "すぐまたは今日中など、急いで対応してほしい要望だけを評価する。",
+    )
+    return BuiltJudgmentInput(
+        model=model,
+        state=JudgmentStateSnapshot(
+            current_text=request.text, question_id=request.context.question,
+            question_text=_question_text(request), confirmed=request.context.confirmed,
+            impact=request.context.impact, recent_user_texts=request.context.recent_user_texts,
+        ),
+        questions=questions,
+    )
+
+
+def build_jev_request(request: JudgmentRequest, *, model: str) -> dict[str, object]:
+    return build_judgment_input(request, model=model).to_payload()

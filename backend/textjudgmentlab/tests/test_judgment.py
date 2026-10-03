@@ -3,7 +3,7 @@ from uuid import UUID
 from django.test import SimpleTestCase
 
 from textjudgmentlab.jev_gateway import JevTransportSuccess
-from textjudgmentlab.judgment_questions import QUESTION_IDS, build_jev_request
+from textjudgmentlab.judgment_questions import QUESTION_IDS, build_jev_request, build_judgment_input, state_payload, questions_payload
 from textjudgmentlab.judgment_policy import normalize_judgment
 from textjudgmentlab.types import (
     ConfirmedAnswers,
@@ -11,7 +11,7 @@ from textjudgmentlab.types import (
     JudgmentContext,
     JudgmentRequest,
     JudgmentFailure,
-    LegacyJudgmentSuccess as JudgmentSuccess,
+    NormalizedJudgment as JudgmentSuccess,
     KnownEvidence,
     NeedsReviewEvidence,
     QuestionId,
@@ -72,7 +72,7 @@ class JudgmentQuestionsTests(SimpleTestCase):
             {
                 "currentText": "  特定のトークだけ通知が来ません  ",
                 "questionId": "scope",
-                "questionText": "通知が届かない範囲はどれですか？",
+                "questionText": "通知が届かない範囲を教えてください。",
                 "confirmed": {
                     "topic": "missing_notification",
                     "scope": "specific",
@@ -361,3 +361,111 @@ class JudgmentPolicyTests(SimpleTestCase):
             assert isinstance(result, JudgmentSuccess)
             self.assertEqual(result.evidence.relevance.value, "mixed")
             self.assertEqual(result.evidence.impact, "needs_review")
+
+
+class SentJudgmentInputTests(SimpleTestCase):
+    # テストケース: 2種類の相談について、開始時と各質問で判定に送る内容を組み立てる。
+    # 期待値: 質問文が画面の文言と一致し、質問の版が2になる。閲覧用の記録が実際の送信内容と一致する。
+    def test_snapshot_and_question_prompts_match_sent_payload(self):
+        from dataclasses import replace
+        prompts = {
+            (QuestionId.START, None): "どちらについて相談しますか？",
+            (QuestionId.TOPIC, None): "どちらについて相談しますか？",
+            (QuestionId.SCOPE, Topic.MISSING_NOTIFICATION): "通知が届かない範囲を教えてください。",
+            (QuestionId.SCOPE, Topic.NOTIFICATION_SETTINGS): "通知を設定したい範囲を教えてください。",
+            (QuestionId.WORKAROUND, Topic.MISSING_NOTIFICATION): "LINEを開けばメッセージを確認できますか？",
+            (QuestionId.URGENCY, Topic.MISSING_NOTIFICATION): "お急ぎですか？",
+            (QuestionId.URGENCY, Topic.NOTIFICATION_SETTINGS): "お急ぎですか？",
+            (QuestionId.RESULT, Topic.MISSING_NOTIFICATION): "案内を試した結果を教えてください。",
+            (QuestionId.RESULT, Topic.NOTIFICATION_SETTINGS): "設定を試した結果を教えてください。",
+        }
+        for (question, topic), prompt in prompts.items():
+            with self.subTest(question=question, topic=topic):
+                request = _request()
+                request = replace(request, context=replace(request.context, question=question,
+                    confirmed=replace(request.context.confirmed, topic=topic)))
+                built = build_judgment_input(request, model="jev-1.13.0")
+                payload = built.to_payload()
+                self.assertEqual(payload["state"]["questionText"], prompt)
+                self.assertEqual(built.question_version, "text-judgment-questions/2")
+                self.assertEqual(payload["state"], state_payload(built.state))
+                self.assertEqual(payload["questions"], questions_payload(built.questions))
+                self.assertEqual(tuple(payload["questions"]), QUESTION_IDS)
+                self.assertNotIn("criteria", payload["questions"]["urgency"])
+                payload["state"]["recentUserTexts"].clear()
+                payload["questions"]["scope"]["criteria"].clear()
+                self.assertEqual(len(built.state.recent_user_texts), 2)
+                self.assertEqual(len(built.questions["scope"].criteria), 5)
+
+
+class NormalizationRecordTests(SimpleTestCase):
+    # テストケース: 全9質問への回答がそろった応答を正規化する。
+    # 期待値: 判定結果を決める処理で、全9件の採用状態・比較値・使用した定数を返す。
+    def test_complete_decisions_correspond_to_evidence(self):
+        result = _normalize(_valid_answers())
+        self.assertEqual(set(result.normalization), set(QUESTION_IDS))
+        self.assertEqual(result.normalization["result"].status, "unmentioned")
+        self.assertEqual(result.normalization["impact"].status, "eligible")
+        self.assertEqual(result.normalization["urgency"].status, "eligible")
+        self.assertEqual(result.policy.choice.min_confidence, 0.70)
+        self.assertEqual(result.policy.score.high_from, 1.5)
+        self.assertEqual(result.policy.noul.urgent_from, 0.80)
+
+    # テストケース: Choiceのconfidenceと最大確率が採用閾値を下回り、最大確率の候補が複数ある応答を返す。
+    # 期待値: 満たさなかった条件をすべて記録する。丸める前の比較値と正規化した判定結果が一致する。
+    def test_collects_all_failed_choice_conditions(self):
+        answers = _valid_answers()
+        answers["scope"].update(choice="all", confidence=0.6999,
+            probabilities={"all": 0.4, "specific": 0.4, "unknown": 0.2, "unmentioned": 0, "unclear": 0})
+        result = _normalize(answers)
+        decision = result.normalization["scope"]
+        self.assertEqual(decision.status, result.evidence.scope.kind)
+        self.assertEqual(set(decision.reasons), {"confidence_below_threshold", "probability_below_threshold", "maximum_not_unique"})
+        self.assertEqual(decision.checks[0].actual, 0.6999)
+        self.assertTrue(all(not check.passed for check in decision.checks))
+
+    # テストケース: Scoreをlowとして採用する場合と、支障の根拠を採用できない場合・根拠がない場合・confidenceが閾値未満の場合を比較する。
+    # 期待値: lowは採用可能とする。採用条件を満たさない場合は、その理由をすべて記録する。
+    def test_score_low_boundary_and_all_rejection_reasons(self):
+        answers = _valid_answers()
+        answers["impact"]["score"] = 1.4999
+        result = _normalize(answers)
+        decision = result.normalization["impact"]
+        self.assertEqual(result.evidence.impact, "low")
+        self.assertEqual(decision.reasons, ("eligible",))
+        self.assertFalse(decision.checks[-1].passed)
+        self.assertEqual(decision.checks[-1].actual, 1.4999)
+        for candidate, confidence, reason in (("present", 0.69, "impact_evidence_not_adopted"),
+                ("absent", 0.9, "impact_evidence_absent"), ("unclear", 0.9, "impact_evidence_not_adopted")):
+            answers["impact_evidence"] = _choice(candidate, ("present", "absent", "unclear"), confidence)
+            answers["impact"]["confidence"] = 0.6999
+            result = _normalize(answers)
+            self.assertEqual(result.evidence.impact, "needs_review")
+            self.assertEqual(set(result.normalization["impact"].reasons), {reason, "confidence_below_threshold"})
+
+    # テストケース: Noulが2つの閾値それぞれの直前・一致・直後となる応答を返す。
+    # 期待値: 両方の閾値との比較値を記録し、急ぎ・急ぎなし・要確認の判定が正規化した判定結果と一致する。
+    def test_noul_boundaries_record_both_comparisons(self):
+        for value, status, known in ((0.1999, "eligible", False), (0.2, "eligible", False),
+                (0.2001, "needs_review", None), (0.7999, "needs_review", None),
+                (0.8, "eligible", True), (0.8001, "eligible", True)):
+            with self.subTest(value=value):
+                answers = _valid_answers()
+                answers["urgency"]["noul"] = value
+                result = _normalize(answers)
+                decision = result.normalization["urgency"]
+                self.assertEqual(decision.status, status)
+                self.assertEqual([c.actual for c in decision.checks], [value, value])
+                self.assertEqual(result.evidence.urgency,
+                    NeedsReviewEvidence() if known is None else KnownEvidence(known))
+
+    # テストケース: 採用条件を満たす回答として、unclear・unmentioned・本人が分からないと答えたunknownを返す。
+    # 期待値: unclearは要確認、unmentionedは未言及、unknownは採用可能となる。
+    def test_special_candidates_follow_condition_checks(self):
+        for candidate, status, reason in (("unclear", "needs_review", "unclear"),
+                ("unmentioned", "unmentioned", "unmentioned"), ("unknown", "eligible", "eligible")):
+            answers = _valid_answers()
+            answers["scope"] = _choice(candidate, ("all", "specific", "unknown", "unmentioned", "unclear"))
+            result = _normalize(answers)
+            self.assertEqual(result.normalization["scope"].status, status)
+            self.assertEqual(result.normalization["scope"].reasons, (reason,))

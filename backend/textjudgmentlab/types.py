@@ -177,15 +177,19 @@ class JudgmentDetails:
 
 
 @dataclass(frozen=True, slots=True)
-class LegacyJudgmentSuccess:
-    """既存の内部処理で使う正規化結果。タスク9で置き換える。v2の公開型には使用しない。"""
+class NormalizedJudgment:
+    """検証済みの判定と、同じ処理の分岐で生成した採用可否の記録。HTTP応答はサービスで組み立てる。"""
     consultation_id: UUID
     request_id: UUID
     revision: int
     model: str
     evidence: JudgmentEvidence
     details: JudgmentDetails
-    contract_version: Literal[1] = 1
+    policy: "AdoptionPolicySnapshot"
+    normalization: Mapping["JudgmentId", "NormalizationDecision"]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "normalization", MappingProxyType(dict(self.normalization)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,7 +205,7 @@ class JudgmentFailure:
     ]
 
 
-JudgmentResult = LegacyJudgmentSuccess | JudgmentFailure
+NormalizationResult = NormalizedJudgment | JudgmentFailure
 
 
 ChoiceId = Literal["topic", "relevance", "change", "scope", "workaround", "result", "impact_evidence"]
@@ -318,7 +322,7 @@ class JudgmentInspection:
 
 @dataclass(frozen=True, slots=True)
 class JudgmentSuccess:
-    """v2の成功応答の型。応答の生成とHTTPでの公開はタスク9で実装する。"""
+    """実際に送信した内容の記録と、検証済みの正規化記録を含むv2の成功応答。"""
 
     consultation_id: UUID
     request_id: UUID
@@ -331,3 +335,6 @@ class JudgmentSuccess:
 
 
 JudgmentResponse = JudgmentSuccess
+
+
+JudgmentResult = JudgmentSuccess | JudgmentFailure
