@@ -1,0 +1,76 @@
+# Agentic SDLC and Spec-Driven Development
+
+Kiro-style Spec-Driven Development on an agentic SDLC
+
+## Project Memory
+Project memory keeps persistent guidance (steering, specs notes, component docs) so Codex honors your standards each run. Treat it as the long-lived source of truth for patterns, conventions, and decisions.
+
+- Use `.kiro/steering/` for project-wide policies: architecture principles, naming schemes, security constraints, tech stack decisions, api standards, etc.
+- Use local `AGENTS.md` files for feature or library context (e.g. `src/lib/payments/AGENTS.md`): describe domain assumptions, API contracts, or testing conventions specific to that folder. Codex auto-loads these when working in the matching path.
+- Specs notes stay with each spec (under `.kiro/specs/`) to guide specification-level workflows.
+
+## Project Context
+
+### Paths
+- Steering: `.kiro/steering/`
+- Specs: `.kiro/specs/`
+- Spec sizing policy: `.kiro/steering/spec-sizing.md`
+
+### Steering vs Specification
+
+**Steering** (`.kiro/steering/`) - Guide AI with project-wide rules and context
+**Specs** (`.kiro/specs/`) - Formalize development process for individual features
+
+### Active Specifications
+- Check `.kiro/specs/` for active specifications
+- Use `$kiro-spec-status [feature-name]` to check progress
+
+## Development Guidelines
+- Generate user-facing responses in Japanese. All Markdown content written to project files (e.g., requirements.md, design.md, tasks.md, research.md, validation reports) MUST be written in the target language configured for this specification (see spec.json.language).
+
+## Minimal Workflow
+- Phase 0 (optional): `$kiro-steering`, `$kiro-steering-custom`
+- Discovery: `$kiro-discovery "idea"` — determines action path, writes brief.md + roadmap.md for multi-spec projects
+- Spec size gate: before choosing or continuing the single-spec path, apply `.kiro/steering/spec-sizing.md`; 40+ projected executable tasks defaults to roadmap decomposition, while smaller specs split only when compound boundary risk or bounded review instability shows that one review scope is not workable
+- Phase 1 (Specification):
+  - Single spec: `$kiro-spec-quick {feature} [--auto]` or step by step:
+    - `$kiro-spec-init "description"`
+    - `$kiro-spec-requirements {feature}`
+    - `$kiro-validate-gap {feature}` (optional: for existing codebase)
+    - `$kiro-spec-design {feature} [-y]`
+    - `$kiro-validate-design {feature}` (optional: design review)
+    - `$kiro-spec-tasks {feature} [-y]`
+  - Multi-spec: `$kiro-spec-batch` — creates all specs from roadmap.md in parallel by dependency wave
+- Phase 2 (Implementation): `$kiro-impl {feature} [tasks]`
+  - Without task numbers: autonomous mode (subagent per task + independent review + final validation)
+  - With task numbers: manual mode (selected tasks in main context, still reviewer-gated before completion)
+  - `$kiro-validate-impl {feature}` (standalone re-validation)
+- Progress check: `$kiro-spec-status {feature}` (use anytime)
+
+## Skills Structure
+Skills are located in `.agents/skills/kiro-*/SKILL.md`
+- Each skill is a directory with a `SKILL.md` file
+- Use `/skills` to inspect currently available skills
+- Invoke a skill directly with `$kiro-<skill-name>`
+- `kiro-review` — task-local adversarial review protocol used by reviewer subagents
+- `kiro-debug` — root-cause-first debug protocol used by debugger subagents
+- `kiro-verify-completion` — fresh-evidence gate before success or completion claims
+- Invoke a skill when the user names it or when the task clearly matches the skill's description. Do not invoke loosely related skills solely because they might be marginally relevant.
+
+## Multi-Agent
+Multi-agent is stable and enabled by default in current Codex versions. When a skill calls for delegation, use sub-agents for independent, bounded research or validation work. Prefer parallel read-heavy work; avoid parallel edits unless boundaries are explicitly non-overlapping.
+
+Skills with "Parallel Research" sections identify independent work items that benefit from sub-agent spawning.
+
+## Development Rules
+- 3-phase approval workflow: Requirements → Design → Tasks → Implementation
+- Human review required each phase; use `-y` only for intentional fast-track
+- Re-run the spec size gate before Requirements, Design, and Tasks are finalized; `--auto` and `-y` never bypass it
+- When the gate returns `SPLIT_REQUIRED`, stop before writing the phase artifact and return to `$kiro-discovery` instead of compressing or hiding work to keep one spec
+- Keep steering current and verify alignment with `$kiro-spec-status`
+- Follow the user's instructions precisely, and within that scope act autonomously: gather the necessary context and complete the requested work end-to-end in this run, asking questions only when essential information is missing or the instructions are critically ambiguous.
+
+## Steering Configuration
+- Load the core steering files `product.md`, `tech.md`, and `structure.md` when they exist
+- Load custom steering files only when their topic is relevant to the current task
+- Custom files are managed via `$kiro-steering-custom`

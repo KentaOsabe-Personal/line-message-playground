@@ -1,258 +1,67 @@
 ---
 name: kiro-impl
-description: Implement approved tasks using TDD with subagent dispatch. Runs all pending tasks autonomously or selected tasks manually.
+description: Implement approved Kiro tasks with task-level workers and independent review-unit acceptance. No task selector runs pending tasks autonomously; a selector runs only those tasks manually. Preserve TDD, bounded remediation, and the mode-specific commit policy.
 ---
 
+# Kiro実装
 
-# kiro-impl Skill
+承認済みspecの実行taskを実装し、独立reviewerの承認とfresh evidenceを得てから完了にします。
 
-<background_information>
-You operate in two modes:
-- **Autonomous mode** (no task numbers): Dispatch a fresh sub-agent per child task, then independently review the completed parent-task group once
-- **Manual mode** (task numbers provided): Execute selected child tasks directly in the main context, then review once per selected parent-task group
+## 前提と実行単位
 
-- **Success Criteria**:
-  - All tests written before implementation code
-  - Code passes all tests with no regressions
-  - Tasks marked as completed in tasks.md
-  - Implementation aligns with design and requirements
-  - Independent reviewer approves each bounded review unit and covers every child task in it before completion
-</background_information>
+- `.kiro/specs/<feature>/` の `spec.json`、`requirements.md`、`design.md`、`tasks.md` が必要。tasksの承認がなければ編集前に停止する。
+- core steering、対象サービスAGENTS、関連custom steering、Implementation Notesを読む。未関係のSkill一式は読み込まない。
+- project manifest／task runner／CI・既存integration設定／READMEからcanonicalな `TEST_COMMANDS`、`BUILD_COMMANDS`、`SMOKE_COMMANDS` を確定する。runtime smokeは実成果物が最初の使用可能状態へ達する最小の信頼できる方法。workerへは該当部分を渡す。
+- 開始時に既存差分を記録し、無関係な変更を保護する。
+- **実行task**は子を持たないmajor task `X.`、または子task `X.Y`。子を持つmajorはreview単位のheader。単独majorは自身が1つのreview単位になる。
+- 引数なしはpending taskを依存順に自律実装。major番号指定はそのpendingな子へ展開し、単独majorならそれ自体を選ぶ。子番号指定は同じ親ごとにreview単位へまとめる。
+- `_Blocked:_` は実行しない。`_Depends:_` は選択範囲外なら `[x]` が必要。同一review単位の先行taskは `READY_FOR_REVIEW` を依存充足として使えるが、checkboxはreviewまで未完了のままにする。
+- 手動選択で未完了依存が範囲外なら停止してexactな前提taskを示し、選択範囲を勝手に広げない。`(P)` は独立性の情報であり、この実装loopは競合防止のため逐次実行する。
 
-<instructions>
+## 共通の実装・レビューloop
 
-## Step 1: Gather Context
+1. 各実行taskについて受入条件、完成時の成果物、design制約、検証方法をTask Briefへまとめる。元のspec番号と `_Boundary:_` を維持する。
+2. taskごとにTDDと下記Feature Flag Protocolを実行する。RED出力、freshなtask-local検証、変更file一覧を `READY_FOR_REVIEW` recordへ保存する。
+3. 同じreview単位の全選択taskがreadyになったら、独立したfresh reviewerへ [reviewer-prompt.md](templates/reviewer-prompt.md) と全taskの本文・境界・spec参照・report・検証commandを渡す。reviewerは `kiro-review` の正本を読み、実diffから相互作用も判定する。
+4. `APPROVED` 後に [completion-gate.md](references/completion-gate.md) をreview単位へ適用する。`VERIFIED` のtaskだけ `[x]` にし、親は全子完了時だけ `[x]` にする。
+5. `REJECTED` は指摘されたtask境界を修正し、単位全体を再reviewする。初回reviewに加えて修正・再reviewは最大2回。その後はdebugへ進む。
 
-If steering/spec context is already available from conversation, skip redundant file reads.
-Otherwise, load all necessary context:
-- `.kiro/specs/{feature}/spec.json`, `requirements.md`, `design.md`, `tasks.md`
-- Core steering context: `product.md`, `tech.md`, `structure.md`
-- Additional steering files only when directly relevant to the selected task's boundary, runtime prerequisites, integrations, domain rules, security/performance constraints, or team conventions that affect implementation or validation
-- Relevant local agent skills or playbooks only when they clearly match the task's host environment or use case; read the specific artifact(s) you need, not entire directories
+controllerは実装reportの `## Status Report`／`- STATUS:`、reviewの `## Review Verdict`／`- VERDICT:` をexactに読む。値が欠落・曖昧なら構造化blockのみを1回再要求し、解釈で補って先へ進まない。
 
-### Parallel Research
+## 自律モード
 
-The following research areas are independent and can be executed in parallel:
-1. **Spec context loading**: spec.json, requirements.md, design.md, tasks.md
-2. **Steering, playbooks, & patterns**: Core steering, task-relevant extra steering, matching local agent skills/playbooks, and existing code patterns
+- [implementer-prompt.md](templates/implementer-prompt.md) でfresh workerを**1実行taskずつ**起動する。独立した所有範囲を渡す。workerはtasks.mdとcommitを操作しない。
+- 各iterationでtasks.mdを読み直す。reviewまで全taskのreport・RED・検証・変更fileを保持し、単位承認後は短い要約へ縮約できる。
+- `READY_FOR_REVIEW` は保留recordへ保存する。`NEEDS_CONTEXT` は1回追加contextで再試行し、未解消ならdebug。`BLOCKED` は直ちにskipせずdebugする。
+- review・完了gate通過後、単位の変更fileとtasks.mdだけ明示pathでstageし、1回commitする。`git add -A`／`git add .` は使わない。
+- commit形式は `feat(<feature-name>): complete task <review-unit-number> <description>`。横断的な学びはtasks.mdの `## Implementation Notes` に残す。
 
-After all parallel research completes, synthesize implementation brief before starting.
+## 手動モード
 
-### Preflight
+選択taskをmain contextで実装し、同じready record・独立review・完了gateを適用します。自動stage・commitは行いません。別途依頼された場合だけ公開します。
 
-**Validate approvals**:
-- Verify tasks are approved in spec.json (stop if not, see Safety & Fallback)
+## Feature Flag Protocol（既存規約を維持）
 
-**Discover validation commands**:
-- Inspect repository-local sources of truth in this order: project scripts/manifests (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, app manifests), task runners (`Makefile`, `justfile`), CI/workflow files, existing e2e/integration configs, then `README*`
-- Derive a canonical validation set for this repo: `TEST_COMMANDS`, `BUILD_COMMANDS`, and `SMOKE_COMMANDS`
-- Prefer commands already used by repo automation over ad hoc shell pipelines
-- For `SMOKE_COMMANDS`, choose the lightest trustworthy runtime-liveness check for the app shape (for example: root URL load, Electron launch, CLI `--help`, service health endpoint, mobile simulator/e2e harness if one already exists)
-- Keep the full command set in the parent context, and pass only the task-relevant subset to implementer and reviewer sub-agents
+behaviorを追加・変更するtaskでは、適切なOFF既定flagのscaffoldingを作り、新behaviorのtestをflag OFFで実行して受入条件に対応する失敗を記録します。flag ONで実装して成功させ、flagを除去して再検証します。OFFでもtestが通る場合はtest対象を修正します。
 
-**Establish repo baseline**:
-- Run `git status --porcelain` and note any pre-existing uncommitted changes
+refactor、設定、文書などbehaviorを変更しないtaskではこのflag protocolを省略します。behavioral TDDはRED → GREEN → REFACTOR → VERIFYを保持します。
 
-## Step 2: Select Tasks & Determine Mode
+## Debugと停止条件
 
-**Parse arguments**:
-- Extract feature name from `$1`
-- If task numbers provided in `$2` (e.g., "1.1" or "1,2,3"): **manual mode**
-- If no task numbers: **autonomous mode** (all pending tasks)
+[debugger-prompt.md](templates/debugger-prompt.md) でfresh investigatorへfailure、現在のdiff、task／spec参照、review findings、関連Notesを渡し、`kiro-debug` の正本を使います。失敗を繰り返す会話全体は渡しません。
 
-**Build task queue and review units**:
-- Read tasks.md and identify actionable child tasks (`X.Y`, such as `1.1`, `2.3`)
-- Treat major tasks (`1.`, `2.`) as review-unit headers, not implementation units
-- When the selector is a major task such as `2`, expand it to its pending child tasks and create one parent review unit
-- When selectors name child tasks, group the selected children by parent number; each group is one bounded review unit
-- With no selector, process pending children in parent-task groups, preserving dependency order
-- Skip tasks with `_Blocked:_` annotation
-- For each selected task, check `_Depends:_` annotations -- verify referenced tasks are `[x]`
-- Within the current review unit, an implemented child in `READY_FOR_REVIEW` state satisfies a later child's dependency even though its checkbox remains unchecked until parent review approval
-- In autonomous mode, order parent units so prerequisites are implemented first
-- In manual mode, if an incomplete dependency is outside the selected review unit, stop before edits and report the exact prerequisite; do not silently expand the user's selected scope
-- Use `_Boundary:_` annotations to understand the task's component scope
+- `RETRY_TASK`: 現在のworktreeを維持し、新しいimplementerへFIX_PLAN・NOTES・diffを渡して明示編集で修復する。ready後に単位全体を再reviewする。
+- `BLOCK_TASK`: `_Blocked: <ROOT_CAUSE>_` を記録し、依存関係が許す次のtaskへ進む。
+- `STOP_FOR_HUMAN`: blockを記録し、feature実行を停止する。順序・境界・分解が不正なら承認済みtask planの見直しへ返す。
+- debugはtaskごとに最大2round。解決しなければblockedにし、学びをNotesへ記録する。全taskがblockedなら停止する。
+- 破壊的reset／checkoutで復旧しない。上流specが原因なら所有するspecへ返し、下流の回避策で隠さない。上流修正後は依存specのvalidation／smokeを再確認する。
+- 予期したRED失敗は証拠。GREEN以降・review・regressionの予期しない失敗時は後続へ進まず診断する。
+- implementerを使えない場合はmain contextへfallback可能。独立reviewerが使えなければ `MANUAL_VERIFY_REQUIRED` としてcheckboxを変えず停止する。必要なfresh debuggerが使えない場合も自己承認しない。
 
-## Step 3: Execute Implementation
+## 全体検証と再開
 
-### Autonomous Mode (sub-agent dispatch)
+自律モードは全task完了後 `$kiro-validate-impl <feature>` を実行します。GOはfeature claimの共有completion gateが通った場合だけ報告します。NO-GOへの修正は具体的な指摘に限定し最大3round、未解消や `MANUAL_VERIFY_REQUIRED` なら停止します。手動モードでは全体検証を案内し、自動実行しません。
 
-**Iteration discipline**: Process exactly ONE child task (for example `1.1`) per implementer iteration. Do not batch child tasks into one implementer dispatch. Within a parent review unit, follow: implement child → verify task-local readiness → retain report → re-read tasks.md → next child. After every selected child in the unit is `READY_FOR_REVIEW`, run one parent-unit review, one completion gate, and one selective commit.
+中断後は未完了単位のdiffを保護し、task-local検証からready状態を再構成します。実装済みtaskを盲目的にやり直さず、全選択taskがreadyならreviewから再開します。
 
-**Context management**: At the start of each implementation iteration, re-read `tasks.md` to determine the next actionable child. Do not rely on accumulated memory for task selection. Until the parent review finishes, retain each child's exact status report, RED evidence, validation results, and changed-file list; the parent reviewer needs them. After approval and commit, retain only a one-line parent summary.
-
-If multi-agent capability is available, for each child task (one at a time):
-
-**a) Dispatch implementer**:
-- Read `templates/implementer-prompt.md` from this skill's directory
-- Construct a prompt by combining the template with task-specific context:
-  - Task description and boundary scope
-  - Paths to spec files: requirements.md, design.md, tasks.md
-  - Exact requirement and design section numbers this task must satisfy (using source numbering, NOT invented `REQ-*` aliases)
-  - Task-relevant steering context and parent-discovered validation commands (tests/build/smoke as relevant)
-  - Whether the task is behavioral (Feature Flag Protocol) or non-behavioral
-  - **Previous learnings**: Include any `## Implementation Notes` entries from tasks.md that are relevant to this task's boundary or dependencies (e.g., "better-sqlite3 requires separate rebuild for Electron"). This prevents the same mistakes from recurring.
-- The implementer sub-agent will read the spec files and build its own Task Brief (acceptance criteria, completion definition, design constraints, verification method) before implementation
-- Spawn a fresh sub-agent with this prompt
-
-**b) Handle implementer status**:
-- Parse implementer status only from the exact `## Status Report` block and `- STATUS:` field.
-- If `STATUS` is missing, ambiguous, or replaced with prose, re-dispatch the implementer once requesting the exact structured status block only. Do NOT proceed to review without a parseable `READY_FOR_REVIEW | BLOCKED | NEEDS_CONTEXT` value.
-- **READY_FOR_REVIEW** → record the child as implemented-pending-parent-review; do not mark, review, or commit it yet; proceed to the next child in the review unit
-- **BLOCKED** → dispatch debug subagent (see section below); do NOT immediately skip
-- **NEEDS_CONTEXT** → re-dispatch once with the requested additional context; if still unresolved → dispatch debug subagent
-
-**c) Dispatch one reviewer after the review unit is implemented**:
-- Read `templates/reviewer-prompt.md` from this skill's directory
-- Construct a review prompt with:
-  - The parent task header and every selected child task's exact text, dependency, `_Boundary:_`, and relevant spec section numbers
-  - Paths to spec files (requirements.md, design.md) so the reviewer can read them directly
-  - Every child implementer's exact status report (for reference only — reviewer must verify independently)
-- The reviewer must apply the `kiro-review` protocol to this bounded parent-task review.
-- Preserve each child's task text, spec refs, boundary scope, validation commands, RED evidence, implementer report, and changed-file list. The actual aggregate `git diff` remains the primary source of truth.
-- Require findings to identify the affected child task ID. Also review interactions among children in the same parent unit.
-- The reviewer sub-agent will run `git diff` itself to read the actual code changes and verify against the spec
-- Spawn a fresh sub-agent with this prompt
-
-**d) Handle reviewer verdict**:
-- Parse reviewer verdict only from the exact `## Review Verdict` block and `- VERDICT:` field.
-- If `VERDICT` is missing, ambiguous, or replaced with prose, re-dispatch the reviewer once requesting the exact structured verdict only. Do not mark the review unit complete, commit, or continue to the next parent unit without a parseable `APPROVED | REJECTED` value.
-- **APPROVED** → apply `kiro-verify-completion` to the entire review unit using fresh aggregate and task-local evidence; then mark every approved child `[x]`; mark the parent `[x]` only when all of its children are complete; perform one selective parent-unit commit
-- **REJECTED (initial review or after first remediation)** → re-dispatch implementers only for child IDs named by concrete findings, then re-run the entire parent-unit review so interactions are checked again. If a finding cannot be assigned safely, remediate at the parent-unit boundary without inventing ownership
-- **REJECTED (after second remediation)** → dispatch a debug subagent with the parent review findings and affected child boundaries
-
-**e) Commit** (parent-only, selective staging):
-- Stage only files actually changed for the approved review unit, plus tasks.md
-- **NEVER** use `git add -A` or `git add .`
-- Use `git add <file1> <file2> ...` with explicit file paths
-- Commit message format: `feat(<feature-name>): complete task <parent-number> <parent description>`
-
-**f) Record learnings**:
-- If the review unit revealed cross-cutting insights, append a one-line note to the `## Implementation Notes` section at the bottom of tasks.md
-
-**g) Debug subagent** (triggered by BLOCKED, NEEDS_CONTEXT unresolved, or REJECTED after 2 remediation rounds):
-
-The debug subagent runs in a **fresh context** — it receives only the error information, not the failed implementation history. This avoids the context pollution that causes infinite retry loops.
-
-- Read `templates/debugger-prompt.md` from this skill's directory
-- Construct a debug prompt with:
-  - The error description / blocker reason / reviewer rejection findings
-  - `git diff` of the current uncommitted changes
-  - The task description and relevant spec section numbers
-  - Paths to spec files so the debugger can read them
-- The debugger must apply the `kiro-debug` protocol to this failure investigation.
-- Preserve rich failure context: error output, reviewer findings, current `git diff`, task/spec refs, and any relevant Implementation Notes.
-- When available, the debugger should inspect runtime/config state and use web or official documentation research to validate root-cause hypotheses before proposing a fix plan.
-- Spawn a fresh sub-agent with this prompt
-
-**Handle debug report**:
-- Parse `NEXT_ACTION` from the debug report's exact structured field.
-- If `NEXT_ACTION: STOP_FOR_HUMAN` → append `_Blocked: <ROOT_CAUSE>_` to tasks.md, stop the feature run, and report that human review is required before continuing
-- If `NEXT_ACTION: BLOCK_TASK` → append `_Blocked: <ROOT_CAUSE>_` to tasks.md, skip to next task
-- If `NEXT_ACTION: RETRY_TASK` → preserve the current worktree; do NOT reset or discard unrelated changes. Spawn a **new** implementer sub-agent with the debug report's `FIX_PLAN`, `NOTES`, and the current `git diff`, and require it to repair the task with explicit edits only
-  - If the new implementer succeeds (`READY_FOR_REVIEW`) → return it to the parent review unit and re-run the aggregate reviewer → normal flow
-  - If the new implementer also fails → repeat debug cycle (max 2 debug rounds total). After 2 failed debug rounds → append `_Blocked: debug attempted twice, still failing — <ROOT_CAUSE>_` to tasks.md, skip
-- **Max 2 debug rounds per task**. Each round: fresh debug subagent → fresh implementer. If still failing after 2 rounds, the task is blocked.
-- Record debug findings in `## Implementation Notes` (this helps subsequent tasks avoid the same issue)
-
-**`(P)` markers**: Tasks marked `(P)` in tasks.md indicate they have no inter-dependencies and could theoretically run in parallel. However, kiro-impl implements them sequentially within the parent review unit to avoid git conflicts. The `(P)` marker is informational, not an execution directive.
-
-**Fallback**: If implementer sub-agents are unavailable, execute child tasks in the main context using the manual TDD procedure. Independent review remains mandatory: if no fresh reviewer can be dispatched, stop before completion, leave checkboxes unchanged, and report `MANUAL_VERIFY_REQUIRED` rather than self-approving.
-
-### Manual Mode (main context)
-
-For each selected child task:
-
-**1. Build Task Brief**:
-Before writing any code, read the relevant sections of requirements.md and design.md for this task and clarify:
-- What observable behaviors must be true when done (acceptance criteria)
-- What files/functions/tests must exist (completion definition)
-- What technical decisions to follow from design.md (design constraints)
-- How to confirm the task works (verification method)
-
-**2. Execute TDD cycle** (Kent Beck's RED → GREEN → REFACTOR):
-- **RED**: Write test for the next small piece of functionality based on the acceptance criteria. Test should fail.
-- **GREEN**: Implement simplest solution to make test pass, following the design constraints.
-- **REFACTOR**: Improve code structure, remove duplication. All tests must still pass.
-- **VERIFY**: All tests pass (new and existing), no regressions. Confirm verification method passes.
-- **QUEUE FOR REVIEW**: Create a controller-owned `READY_FOR_REVIEW` record containing the child ID, Task Brief, RED output, fresh task-local verification, and changed files. Do not update its checkbox yet. This record satisfies later dependencies inside the same review unit.
-
-After every selected child in the same parent-task group is implemented:
-
-- **REVIEW**: Apply `kiro-review` once to the bounded parent review unit using a fresh independent reviewer. Require one parseable `APPROVED | REJECTED` verdict and child IDs on findings. If no fresh reviewer is available, return `MANUAL_VERIFY_REQUIRED`; do not self-approve or mark tasks.
-- **REMEDIATE**: On rejection, repair only the named child boundaries, then re-run the whole parent-unit review. Preserve the bounded review/debug limits.
-- **DEBUG**: If a manual child is blocked, still needs context after one retry, or the parent unit exhausts review remediation, use the same fresh debugger protocol and structured `NEXT_ACTION` handling defined above. If a fresh debugger is unavailable, stop with checkboxes unchanged and report the blocker.
-- **MARK COMPLETE**: Only after `APPROVED`, apply `kiro-verify-completion` with fresh evidence for the entire unit, mark approved children `[x]`, and mark the parent `[x]` only when all children are complete.
-- **NO AUTOMATIC COMMIT**: Preserve manual mode behavior: do not stage or commit unless the user separately requests it. The parent-unit selective commit procedure applies to autonomous mode only.
-
-## Step 4: Final Validation
-
-**Autonomous mode**:
-- After all tasks complete, run `$kiro-validate-impl $1` as a GO/NO-GO gate
-- If validation returns GO → before reporting feature success, apply `kiro-verify-completion` to the feature-level claim using the validation result and fresh supporting evidence
-- If validation returns NO-GO:
-  - Fix only concrete findings from the validation report
-  - Cap remediation at 3 rounds; if still NO-GO, stop and report remaining findings
-- If validation returns MANUAL_VERIFY_REQUIRED → stop and report the missing verification step
-
-**Manual mode**:
-- Suggest running `$kiro-validate-impl $1` but do not auto-execute
-
-## Feature Flag Protocol
-
-For tasks that add or change behavior, enforce RED → GREEN with a feature flag:
-
-1. **Add flag** (OFF by default): Introduce only the toggle scaffolding appropriate to the codebase (env var, config constant, boolean, conditional). This setup is allowed before the RED test; do not add the new behavior yet
-2. **RED -- flag OFF**: Write tests for the new behavior. Run tests → must FAIL. If tests pass with flag OFF, the tests are not testing the right thing. Rewrite.
-3. **GREEN -- flag ON + implement**: Enable the flag, write implementation. Run tests → must PASS.
-4. **Remove flag**: Make the code unconditional. Run tests → must still PASS.
-
-**Skip this protocol for**: refactoring, configuration, documentation, or tasks with no behavioral change.
-
-</instructions>
-
-## Critical Constraints
-- **Strict Handoff Parsing**: Never infer implementer `STATUS` or reviewer `VERDICT` from surrounding prose; only the exact structured fields count
-- **No Destructive Reset**: Never use `git checkout .`, `git reset --hard`, or similar destructive rollback inside the implementation loop
-- **Selective Staging**: NEVER use `git add -A` or `git add .`; always stage explicit file paths
-- **Bounded Review Rounds**: Run one initial parent review, then at most 2 remediation-and-re-review rounds. A rejection after the second remediation triggers debug
-- **Bounded Debug**: Max 2 debug rounds per task (debug + re-implementation per round); if still failing → BLOCKED
-- **Bounded Remediation**: Cap final-validation remediation at 3 rounds
-
-## Output Description
-
-**Autonomous mode**: For each parent review unit, report child task IDs and implementer statuses, aggregate reviewer verdict, files changed, and commit hash. After all tasks: final validation result.
-
-**Manual mode**: Child tasks executed with test results, parent-unit reviewer verdicts, and completed/remaining status.
-
-**Format**: Concise, in the language specified in spec.json.
-
-## Safety & Fallback
-
-### Error Scenarios
-
-**Tasks Not Approved or Missing Spec Files**:
-- **Stop Execution**: All spec files must exist and tasks must be approved
-- **Suggested Action**: "Complete previous phases: `$kiro-spec-requirements`, `$kiro-spec-design`, `$kiro-spec-tasks`"
-
-**Test Failures**:
-- Expected failures in the RED phase are evidence, not blockers
-- If GREEN, REFACTOR, VERIFY, reviewer, or regression tests fail unexpectedly, stop advancing to later children or review units; diagnose and fix within the current child boundary, then re-run before continuing
-
-**All Tasks Blocked**:
-- Stop and report all blocked tasks with reasons; human review needed
-
-**Spec Conflicts with Reality**:
-- Block the task with `_Blocked: <reason>_` -- do not silently work around it
-
-**Upstream Ownership Detected**:
-- If review, debug, or validation shows that the root cause belongs to an upstream, foundation, shared-platform, or dependency spec, do not patch around it inside the downstream feature
-- Route the fix back to the owning upstream spec, keep the downstream task blocked until that contract is repaired, and re-run validation/smoke for dependent specs after the upstream fix lands
-
-**Task Plan Invalidated During Implementation**:
-- If debug returns `NEXT_ACTION: STOP_FOR_HUMAN` because of task ordering, boundary, or decomposition problems, stop and return for human review of `tasks.md` or the approved plan instead of forcing a code workaround
-
-**Session Interrupted**:
-- Completed parent review units are checked; autonomous units are also committed, while manual-mode changes remain uncommitted unless the user requested a commit
-- For an unchecked unit with existing changes, inspect the diff and re-run each child's task-local validation to reconstruct `implemented-pending-parent-review`; do not blindly re-implement or discard it
-- Resume remaining children, or dispatch the parent reviewer immediately when all selected children have fresh readiness evidence
+結果はspecの言語で、対象ID、実装status、review verdict、検証、残task、自律モードのcommitを報告します。

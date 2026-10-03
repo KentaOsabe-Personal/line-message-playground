@@ -1,112 +1,36 @@
 ---
 name: create-pr
-description: Commit scoped local changes, push this repository's develop branch, and create or update a GitHub pull request. Use when the user asks to commit, push, publish, open a PR, create a pull request, or perform the repeated commit, push, and PR flow for `line-message-playground` after implementation or documentation work.
+description: Publish completed line-message-playground changes when the user requests commit, push, or a GitHub pull request. Preserves this repository’s develop-to-main flow, CLI-only authentication, account checks, and Japanese PR conventions; stacked PRs use gh-stack.
 ---
 
-# create-pr
+# 変更の公開
 
-## Overview
+`KentaOsabe-Personal/line-message-playground` の通常フローは `develop` → `main`、PRはreadyです。draftは依頼された場合または明確に未完了の場合。PR・要約は日本語（既存の英語titleやユーザー指定を優先）にします。
 
-Use this skill to publish completed local work from `line-message-playground` with the project's usual discipline: inspect scope, commit only intended files, push `develop`, and create a ready PR to `main` unless the user explicitly asks otherwise.
+## GitHub認証
 
-Read `references/publish-history.md` when selecting titles, branch/base defaults, or PR body style from past repository practice.
+- `origin` が対象GitHub repositoryのcheckoutであることと、`gh` の利用可能性を確認する。
+- 認証はローカルGitHub CLIを正本とし、失敗時にconnectorやbrowserへ迂回しない。
+- networkアクセス可能な実行環境で `gh auth status --active --hostname github.com` と `gh api user --jq .login` を確認する。必要ならsandbox escalationを使う。sandbox内の到達不能をtoken無効の証拠にしない。
+- 既定accountは `KentaOsabe-Personal`。別accountでの公開はユーザーに確認する。
+- 両確認が認証固有の理由で失敗した場合だけ `gh auth login -h github.com -p ssh --web` で復旧し、完了後に両方を再確認する。
+- CLIが成功しappの表示だけが未接続なら表示の不整合として再起動を案内し、別認証経路を試さない。
 
-## Defaults
+## 公開前の安全確認
 
-- Repository: `KentaOsabe-Personal/line-message-playground`.
-- Normal branch flow: `develop` -> `main`.
-- PR state: ready for review by default. Create a draft only when the user asks for draft or the work is explicitly incomplete.
-- Language: use Japanese for user-facing summaries and PR prose unless an existing title or user request is English.
-- PR body headings: use Japanese headings by default, for example `## 概要`, `## 検証`, and `## 補足`.
-- Scope safety: never stage unrelated user changes silently.
+root AGENTSのGit・秘密情報規則を適用する。status、差分、既存stagingを確認し、公開範囲が不明な変更は確認する。事前stagingは必須ではない。
 
-## Prerequisites
+- `.env`／`.env.*`、秘密鍵・証明書、credential／service-account／secret JSON、ADC、`.config/gcloud/` 配下は要確認対象。
+- `private_key`、`client_email`、`client_secret`、`api_key`、`access_token`、`refresh_token`、`password`、秘密鍵header、`GOOGLE_APPLICATION_CREDENTIALS` を含む差分は内容を確認し、実秘密値を表示しない。
+- 疑わしいファイルや差分があれば停止して確認する。既にstage済みでもcommitしない。sanitized fixtureはユーザーが安全と明示した場合だけ進める。
+- credential fileや秘密をrepositoryへコピーしない。既存環境にないGCP／Compose構成を仮定しない。
 
-- Require a local git checkout with `origin` pointing at the GitHub repository.
-- Require GitHub CLI `gh` to be installed and authenticated before creating or updating a PR.
-- Treat the local GitHub CLI as the authoritative GitHub authentication path for this repository. Do not fall back to the GitHub connector, an in-app browser, or another browser when CLI authentication fails.
-- Run GitHub CLI authentication checks with external network access, requesting escalation when required. A sandboxed `gh auth status` can report `The token in default is invalid` merely because it cannot reach GitHub; never treat that result as evidence that stored credentials are invalid.
-- Preflight with both `gh auth status --active --hostname github.com` and `gh api user --jq .login` outside the network-restricted sandbox. If a prior sandboxed check failed, discard that result and repeat these checks with network access before taking any recovery action.
-- Expect `KentaOsabe-Personal` from `gh api user --jq .login` for the default repository workflow; stop and ask before publishing as another account.
-- Run `gh auth login -h github.com -p ssh --web` only when both network-enabled preflight checks fail for an authentication-specific reason. After the user completes the device flow, rerun both checks before continuing.
-- If the Codex app still displays GitHub CLI as unavailable while the exact preflight succeeds, treat the app indicator as stale and ask the user to restart the app. Do not attempt alternate GitHub authorization routes.
-- Do not require files to be staged before this skill runs. Treat staging as part of this workflow after diff review.
-- If files are already staged, inspect `git diff --staged` and verify that staged content still belongs to the requested publish scope.
-- For BigQuery or GCP work, assume credentials live outside the repository by default:
-  - Prefer ADC from `~/.config/gcloud/application_default_credentials.json`.
-  - Accept `GOOGLE_APPLICATION_CREDENTIALS` only as a path to a credentials file outside the repository unless the user explicitly confirms a safe test fixture.
-  - In Docker Compose, `~/.config/gcloud` is mounted read-only into the backend container; do not copy those credential files into the repo.
+## 公開手順
 
-## Credential Safety
-
-Before staging or committing, scan status and diffs for credential risk. Stop and ask the user before proceeding if any suspicious file or diff appears.
-
-Treat these as high-risk by default:
-
-- `.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`
-- `*service-account*.json`, `*credentials*.json`, `*secret*.json`
-- `application_default_credentials.json`
-- files under `.config/gcloud/`
-- diffs containing `private_key`, `client_email`, `client_secret`, `api_key`, `access_token`, `refresh_token`, `password`, `BEGIN PRIVATE KEY`, or `GOOGLE_APPLICATION_CREDENTIALS`
-
-If a high-risk file is already staged, do not commit. Ask whether to unstage it or whether it is an intentional sanitized fixture. Only proceed when the user explicitly confirms it is safe.
-
-## Workflow
-
-1. Inspect repository state.
-   - Run `git status --short` and `git branch --show-current`.
-   - Read the relevant diff before staging: `git diff` and, when staged content exists, `git diff --staged`.
-   - If the worktree contains unrelated or unclear changes, ask which paths belong to this publish flow.
-   - Apply the credential safety checks before deciding what to stage.
-
-2. Confirm branch and base.
-   - Prefer publishing from `develop` to `main`.
-   - If already on `develop`, stay there.
-   - If on another feature branch, publish that branch only when the user requested it or the branch name clearly belongs to the current work.
-   - If on `main`, do not commit directly there; create or switch to an appropriate working branch.
-
-3. Validate before commit when feasible.
-   - Use the checks that match the changed area.
-   - For backend changes, prefer project test commands found in repository docs, specs, package scripts, or prior task notes.
-   - For frontend changes, run the relevant package test, lint, typecheck, or build command.
-   - If validation cannot run because dependencies or services are unavailable, record the exact blocker in the final summary and PR body.
-
-4. Stage intentionally.
-   - Use explicit file paths when unrelated changes exist.
-   - Use `git add -A` only when all current changes are confirmed in scope.
-   - Re-run `git status --short` after staging.
-
-5. Commit with a concise message.
-   - Use a short Japanese summary or a project-style task message.
-   - Prefer formats seen in the repository history, such as `<feature> taskN done`, `<feature> taskN~M done`, `Steering資料更新`, or a terse fix summary.
-   - Include a conventional prefix only when it adds clarity or matches the changed area, for example `feat(...)`, `fix(...)`, or `refactor(...)`.
-
-6. Push.
-   - Push the current branch to origin with upstream tracking when needed.
-   - For the usual flow, `git push origin develop` is acceptable after confirming the current branch is `develop`.
-
-7. Create or update the PR.
-   - First check for an existing open PR for the current branch: `gh pr list --head <branch> --state open`.
-   - If a PR exists, update it only if the user asked or the title/body is clearly stale.
-   - If no PR exists, create one targeting `main`.
-   - Use a title that summarizes the whole published diff. `[codex] ...` is acceptable but not mandatory; follow recent repository history and user wording.
-   - Write a PR body with Japanese headings by default:
-     - `## 概要`
-     - `## 検証`
-     - `## 補足` only for blockers, skipped checks, intentional exclusions, or follow-up context
-   - In the validation section, do not list only raw command names. Pair each command with the purpose or result it verifies, so reviewers can understand why it matters.
-     - Good: ``- `jq empty lsp.json`: repo-level LSP 設定が valid JSON であることを確認``
-     - Good: ``- `docker compose config --quiet`: Compose 設定が構文上有効で、サービス定義として解釈できることを確認``
-     - Bad: `- jq empty lsp.json`
-
-8. Report the result.
-   - Include branch, commit hash, PR URL, validation run, and any uncommitted files intentionally left untouched.
-   - Emit Codex git directives only for actions that actually succeeded.
-
-## Safety Rules
-
-- Do not use `git reset --hard`, `git checkout --`, force push, or delete branches unless the user explicitly asks.
-- Do not include `.env`, secrets, credential files, local runtime artifacts, editor files, or unrelated generated files.
-- Do not claim tests passed without fresh command output from the current tree.
-- Do not create a PR when commit or push failed.
-- Do not merge the PR unless the user explicitly asks.
+1. `git status --short`、current branch、unstaged／staged diffから対象を確定する。`develop`なら維持する。別feature branchは依頼対象と分かる場合に使用し、`main`へ直接commitしない。
+2. 変更領域に対応する既存検証を行う。実行不能ならblockerを記録し、未実施を成功扱いしない。
+3. 対象pathをstageする。`git add -A` は全変更が範囲内と確認できた場合だけ許容し、stage後のstatusを再確認する。Kiro自律実装内のより厳しいselective staging規則を緩めない。
+4. 実差分を表す簡潔な日本語summaryまたはproject-style task messageでcommitする。通常branchをupstream付きでpushする。commit／push失敗時にPRを作らない。
+5. `gh pr list --head <branch> --state open` で既存PRを調べる。更新は依頼または明確なtitle／bodyの陳腐化がある場合。新規は通常 `main` をbaseとする。stack操作は `$gh-stack` に従う。
+6. PR本文は `## 概要`、`## 検証`、必要時だけ `## 補足`。検証commandには目的・結果を添え、未実施・blockerを明示する。titleは公開する差分全体を表す。
+7. branch、commit、PR URL、検証結果、意図して残した変更を報告する。mergeは明示された場合だけ行う。

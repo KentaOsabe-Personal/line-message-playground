@@ -1,2 +1,3 @@
-name: kiro-spec-batch
-description: Create complete specs for all features in roadmap.md using parallel dispatch by dependency wave
+interface:
+  display_name: "Spec Batch"
+  short_description: "Generate roadmap specs by dependency wave"
