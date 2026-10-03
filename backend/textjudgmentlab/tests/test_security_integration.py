@@ -180,7 +180,7 @@ class LabSecurityIntegrationTests(SimpleTestCase):
         gateway = _Gateway(VerifiedLabIdentity(FUTURE, "a" * 64))
         judgment_url = "/api/labs/text-judgment/judgments"
         payload = {
-            "contractVersion": 1,
+            "contractVersion": 2,
             "consultationId": "123e4567-e89b-42d3-a456-426614174000",
             "requestId": "123e4567-e89b-42d3-a456-426614174001",
             "revision": 0,

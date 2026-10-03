@@ -26,7 +26,7 @@ from .runtime import LabRuntimeConfigured
 from .serializers import JudgmentRequestSerializer
 from .types import (
     JudgmentFailure,
-    JudgmentSuccess,
+    LegacyJudgmentSuccess as JudgmentSuccess,
     KnownEvidence,
 )
 

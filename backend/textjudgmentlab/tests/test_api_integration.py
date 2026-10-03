@@ -12,7 +12,7 @@ from textjudgmentlab.types import (
     JudgmentDetails,
     JudgmentEvidence,
     JudgmentFailure,
-    JudgmentSuccess,
+    LegacyJudgmentSuccess as JudgmentSuccess,
     KnownEvidence,
     LabPrincipal,
     NeedsReviewEvidence,
@@ -40,7 +40,7 @@ REQUEST_ID = "abcdefab-cdef-4abc-8def-abcdefabcdef"
 
 def _request_payload() -> dict[str, object]:
     return {
-        "contractVersion": 1,
+        "contractVersion": 2,
         "consultationId": CONSULTATION_ID,
         "requestId": REQUEST_ID,
         "revision": 2,

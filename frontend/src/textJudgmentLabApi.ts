@@ -99,8 +99,12 @@ export function createLabHttpClient(fetcher: Fetcher = fetch): LabHttpClient {
     checkAccess: (idToken: string, signal?: AbortSignal) => post(
       '/api/labs/text-judgment/access', idToken, {}, 'access', parseLabAccessResponse, signal,
     ),
-    judge: (idToken: string, request: JudgmentRequest, signal?: AbortSignal) => post(
-      '/api/labs/text-judgment/judgments', idToken, request, 'judgment', parseJudgmentResponse, signal,
-    ),
+    judge: (idToken: string, request: JudgmentRequest, signal?: AbortSignal) => {
+      const sentRequest = structuredClone(request)
+      return post(
+        '/api/labs/text-judgment/judgments', idToken, sentRequest, 'judgment',
+        value => parseJudgmentResponse(value, sentRequest), signal,
+      )
+    },
   })
 }

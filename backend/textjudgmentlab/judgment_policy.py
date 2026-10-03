@@ -14,7 +14,7 @@ from .types import (
     JudgmentFailure,
     JudgmentRequest,
     JudgmentResult,
-    JudgmentSuccess,
+    LegacyJudgmentSuccess as JudgmentSuccess,
     KnownEvidence,
     NeedsReviewEvidence,
     NoulDetail,

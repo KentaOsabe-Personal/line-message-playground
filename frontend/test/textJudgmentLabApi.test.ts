@@ -5,7 +5,7 @@ import type { JudgmentRequest } from '../src/textJudgmentLabTypes'
 
 
 const request: JudgmentRequest = {
-  contractVersion: 1,
+  contractVersion: 2,
   consultationId: '12345678-1234-4234-8234-123456789012',
   requestId: '22345678-1234-4234-8234-123456789012',
   revision: 0,
@@ -81,4 +81,35 @@ describe('text judgment lab HTTP client', () => {
     const client = createLabHttpClient(fetcher)
     await expect(client.judge('id-token', request)).rejects.toMatchObject({ code: 'judgment_failed' })
   })
+})
+
+// テストケース: 専用HTTPクライアントに、完全なv2応答と送信要求に一致しない応答を返す。
+// 期待値: 完全な成功応答だけを返し、送信要求との不一致はprotocol_errorとして扱う。
+test('passes the sent request to the v2 success parser', async () => {
+  const { v2Response } = await import('./textJudgmentLabV2Fixture')
+  const success = v2Response(request)
+  const mismatch = structuredClone(success)
+  Object.assign(mismatch.inspection.state, { currentText: '別の入力' })
+  const fetcher = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(success)))
+    .mockResolvedValueOnce(new Response(JSON.stringify(mismatch)))
+  const client = createLabHttpClient(fetcher)
+  await expect(client.judge('id-token', request)).resolves.toEqual(success)
+  await expect(client.judge('id-token', request)).rejects.toMatchObject({ code: 'protocol_error' })
+})
+
+// テストケース: 送信開始後、呼び出し元で要求の本文と文脈を変更する。
+// 期待値: 送信時に保存した要求の内容と応答を照合する。
+test('retains the sent request when the caller mutates its input', async () => {
+  const { v2Response } = await import('./textJudgmentLabV2Fixture')
+  const input = structuredClone(request)
+  const success = v2Response(input)
+  let finish!: (response: Response) => void
+  const fetcher = vi.fn((_url: RequestInfo | URL, _init?: RequestInit) => new Promise<Response>(resolve => { finish = resolve }))
+  const pending = createLabHttpClient(fetcher).judge('id-token', input)
+  input.text = '変更した入力'
+  input.context.confirmed.scope = 'all'
+  finish(new Response(JSON.stringify(success)))
+  await expect(pending).resolves.toEqual(success)
+  expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual(request)
 })

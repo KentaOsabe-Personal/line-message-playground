@@ -11,7 +11,7 @@ from textjudgmentlab.types import (
     JudgmentContext,
     JudgmentRequest,
     JudgmentFailure,
-    JudgmentSuccess,
+    LegacyJudgmentSuccess as JudgmentSuccess,
     KnownEvidence,
     NeedsReviewEvidence,
     QuestionId,
@@ -22,7 +22,7 @@ from textjudgmentlab.types import (
 
 def _request() -> JudgmentRequest:
     return JudgmentRequest(
-        contract_version=1,
+        contract_version=2,
         consultation_id=UUID("11111111-1111-4111-8111-111111111111"),
         request_id=UUID("22222222-2222-4222-8222-222222222222"),
         revision=4,

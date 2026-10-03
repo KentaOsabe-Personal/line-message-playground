@@ -1,3 +1,4 @@
+import { inspectionFor, v2Request } from './textJudgmentLabV2Fixture'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
@@ -42,11 +43,12 @@ function responseFor(
     confidence: 1,
   })
   return {
-    contractVersion: 1,
+    contractVersion: 2,
     consultationId: request.consultationId,
     requestId: request.requestId,
     revision: request.revision,
     model: 'jev-1.13.0',
+    inspection: inspectionFor(request),
     evidence: resolvedEvidence,
     details: {
       choices: {

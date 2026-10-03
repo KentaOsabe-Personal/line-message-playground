@@ -19,7 +19,7 @@ class LabContractTests(SimpleTestCase):
 
     def valid_payload(self) -> dict[str, object]:
         return {
-            "contractVersion": 1,
+            "contractVersion": 2,
             "consultationId": self.consultation_id,
             "requestId": self.request_id,
             "revision": 0,
@@ -44,6 +44,7 @@ class LabContractTests(SimpleTestCase):
 
         self.assertTrue(serializer.is_valid(), serializer.errors)
         request = serializer.to_request()
+        self.assertEqual(request.contract_version, 2)
         self.assertEqual(request.text, "LINEの通知が届きません")
         self.assertEqual(request.context.question, QuestionId.START)
         self.assertEqual(request.context.impact, Impact.UNASSESSED)
@@ -130,3 +131,102 @@ class LabContractTests(SimpleTestCase):
         self.assertEqual(Topic.MISSING_NOTIFICATION.value, "missing_notification")
         self.assertEqual(Scope.UNKNOWN.value, "unknown")
         self.assertNotIn("token", repr(principal).lower())
+
+    # テストケース: 認証済みの利用者がv1の判定要求を送信する。
+    # 期待値: 判定サービスを呼び出さず、HTTP 400とCache-Control: no-storeを返す。
+    def test_rejects_v1_at_the_http_boundary(self):
+        from unittest.mock import patch
+        from rest_framework.test import APIRequestFactory, force_authenticate
+        from django.test import override_settings
+        from textjudgmentlab.views import LabJudgmentAPIView
+        from .test_http_boundary import RUNTIME
+
+        payload = self.valid_payload()
+        payload["contractVersion"] = 1
+        request = APIRequestFactory().post(
+            "/api/labs/text-judgment/judgments", payload, format="json",
+            HTTP_ORIGIN=RUNTIME.origin,
+        )
+        force_authenticate(request, user=LabPrincipal(datetime.now(UTC) + timedelta(minutes=1), "a" * 64))
+        with override_settings(TEXT_JUDGMENT_LAB_RUNTIME=RUNTIME), patch(
+            "textjudgmentlab.views.build_judgment_service"
+        ) as service:
+            response = LabJudgmentAPIView.as_view()(request)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["code"], "invalid_input")
+        self.assertEqual(response["Cache-Control"], "no-store")
+        service.assert_not_called()
+
+    # テストケース: v2の閲覧情報を作成した後、元のマップと配列を変更する。
+    # 期待値: 質問、理由、比較記録は作成時の値を保持する。Noulにcriteriaは定義しない。
+    def test_inspection_values_defensively_copy_nested_collections(self):
+        from textjudgmentlab.types import (
+            AdoptionPolicySnapshot, ChoiceAdoptionPolicy, ScoreAdoptionPolicy,
+            NoulAdoptionPolicy, PolicyCheck, NormalizationDecision,
+            JudgmentStateSnapshot, JudgmentInspection, SentChoiceQuestion,
+            SentScoreQuestion, SentNoulQuestion,
+        )
+        criteria = {"keep": "継続"}
+        question = SentChoiceQuestion("判定", criteria)
+        criteria["keep"] = "変更"
+        self.assertEqual(question.criteria["keep"], "継続")
+        with self.assertRaises(TypeError):
+            question.criteria["keep"] = "変更"
+        score_criteria = ["低", "中", "高"]
+        score_question = SentScoreQuestion("支障", score_criteria)
+        score_criteria.clear()
+        self.assertEqual(score_question.criteria, ("低", "中", "高"))
+        self.assertFalse(hasattr(SentNoulQuestion("急ぎ"), "criteria"))
+        check = PolicyCheck("confidence_below_threshold", 0.6999, "gte", 0.7, False)
+        reasons = ["confidence_below_threshold"]
+        checks = [check]
+        decision = NormalizationDecision("needs_review", reasons, checks)
+        reasons.clear()
+        checks.clear()
+        self.assertEqual(decision.reasons, ("confidence_below_threshold",))
+        self.assertEqual(decision.checks[0].actual, 0.6999)
+        request = JudgmentRequestSerializer(data=self.valid_payload())
+        self.assertTrue(request.is_valid())
+        context = request.to_request().context
+        questions = {"change": question}
+        normalization = {"change": decision}
+        inspection = JudgmentInspection(
+            JudgmentStateSnapshot("入力", context.question, "質問", context.confirmed,
+                                  context.impact, ["前の発言"]),
+            questions,
+            AdoptionPolicySnapshot(ChoiceAdoptionPolicy(0.7, 0.7, True),
+                                   ScoreAdoptionPolicy("present", 0.7, 1.5),
+                                   NoulAdoptionPolicy(0.8, 0.2)),
+            normalization,
+        )
+        questions.clear()
+        normalization.clear()
+        self.assertIn("change", inspection.questions)
+        self.assertIn("change", inspection.normalization)
+        with self.assertRaises(FrozenInstanceError):
+            inspection.question_version = "future"
+
+    # テストケース: 不正な版、負数・上限超過のrevision、入れ子の未知キー、相談の種類が未確定の確定回答を渡す。
+    # 期待値: 型付き要求へ変換する前に、不正な入力と矛盾する文脈を拒否する。
+    def test_rejects_invalid_versions_and_nested_context(self):
+        from copy import deepcopy
+        base = self.valid_payload()
+        cases = []
+        for field, value in (("contractVersion", 1), ("contractVersion", 3),
+                             ("contractVersion", True), ("revision", -1),
+                             ("revision", 2**53), ("revision", "2")):
+            payload = deepcopy(base)
+            payload[field] = value
+            cases.append(payload)
+        for key, value in (("topic", "other"), ("scope", "all"),
+                           ("workaround", "can_read"), ("urgency", True),
+                           ("extra", None)):
+            payload = deepcopy(base)
+            payload["context"]["confirmed"][key] = value
+            cases.append(payload)
+        payload = deepcopy(base)
+        payload["context"]["extra"] = None
+        cases.append(payload)
+        for payload in cases:
+            with self.subTest(payload=payload):
+                self.assertFalse(JudgmentRequestSerializer(data=payload).is_valid())

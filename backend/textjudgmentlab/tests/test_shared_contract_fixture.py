@@ -14,12 +14,12 @@ FIXTURE_PATH = Path("/test-fixtures/text-judgment-lab-contract-v1.json")
 
 class SharedContractFixtureTests(SimpleTestCase):
     # テストケース: BackendとFrontendで共有するv1契約fixtureを読む。
-    # 期待値: request、候補、Evidence、Score、errorの意味をBackend契約でも受理する。
-    def test_shared_fixture_matches_backend_contract(self) -> None:
+    # 期待値: v1の要求を拒否する。旧版の結果と固定のエラー形式は検証資料として保持する。
+    def test_shared_v1_fixture_is_rejected_and_preserved(self) -> None:
         fixture = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
         serializer = JudgmentRequestSerializer(data=fixture["request"])
 
-        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertFalse(serializer.is_valid())
         self.assertEqual(_success_payload(_success()), fixture["response"])
         self.assertEqual(fixture["response"]["contractVersion"], 1)
         self.assertEqual(

@@ -2,6 +2,8 @@ import type {
   ChoiceDetail,
   Evidence,
   JudgmentResponse,
+  JudgmentRequest,
+  JudgmentInspection,
   LabAccessResponse,
   Parsed,
   ResultAnswer,
@@ -97,14 +99,104 @@ export function parseLabAccessResponse(value: unknown): Parsed<LabAccessResponse
   return { ok: true, value: { status: 'authorized', expiresAt: value.expiresAt, serverTime: value.serverTime } }
 }
 
-export function parseJudgmentResponse(value: unknown): Parsed<JudgmentResponse> {
+const nonblank = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
+const isText = (value: unknown): value is string => nonblank(value) && [...value].length <= 1000
+const scalar = (value: unknown): boolean => typeof value === 'string' || typeof value === 'boolean' || isFiniteNumber(value)
+const reasons = ['eligible', 'unmentioned', 'unclear', 'confidence_below_threshold', 'probability_below_threshold',
+  'maximum_not_unique', 'impact_evidence_not_adopted', 'impact_evidence_absent', 'noul_between_thresholds'] as const
+const checkRules = [...reasons, 'score_high_boundary', 'noul_urgent_boundary', 'noul_not_urgent_boundary'] as const
+const judgmentIds = [...Object.keys(choiceCandidates), 'impact', 'urgency']
+
+function isInspection(value: unknown): value is JudgmentInspection {
+  if (!isRecord(value) || !hasExactKeys(value, ['questionVersion', 'state', 'questions', 'policy', 'normalization']) ||
+    value.questionVersion !== 'text-judgment-questions/2') return false
+  const state = value.state
+  if (!isRecord(state) || !hasExactKeys(state, ['currentText', 'questionId', 'questionText', 'confirmed', 'impact', 'recentUserTexts']) ||
+    !isText(state.currentText) || !nonblank(state.questionText) ||
+    !inSet(state.questionId, ['start', 'topic', 'scope', 'workaround', 'urgency', 'result']) ||
+    !inSet(state.impact, ['unassessed', 'needs_review', 'low', 'high']) ||
+    !Array.isArray(state.recentUserTexts) || state.recentUserTexts.length > 2 || !state.recentUserTexts.every(isText) ||
+    !isRecord(state.confirmed) || !hasExactKeys(state.confirmed, ['topic', 'scope', 'workaround', 'urgency'])) return false
+  const confirmed = state.confirmed
+  if (!(confirmed.topic === null || inSet(confirmed.topic, ['missing_notification', 'notification_settings'])) ||
+    !(confirmed.scope === null || inSet(confirmed.scope, ['all', 'specific', 'unknown'])) ||
+    !(confirmed.workaround === null || inSet(confirmed.workaround, ['can_read', 'cannot_read', 'unknown'])) ||
+    !(confirmed.urgency === null || typeof confirmed.urgency === 'boolean')) return false
+  if (confirmed.topic === null && (confirmed.scope !== null || confirmed.workaround !== null || confirmed.urgency !== null || state.impact !== 'unassessed')) return false
+  if (confirmed.topic === 'notification_settings' && confirmed.workaround !== null) return false
+  if (!['start', 'topic'].includes(state.questionId) && confirmed.topic === null) return false
+  if (state.questionId === 'workaround' && confirmed.topic !== 'missing_notification') return false
+  if (state.questionId === 'result' && confirmed.scope === null) return false
+
+  if (!isRecord(value.questions) || !hasExactKeys(value.questions, judgmentIds)) return false
+  for (const [id, candidates] of Object.entries(choiceCandidates)) {
+    const question = value.questions[id]
+    if (!isRecord(question) || !hasExactKeys(question, ['type', 'instructions', 'criteria']) ||
+      question.type !== 'choice' || !nonblank(question.instructions) || !isRecord(question.criteria) ||
+      !hasExactKeys(question.criteria, candidates) || !Object.values(question.criteria).every(nonblank)) return false
+  }
+  const impact = value.questions.impact
+  const urgency = value.questions.urgency
+  if (!isRecord(impact) || !hasExactKeys(impact, ['type', 'instructions', 'criteria']) || impact.type !== 'score' ||
+    !nonblank(impact.instructions) || !Array.isArray(impact.criteria) || impact.criteria.length !== 3 ||
+    impact.criteria[0] !== '支障なし' || impact.criteria[1] !== '不便だが別の操作で目的を達成できる' ||
+    impact.criteria[2] !== '目的を達成できない' || !isRecord(urgency) ||
+    !hasExactKeys(urgency, ['type', 'instructions']) || urgency.type !== 'noul' || !nonblank(urgency.instructions)) return false
+  const policy = value.policy
+  if (!isRecord(policy) || !hasExactKeys(policy, ['version', 'choice', 'score', 'noul']) || policy.version !== 'text-judgment-adoption/1' ||
+    !isRecord(policy.choice) || !hasExactKeys(policy.choice, ['minConfidence', 'minProbability', 'requireUniqueMaximum']) ||
+    policy.choice.minConfidence !== 0.7 || policy.choice.minProbability !== 0.7 || policy.choice.requireUniqueMaximum !== true ||
+    !isRecord(policy.score) || !hasExactKeys(policy.score, ['requiredImpactEvidence', 'minConfidence', 'highFrom']) ||
+    policy.score.requiredImpactEvidence !== 'present' || policy.score.minConfidence !== 0.7 || policy.score.highFrom !== 1.5 ||
+    !isRecord(policy.noul) || !hasExactKeys(policy.noul, ['urgentFrom', 'notUrgentThrough']) ||
+    policy.noul.urgentFrom !== 0.8 || policy.noul.notUrgentThrough !== 0.2) return false
+  if (!isRecord(value.normalization) || !hasExactKeys(value.normalization, judgmentIds)) return false
+  for (const id of judgmentIds) {
+    const decision = value.normalization[id]
+    if (!isRecord(decision) || !hasExactKeys(decision, ['status', 'reasons', 'checks']) ||
+      !inSet(decision.status, ['eligible', 'unmentioned', 'needs_review']) || !Array.isArray(decision.reasons) ||
+      decision.reasons.length === 0 || !decision.reasons.every(reason => inSet(reason, reasons)) || !Array.isArray(decision.checks)) return false
+    for (const check of decision.checks) {
+      if (!isRecord(check) || !hasExactKeys(check, ['rule', 'actual', 'operator', 'expected', 'passed']) ||
+        !inSet(check.rule, checkRules) || !inSet(check.operator, ['gte', 'lte', 'eq']) ||
+        !scalar(check.actual) || !scalar(check.expected) || typeof check.passed !== 'boolean') return false
+    }
+  }
+  return true
+}
+
+function matchesRequest(value: JudgmentInspection, request: JudgmentRequest): boolean {
+  const state = value.state
+  const context = request.context
+  return request.contractVersion === 2 && state.currentText === request.text && state.questionId === context.question &&
+    state.impact === context.impact && state.recentUserTexts.length === context.recentUserTexts.length &&
+    state.recentUserTexts.every((text, index) => text === context.recentUserTexts[index]) &&
+    state.confirmed.topic === context.confirmed.topic && state.confirmed.scope === context.confirmed.scope &&
+    state.confirmed.workaround === context.confirmed.workaround && state.confirmed.urgency === context.confirmed.urgency
+}
+
+// 検証済みのJSON値だけを複製し、変更できない状態にする。元の応答を後から変更しても、複製した値は変わらない。
+function freezeValue<T>(value: T): T {
+  if (typeof value === 'object' && value !== null) {
+    for (const child of Object.values(value)) freezeValue(child)
+    Object.freeze(value)
+  }
+  return value
+}
+
+export function parseJudgmentResponse(value: unknown, request: JudgmentRequest): Parsed<JudgmentResponse> {
   if (!isRecord(value) || !hasExactKeys(value, [
-    'contractVersion', 'consultationId', 'requestId', 'revision', 'model', 'evidence', 'details',
-  ]) || value.contractVersion !== 1 || !isUuid(value.consultationId) || !isUuid(value.requestId) ||
+    'contractVersion', 'consultationId', 'requestId', 'revision', 'model', 'evidence', 'details', 'inspection',
+  ]) || value.contractVersion !== 2 || !isUuid(value.consultationId) || !isUuid(value.requestId) ||
     !Number.isSafeInteger(value.revision) || (value.revision as number) < 0 ||
     typeof value.model !== 'string' || value.model.length === 0 || !isRecord(value.evidence) ||
     !hasExactKeys(value.evidence, ['topic', 'relevance', 'change', 'scope', 'workaround', 'result', 'impact', 'urgency']) ||
     !isRecord(value.details) || !hasExactKeys(value.details, ['choices', 'score', 'noul', 'jevElapsedMs'])) return protocolError()
+
+  if (!isInspection(value.inspection) || (
+    !matchesRequest(value.inspection, request) || value.consultationId !== request.consultationId ||
+    value.requestId !== request.requestId || value.revision !== request.revision
+  )) return protocolError()
 
   const evidence = value.evidence
   const topic = parseEvidence<Topic | 'both'>(evidence.topic, (candidate): candidate is Topic | 'both' =>
@@ -134,12 +226,13 @@ export function parseJudgmentResponse(value: unknown): Parsed<JudgmentResponse> 
   if (score === null) return protocolError()
 
   return { ok: true, value: {
-    contractVersion: 1, consultationId: value.consultationId, requestId: value.requestId,
+    contractVersion: 2, consultationId: value.consultationId, requestId: value.requestId,
     revision: value.revision as number, model: value.model,
     evidence: {
       topic, relevance: evidence.relevance, change: evidence.change, scope, workaround, result,
       impact: evidence.impact, urgency,
     },
+    inspection: freezeValue(structuredClone(value.inspection)),
     details: {
       choices: choices as JudgmentResponse['details']['choices'], score,
       noul: { type: 'noul', noul: details.noul.noul }, jevElapsedMs: details.jevElapsedMs,

@@ -1,14 +1,16 @@
+import { inspectionFor, v2Request } from './textJudgmentLabV2Fixture'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createTextJudgmentLabController } from '../src/useTextJudgmentLab'
 import type { JudgmentResponse } from '../src/textJudgmentLabTypes'
 
 const response = (consultationId: string, requestId: string, revision: number): JudgmentResponse => ({
-  contractVersion: 1,
+  contractVersion: 2,
   consultationId,
   requestId,
   revision,
   model: 'jev-test',
+  inspection: inspectionFor(v2Request()),
   evidence: {
     topic: { kind: 'known', value: 'missing_notification' },
     relevance: 'in_scope',

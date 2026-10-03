@@ -6,7 +6,7 @@ from django.test import SimpleTestCase
 from textjudgmentlab.jev_gateway import JevTransportFailure, JevTransportSuccess
 from textjudgmentlab.limits import LabLimitPermit, LabLimits
 from textjudgmentlab.services import JudgmentService
-from textjudgmentlab.types import JudgmentFailure, JudgmentSuccess, LabPrincipal
+from textjudgmentlab.types import JudgmentFailure, LegacyJudgmentSuccess as JudgmentSuccess, LabPrincipal
 
 from .test_judgment import _request, _valid_answers
 

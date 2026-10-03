@@ -105,6 +105,11 @@ class JudgmentContextSerializer(StrictSerializer):
         confirmed = attrs["confirmed"]
         topic = confirmed["topic"]
         question = attrs["question"]
+        if topic is None and (
+            any(confirmed[key] is not None for key in ("scope", "workaround", "urgency"))
+            or attrs["impact"] != Impact.UNASSESSED.value
+        ):
+            raise serializers.ValidationError({"non_field_errors": [_SAFE_ERROR]})
         if topic == Topic.NOTIFICATION_SETTINGS.value and confirmed["workaround"] is not None:
             raise serializers.ValidationError({"non_field_errors": [_SAFE_ERROR]})
         if question not in (QuestionId.START.value, QuestionId.TOPIC.value) and topic is None:
@@ -117,10 +122,10 @@ class JudgmentContextSerializer(StrictSerializer):
 
 
 class JudgmentRequestSerializer(StrictSerializer):
-    contractVersion = StrictIntegerField(min_value=1, max_value=1)
+    contractVersion = StrictIntegerField(min_value=2, max_value=2)
     consultationId = CanonicalUuidField()
     requestId = CanonicalUuidField()
-    revision = StrictIntegerField(min_value=0)
+    revision = StrictIntegerField(min_value=0, max_value=2**53 - 1)
     text = CodePointTextField()
     context = JudgmentContextSerializer()
 
@@ -131,7 +136,7 @@ class JudgmentRequestSerializer(StrictSerializer):
         context = data["context"]
         confirmed = context["confirmed"]
         return JudgmentRequest(
-            contract_version=1,
+            contract_version=2,
             consultation_id=data["consultationId"],
             request_id=data["requestId"],
             revision=data["revision"],

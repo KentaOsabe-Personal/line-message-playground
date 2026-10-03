@@ -129,7 +129,7 @@ export function createTextJudgmentLabController(api: ControllerApi, runtime: Con
       }
       const recentUserTexts = state.messages.filter((message) => message.status === 'judged').slice(-2).map((message) => message.text)
       const request: JudgmentRequest = {
-        contractVersion: 1,
+        contractVersion: 2,
         consultationId: snapshot.consultationId,
         requestId,
         revision: snapshot.revision,

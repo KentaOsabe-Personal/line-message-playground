@@ -93,7 +93,7 @@ class JudgmentContext:
 
 @dataclass(frozen=True, slots=True)
 class JudgmentRequest:
-    contract_version: Literal[1]
+    contract_version: Literal[2]
     consultation_id: UUID
     request_id: UUID
     revision: int
@@ -177,7 +177,8 @@ class JudgmentDetails:
 
 
 @dataclass(frozen=True, slots=True)
-class JudgmentSuccess:
+class LegacyJudgmentSuccess:
+    """既存の内部処理で使う正規化結果。タスク9で置き換える。v2の公開型には使用しない。"""
     consultation_id: UUID
     request_id: UUID
     revision: int
@@ -200,4 +201,133 @@ class JudgmentFailure:
     ]
 
 
-JudgmentResult = JudgmentSuccess | JudgmentFailure
+JudgmentResult = LegacyJudgmentSuccess | JudgmentFailure
+
+
+ChoiceId = Literal["topic", "relevance", "change", "scope", "workaround", "result", "impact_evidence"]
+JudgmentId = ChoiceId | Literal["impact", "urgency"]
+NormalizationReason = Literal[
+    "eligible", "unmentioned", "unclear", "confidence_below_threshold",
+    "probability_below_threshold", "maximum_not_unique", "impact_evidence_not_adopted",
+    "impact_evidence_absent", "noul_between_thresholds",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class SentChoiceQuestion:
+    instructions: str
+    criteria: Mapping[str, str]
+    type: Literal["choice"] = "choice"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "criteria", MappingProxyType(dict(self.criteria)))
+
+
+@dataclass(frozen=True, slots=True)
+class SentScoreQuestion:
+    instructions: str
+    criteria: tuple[str, ...]
+    type: Literal["score"] = "score"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "criteria", tuple(self.criteria))
+
+
+@dataclass(frozen=True, slots=True)
+class SentNoulQuestion:
+    instructions: str
+    type: Literal["noul"] = "noul"
+
+
+SentQuestion = SentChoiceQuestion | SentScoreQuestion | SentNoulQuestion
+
+
+@dataclass(frozen=True, slots=True)
+class ChoiceAdoptionPolicy:
+    min_confidence: float
+    min_probability: float
+    require_unique_maximum: Literal[True]
+
+
+@dataclass(frozen=True, slots=True)
+class ScoreAdoptionPolicy:
+    required_impact_evidence: Literal["present"]
+    min_confidence: float
+    high_from: float
+
+
+@dataclass(frozen=True, slots=True)
+class NoulAdoptionPolicy:
+    urgent_from: float
+    not_urgent_through: float
+
+
+@dataclass(frozen=True, slots=True)
+class AdoptionPolicySnapshot:
+    choice: ChoiceAdoptionPolicy
+    score: ScoreAdoptionPolicy
+    noul: NoulAdoptionPolicy
+    version: Literal["text-judgment-adoption/1"] = "text-judgment-adoption/1"
+
+
+@dataclass(frozen=True, slots=True)
+class PolicyCheck:
+    rule: NormalizationReason | Literal["score_high_boundary", "noul_urgent_boundary", "noul_not_urgent_boundary"]
+    actual: float | str | bool
+    operator: Literal["gte", "lte", "eq"]
+    expected: float | str | bool
+    passed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizationDecision:
+    status: Literal["eligible", "unmentioned", "needs_review"]
+    reasons: tuple[NormalizationReason, ...]
+    checks: tuple[PolicyCheck, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "reasons", tuple(self.reasons))
+        object.__setattr__(self, "checks", tuple(self.checks))
+
+
+@dataclass(frozen=True, slots=True)
+class JudgmentStateSnapshot:
+    current_text: str
+    question_id: QuestionId
+    question_text: str
+    confirmed: ConfirmedAnswers
+    impact: Impact
+    recent_user_texts: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "recent_user_texts", tuple(self.recent_user_texts))
+
+
+@dataclass(frozen=True, slots=True)
+class JudgmentInspection:
+    state: JudgmentStateSnapshot
+    questions: Mapping[JudgmentId, SentQuestion]
+    policy: AdoptionPolicySnapshot
+    normalization: Mapping[JudgmentId, NormalizationDecision]
+    question_version: Literal["text-judgment-questions/2"] = "text-judgment-questions/2"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "questions", MappingProxyType(dict(self.questions)))
+        object.__setattr__(self, "normalization", MappingProxyType(dict(self.normalization)))
+
+
+@dataclass(frozen=True, slots=True)
+class JudgmentSuccess:
+    """v2の成功応答の型。応答の生成とHTTPでの公開はタスク9で実装する。"""
+
+    consultation_id: UUID
+    request_id: UUID
+    revision: int
+    model: str
+    evidence: JudgmentEvidence
+    details: JudgmentDetails
+    inspection: JudgmentInspection
+    contract_version: Literal[2] = 2
+
+
+JudgmentResponse = JudgmentSuccess
