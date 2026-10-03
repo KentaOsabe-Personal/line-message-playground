@@ -1,9 +1,10 @@
-import { useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useSyncExternalStore } from 'react'
 
 import { LabHttpError, type LabHttpClient } from './textJudgmentLabApi'
 import {
   applyJudgment,
   createConversationCore,
+  conversationQuestion,
   currentQuestionId,
   interruptConversation,
   restartConversation,
@@ -11,18 +12,7 @@ import {
   type ConversationChoice,
   type ConversationCore,
 } from './textJudgmentLabState'
-import type { JudgmentRequest, JudgmentResponse, QuestionId } from './textJudgmentLabTypes'
-
-export type LabDisplayMessage = Readonly<{
-  id: string
-  role: 'user'
-  text: string
-  source: 'text' | 'example' | 'choice'
-  choiceQuestion?: QuestionId
-  status: 'pending' | 'judged' | 'failed' | 'interrupted'
-  judgment?: JudgmentResponse
-  uiElapsedMs?: number
-}>
+import type { JudgmentRequest, QuestionId, TurnRecord } from './textJudgmentLabTypes'
 
 export type PendingRequest = Readonly<{
   consultationId: string
@@ -37,7 +27,7 @@ export type PendingRequest = Readonly<{
 
 export type LabControllerState = Readonly<{
   core: ConversationCore
-  messages: readonly LabDisplayMessage[]
+  messages: readonly TurnRecord[]
   pending: PendingRequest | null
   draft: string
   failure: 'judgment_failed' | 'auth_expired' | 'access_unavailable' | null
@@ -60,7 +50,20 @@ export type TextJudgmentLabController = Readonly<{
   choose: (question: QuestionId, value: string, revision: number, authorized: boolean) => boolean
   interrupt: () => void
   restart: () => void
+  dispose: () => void
 }>
+
+function freezeValue<T>(value: T): T {
+  if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.values(value).forEach(freezeValue)
+    Object.freeze(value)
+  }
+  return value
+}
+
+function snapshotValue<T>(value: T): T {
+  return freezeValue(structuredClone(value))
+}
 
 const defaultUuid = () => crypto.randomUUID()
 
@@ -82,9 +85,16 @@ export function createTextJudgmentLabController(api: ControllerApi, runtime: Con
   let abortController: AbortController | null = null
   let deadlineTimer: ReturnType<typeof setTimeout> | null = null
   const listeners = new Set<() => void>()
-  const emit = (next: LabControllerState) => { state = next; listeners.forEach((listener) => listener()) }
-  const updateMessage = (id: string, changes: Partial<LabDisplayMessage>, messages = state.messages) =>
-    messages.map((message) => message.id === id ? { ...message, ...changes } : message)
+  const emit = (next: LabControllerState) => { state = freezeValue(next); listeners.forEach((listener) => listener()) }
+  state = freezeValue(state)
+  const updateMessage = (id: string, replace: (record: TurnRecord) => TurnRecord) =>
+    state.messages.map(message => message.id === id ? replace(message) : message)
+  const nonApplied = (record: TurnRecord, kind: 'failed' | 'interrupted', failure?: NonNullable<LabControllerState['failure']>): TurnRecord => {
+    if (record.kind !== 'pending') return record
+    const { id, text, before, previousQuestion, source } = record
+    const origin = { id, text, before, previousQuestion, source }
+    return kind === 'failed' ? { ...origin, kind, failure: failure ?? 'judgment_failed' } : { ...origin, kind }
+  }
 
   const fail = (pending: PendingRequest, reason: LabControllerState['failure']) => {
     if (state.pending?.requestId !== pending.requestId) return
@@ -94,7 +104,7 @@ export function createTextJudgmentLabController(api: ControllerApi, runtime: Con
       pending: null,
       draft: pending.text,
       failure: reason,
-      messages: updateMessage(pending.messageId, { status: 'failed' }),
+      messages: updateMessage(pending.messageId, record => nonApplied(record, 'failed', reason ?? 'judgment_failed')),
     })
     if (reason === 'auth_expired' || reason === 'access_unavailable') runtime.onAccessFailure?.(reason)
   }
@@ -112,11 +122,11 @@ export function createTextJudgmentLabController(api: ControllerApi, runtime: Con
     },
     submit: async (rawText, source, idToken) => {
       const text = rawText.trim()
-      if (!text || !state.interactive || state.pending !== null || state.core.stage.kind === 'ended') return
+      if (!text || [...text].length > 1000 || !state.interactive || state.pending !== null || state.core.stage.kind === 'ended' || conversationQuestion(state.core)?.inputMode === 'choices_only') return
       const requestId = uuid()
       const messageId = uuid()
       const startedAt = now()
-      const snapshot = state.core
+      const snapshot = snapshotValue(state.core)
       const pending: PendingRequest = {
         consultationId: snapshot.consultationId,
         requestId,
@@ -127,8 +137,8 @@ export function createTextJudgmentLabController(api: ControllerApi, runtime: Con
         messageId,
         text,
       }
-      const recentUserTexts = state.messages.filter((message) => message.status === 'judged').slice(-2).map((message) => message.text)
-      const request: JudgmentRequest = {
+      const recentUserTexts = state.messages.filter((message) => message.kind === 'judged' || message.kind === 'choice').slice(-2).map((message) => message.text)
+      const request: JudgmentRequest = snapshotValue({
         contractVersion: 2,
         consultationId: snapshot.consultationId,
         requestId,
@@ -140,7 +150,8 @@ export function createTextJudgmentLabController(api: ControllerApi, runtime: Con
           recentUserTexts,
           impact: snapshot.impact,
         },
-      }
+      })
+      const previousQuestion = snapshotValue(conversationQuestion(snapshot)!)
       const requestAbortController = new AbortController()
       abortController = requestAbortController
       const requestDeadlineTimer = setTimeout(() => {
@@ -154,10 +165,10 @@ export function createTextJudgmentLabController(api: ControllerApi, runtime: Con
         pending,
         draft: '',
         failure: null,
-        messages: [...state.messages, { id: messageId, role: 'user', text, source, status: 'pending' }],
+        messages: [...state.messages, { id: messageId, text, source, kind: 'pending', before: snapshot, previousQuestion, request }],
       })
       try {
-        const result = await api.judge(idToken, request, requestAbortController.signal)
+        const result = snapshotValue(await api.judge(idToken, request, requestAbortController.signal))
         const current = state.pending as PendingRequest | null
         if (current === null || current.requestId !== requestId) return
         const finishedAt = now()
@@ -168,13 +179,13 @@ export function createTextJudgmentLabController(api: ControllerApi, runtime: Con
           current.revision === result.revision &&
           state.core.revision === current.revision
         if (!valid) { fail(current, state.interactive ? 'judgment_failed' : 'auth_expired'); return }
-        const core = applyJudgment(current.snapshot, result.evidence)
+        const transition = applyJudgment(current.snapshot, result)
         emit({
           ...state,
-          core,
+          core: transition.core,
           pending: null,
           failure: null,
-          messages: updateMessage(messageId, { status: 'judged', judgment: result, uiElapsedMs: finishedAt - current.startedAt }),
+          messages: updateMessage(messageId, record => record.kind === 'pending' ? { ...record, kind: 'judged', judgment: result, application: snapshotValue(transition.application), uiElapsedMs: finishedAt - current.startedAt } : record),
         })
       } catch (error) {
         const current = state.pending as PendingRequest | null
@@ -195,13 +206,17 @@ export function createTextJudgmentLabController(api: ControllerApi, runtime: Con
       if (!authorized || !state.interactive || state.pending !== null || state.core.stage.kind === 'ended' || revision !== state.core.revision) return false
       const choice = choiceValue(question, value)
       if (choice === null) return false
-      const next = selectConversationChoice(state.core, choice)
-      if (next === state.core) return false
+      const before = snapshotValue(state.core)
+      const previousQuestion = snapshotValue(conversationQuestion(before)!)
+      const next = selectConversationChoice(before, choice)
+      if (next === null) return false
+      const label = previousQuestion.choices.find(candidate => candidate.id === value)?.label
+      if (label === undefined) return false
       emit({
         ...state,
-        core: next,
+        core: next.core,
         failure: null,
-        messages: [...state.messages, { id: uuid(), role: 'user', text: value, source: 'choice', choiceQuestion: question, status: 'judged' }],
+        messages: [...state.messages, { id: uuid(), text: label, source: 'choice', kind: 'choice', before, previousQuestion, answer: snapshotValue(choice), application: snapshotValue(next.application) }],
       })
       return true
     },
@@ -210,9 +225,10 @@ export function createTextJudgmentLabController(api: ControllerApi, runtime: Con
       abortController?.abort()
       if (deadlineTimer !== null) clearTimeout(deadlineTimer)
       deadlineTimer = null
-      const messages = state.pending === null ? state.messages : updateMessage(state.pending.messageId, { status: 'interrupted' })
+      const messages = state.pending === null ? state.messages : updateMessage(state.pending.messageId, record => nonApplied(record, 'interrupted'))
       emit({ ...state, core: interruptConversation(state.core), messages, pending: null, draft: '', failure: null })
     },
+    dispose: () => controller.restart(),
     restart: () => {
       abortController?.abort()
       if (deadlineTimer !== null) clearTimeout(deadlineTimer)
@@ -231,5 +247,6 @@ export function useTextJudgmentLabController(controller: TextJudgmentLabControll
 
 export function useTextJudgmentLab(api: ControllerApi, onAccessFailure?: ControllerRuntime['onAccessFailure']): readonly [TextJudgmentLabController, LabControllerState] {
   const controller = useMemo(() => createTextJudgmentLabController(api, { onAccessFailure }), [api, onAccessFailure])
+  useEffect(() => () => controller.dispose(), [controller])
   return [controller, useTextJudgmentLabController(controller)] as const
 }

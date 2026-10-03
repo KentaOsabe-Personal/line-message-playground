@@ -1,15 +1,25 @@
 import { describe, expect, test } from 'vitest'
 
 import {
-  applyJudgment,
+  applyJudgment as transitionJudgment,
   createConversationCore,
   currentQuestionId,
   interruptConversation,
   restartConversation,
-  selectConversationChoice,
+  selectConversationChoice as transitionChoice,
   type ConversationCore,
   type JudgmentEvidence,
 } from '../src/textJudgmentLabState'
+
+import { v2Response } from './textJudgmentLabV2Fixture'
+
+function selectConversationChoice(core: ConversationCore, choice: Parameters<typeof transitionChoice>[1]) {
+  return transitionChoice(core, choice)?.core ?? core
+}
+
+function applyJudgment(core: ConversationCore, evidence: JudgmentEvidence) {
+  return transitionJudgment(core, { ...v2Response(), evidence }).core
+}
 
 const unmentioned = { kind: 'unmentioned' } as const
 const needsReview = { kind: 'needs_review' } as const
@@ -322,7 +332,7 @@ describe('text judgment lab conversation state', () => {
   })
 
   // テストケース: 案内表示後の結果回答判定に別のimpactが含まれる。
-  // 期待値: 案内と表示方法と同様、案内前に採用したimpactを固定する。
+  // 期待値: 設定相談では支障の大きさを未評価のまま保ち、案内と表示方法も変更しない。
   test('freezes impact after guidance is shown', () => {
     let core = applyJudgment(createConversationCore('consultation-1'), evidence({
       topic: { kind: 'known', value: 'notification_settings' },
@@ -331,15 +341,15 @@ describe('text judgment lab conversation state', () => {
       urgency: { kind: 'known', value: false },
     }))
     expect(core.stage.kind).toBe('guidance')
-    expect(core.impact).toBe('needs_review')
+    expect(core.impact).toBe('unassessed')
 
     core = applyJudgment(core, evidence({ result: { kind: 'known', value: 'not_tried' }, impact: 'high' }))
-    expect(core.impact).toBe('needs_review')
+    expect(core.impact).toBe('unassessed')
     expect(core.stage.kind).toBe('guidance')
   })
 
   // テストケース: 案内後の複数相談pickerで、現在の相談を特定できない自由文に別のimpactが含まれる。
-  // 期待値: 現在相談へ復帰しても、案内前に採用したimpact・案内・表示方法を固定する。
+  // 期待値: 現在の相談に戻っても、支障の大きさは未評価のままとし、案内と表示方法を変更しない。
   test.each([
     ['needs_review', needsReview],
     ['unmentioned', unmentioned],
@@ -359,7 +369,7 @@ describe('text judgment lab conversation state', () => {
     core = applyJudgment(core, evidence({ topic, impact: 'high' }))
     core = choose(core, 'topic', 'notification_settings')
 
-    expect(core.impact).toBe('needs_review')
+    expect(core.impact).toBe('unassessed')
     expect(core.stage).toEqual(guidance)
   })
 

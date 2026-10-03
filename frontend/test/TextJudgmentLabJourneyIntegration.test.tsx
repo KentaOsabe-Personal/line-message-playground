@@ -266,7 +266,7 @@ describe('文章判定ラボの相談全体', () => {
     expect(controller.getState().core.stage).toMatchObject({ kind: 'guidance', guideId: 'settings_all' })
     expect(container.textContent).toContain('iPhoneとLINEの通知を希望に合わせて設定します。')
     expect(container.textContent).toContain(label)
-    expect(controller.getState().messages.at(-1)).toMatchObject({ source: 'choice', text: expected })
+    expect(controller.getState().messages.at(-1)).toMatchObject({ kind: 'choice', source: 'choice', text: label, answer: { question: 'result', value: expected } })
   })
 
   // テストケース: 設定相談の案内後に設定失敗を選ぶ。
@@ -417,7 +417,7 @@ describe('文章判定ラボの相談全体', () => {
       impact: 'high',
     })))
     expect(controller.getState().core.stage).toEqual({ kind: 'ended', outcome: 'interrupted' })
-    expect(controller.getState().messages.at(-1)?.status).toBe('interrupted')
+    expect(controller.getState().messages.at(-1)?.kind).toBe('interrupted')
   })
 
   // テストケース: pending中に新しい相談を開始し、その後に旧相談の成功応答が届く。

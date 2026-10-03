@@ -12,10 +12,6 @@ function questionContentId(question: QuestionId, topic: string | null): LabQuest
   return topic === 'notification_settings' ? 'settings_result' : 'missing_result'
 }
 
-function choiceLabel(question: QuestionId, value: string, topic: string | null): string {
-  return getQuestion(questionContentId(question, topic)).choices.find((choice) => choice.id === value)?.label ?? value
-}
-
 export default function TextJudgmentLab({ controller, access, getValidIdToken }: Readonly<{
   controller: TextJudgmentLabController
   access: LabAccessState
@@ -62,15 +58,15 @@ export default function TextJudgmentLab({ controller, access, getValidIdToken }:
         </div>
       </div>
       <div className="grid min-h-36 gap-4 p-4" role="log" aria-live="polite" aria-label="相談の会話">
-      {state.messages.map((message) => <article key={message.id} className={`lab-message-row lab-message-user lab-message-${message.status} flex max-w-[92%] items-end justify-self-end gap-2`} aria-label="あなたのメッセージ">
+      {state.messages.map((message) => <article key={message.id} className={`lab-message-row lab-message-user lab-message-${message.kind} flex max-w-[92%] items-end justify-self-end gap-2`} aria-label="あなたのメッセージ">
         <div className="grid min-w-0 justify-items-end">
           <div className="lab-bubble rounded-card rounded-br-sm bg-success-soft px-4 py-3 leading-relaxed shadow-card">
-            <p>{message.source === 'choice' ? `${choiceLabel(message.choiceQuestion ?? questionId, message.text, state.core.confirmed.topic)}（選択肢で回答）` : message.text}</p>
-            {message.status === 'pending' && <p className="mt-2 border-t border-border pt-2 text-xs text-muted" role="status"><span className="mr-2 inline-flex gap-1" aria-hidden="true"><i className="size-1 rounded-full bg-muted" /><i className="size-1 rounded-full bg-muted" /><i className="size-1 rounded-full bg-muted" /></span>判定中です。</p>}
-            {message.status === 'failed' && <p className="mt-2 border-t border-danger pt-2 text-xs font-bold text-danger" role="alert">判定できませんでした。入力欄から編集して再送信できます。</p>}
-            {message.status === 'interrupted' && <p className="mt-2 border-t border-border pt-2 text-xs text-muted">中断のため判定を反映しませんでした。</p>}
+            <p>{message.source === 'choice' ? `${message.text}（選択肢で回答）` : message.text}</p>
+            {message.kind === 'pending' && <p className="mt-2 border-t border-border pt-2 text-xs text-muted" role="status"><span className="mr-2 inline-flex gap-1" aria-hidden="true"><i className="size-1 rounded-full bg-muted" /><i className="size-1 rounded-full bg-muted" /><i className="size-1 rounded-full bg-muted" /></span>判定中です。</p>}
+            {message.kind === 'failed' && <p className="mt-2 border-t border-danger pt-2 text-xs font-bold text-danger" role="alert">判定できませんでした。入力欄から編集して再送信できます。</p>}
+            {message.kind === 'interrupted' && <p className="mt-2 border-t border-border pt-2 text-xs text-muted">中断のため判定を反映しませんでした。</p>}
           </div>
-          {message.judgment && <TextJudgmentDetails judgment={message.judgment} uiElapsedMs={message.uiElapsedMs ?? 0} />}
+          {message.kind === 'judged' && <TextJudgmentDetails judgment={message.judgment} uiElapsedMs={message.uiElapsedMs ?? 0} />}
         </div>
         <span className="grid size-8 shrink-0 place-items-center rounded-full bg-text text-[0.58rem] font-black text-on-action" aria-hidden="true">YOU</span>
       </article>)}
