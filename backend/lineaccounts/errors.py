@@ -16,7 +16,6 @@ from rest_framework.exceptions import (
 )
 from rest_framework.response import Response
 
-
 _SAFE_FIELD_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,63}\Z", re.ASCII)
 _SAFE_FIELD_MESSAGE = "入力値が不正です。"
 _ERRORS = {
@@ -38,7 +37,10 @@ _ERRORS = {
     "unlink_attempt_stale": (status.HTTP_409_CONFLICT, "連携状態を再確認してください。"),
     "provider_mismatch": (status.HTTP_422_UNPROCESSABLE_ENTITY, "チャネル設定を確認してください。"),
     "provider_immutable": (status.HTTP_422_UNPROCESSABLE_ENTITY, "チャネルを再登録してください。"),
-    "credential_unavailable": (status.HTTP_422_UNPROCESSABLE_ENTITY, "資格情報を再設定してください。"),
+    "credential_unavailable": (
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "資格情報を再設定してください。",
+    ),
     "channel_unavailable": (status.HTTP_422_UNPROCESSABLE_ENTITY, "チャネルを利用できません。"),
     "line_rate_limited": (status.HTTP_429_TOO_MANY_REQUESTS, "時間をおいて再試行してください。"),
     "line_unavailable": (status.HTTP_503_SERVICE_UNAVAILABLE, "LINEへ接続できませんでした。"),

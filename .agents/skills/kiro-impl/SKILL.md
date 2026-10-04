@@ -11,7 +11,7 @@ description: Implement approved Kiro tasks with task-level workers and independe
 
 - `.kiro/specs/<feature>/` の `spec.json`、`requirements.md`、`design.md`、`tasks.md` が必要。tasksの承認がなければ編集前に停止する。
 - core steering、対象サービスAGENTS、関連custom steering、Implementation Notesを読む。未関係のSkill一式は読み込まない。
-- project manifest／task runner／CI・既存integration設定／READMEからcanonicalな `TEST_COMMANDS`、`BUILD_COMMANDS`、`SMOKE_COMMANDS` を確定する。runtime smokeは実成果物が最初の使用可能状態へ達する最小の信頼できる方法。workerへは該当部分を渡す。
+- project manifest／task runner／CI・既存integration設定／READMEからcanonicalな `TEST_COMMANDS`、`BUILD_COMMANDS`、`SMOKE_COMMANDS`、`STATIC_CHECK_COMMANDS` を確定する。runtime smokeは実成果物が最初の使用可能状態へ達する最小の信頼できる方法。workerへは該当部分を渡す。
 - 開始時に既存差分を記録し、無関係な変更を保護する。
 - **実行task**は子を持たないmajor task `X.`、または子task `X.Y`。子を持つmajorはreview単位のheader。単独majorは自身が1つのreview単位になる。
 - 引数なしはpending taskを依存順に自律実装。major番号指定はそのpendingな子へ展開し、単独majorならそれ自体を選ぶ。子番号指定は同じ親ごとにreview単位へまとめる。
@@ -21,7 +21,7 @@ description: Implement approved Kiro tasks with task-level workers and independe
 ## 共通の実装・レビューloop
 
 1. 各実行taskについて受入条件、完成時の成果物、design制約、検証方法をTask Briefへまとめる。元のspec番号と `_Boundary:_` を維持する。
-2. taskごとにTDDと下記Feature Flag Protocolを実行する。RED出力、freshなtask-local検証、変更file一覧を `READY_FOR_REVIEW` recordへ保存する。
+2. taskごとにTDDと下記Feature Flag Protocolを実行する。[READMEのローカル品質チェック](../../../README.md#ローカル品質チェック)から変更範囲に対応する `STATIC_CHECK_COMMANDS` を選び、対象サービス全体を検査する。失敗・未実施のまま `READY_FOR_REVIEW` にしない。文書のみで対象外なら理由を記録する。RED出力、freshなtask-local検証、変更file一覧を `READY_FOR_REVIEW` recordへ保存する。
 3. 同じreview単位の全選択taskがreadyになったら、独立したfresh reviewerへ [reviewer-prompt.md](templates/reviewer-prompt.md) と全taskの本文・境界・spec参照・report・検証commandを渡す。reviewerは `kiro-review` の正本を読み、実diffから相互作用も判定する。
 4. `APPROVED` 後に [completion-gate.md](references/completion-gate.md) をreview単位へ適用する。`VERIFIED` のtaskだけ `[x]` にし、親は全子完了時だけ `[x]` にする。
 5. `REJECTED` は指摘されたtask境界を修正し、単位全体を再reviewする。初回reviewに加えて修正・再reviewは最大2回。その後はdebugへ進む。

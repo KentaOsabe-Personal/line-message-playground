@@ -13,6 +13,8 @@ class DeliveryAppTests(SimpleTestCase):
 
         self.assertEqual(app_config.name, "delivery")
         self.assertIn("delivery", settings.INSTALLED_APPS)
-        self.assertEqual(settings.LINE_CHANNEL_ACCESS_TOKEN, os.getenv("LINE_CHANNEL_ACCESS_TOKEN", ""))
+        self.assertEqual(
+            settings.LINE_CHANNEL_ACCESS_TOKEN, os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
+        )
         self.assertEqual(settings.LINE_USER_ID, os.getenv("LINE_USER_ID", ""))
         self.assertNotIn("LINE_CHANNEL_SECRET", vars(settings))

@@ -78,9 +78,7 @@ class LineChannelConcurrencyIntegrationTests(TransactionTestCase):
     def setUp(self):
         self.primary_key = Fernet.generate_key().decode("ascii")
         self.old_key = Fernet.generate_key().decode("ascii")
-        self.primary_cipher = FernetCredentialCipher(
-            parse_credential_keyring(self.primary_key)
-        )
+        self.primary_cipher = FernetCredentialCipher(parse_credential_keyring(self.primary_key))
         self.old_cipher = FernetCredentialCipher(parse_credential_keyring(self.old_key))
         self.rotation_cipher = FernetCredentialCipher(
             parse_credential_keyring(f"{self.primary_key},{self.old_key}")
@@ -113,9 +111,7 @@ class LineChannelConcurrencyIntegrationTests(TransactionTestCase):
         self._register(untouched_id, "123456789022", "U" + "3" * 32)
         untouched_before = LineChannel.objects.get(public_id=untouched_id)
         target_before = LineChannel.objects.get(public_id=public_id)
-        credential_before = LineChannelCredential.objects.get(
-            line_channel__public_id=public_id
-        )
+        credential_before = LineChannelCredential.objects.get(line_channel__public_id=public_id)
         old_access_ciphertext = bytes(credential_before.access_token_ciphertext)
         old_secret_ciphertext = bytes(credential_before.channel_secret_ciphertext)
         first_locked = threading.Event()
@@ -167,9 +163,7 @@ class LineChannelConcurrencyIntegrationTests(TransactionTestCase):
         self.assertEqual(channel.label, "before")
         self.assertGreater(channel.updated_at, target_before.updated_at)
         self.assertEqual(untouched_after.updated_at, untouched_before.updated_at)
-        self.assertNotEqual(
-            bytes(credential_before.access_token_ciphertext), old_access_ciphertext
-        )
+        self.assertNotEqual(bytes(credential_before.access_token_ciphertext), old_access_ciphertext)
         self.assertNotEqual(
             bytes(credential_before.channel_secret_ciphertext), old_secret_ciphertext
         )
@@ -241,9 +235,7 @@ class LineChannelConcurrencyIntegrationTests(TransactionTestCase):
                 _run_with_independent_connection, rotation_service.rotate_all
             )
             self.assertTrue(rotation_locked.wait(timeout=5))
-            update = executor.submit(
-                _run_with_independent_connection, replace_credentials
-            )
+            update = executor.submit(_run_with_independent_connection, replace_credentials)
             release_rotation.set()
             summary = rotation.result(timeout=10)
             update_result = update.result(timeout=10)

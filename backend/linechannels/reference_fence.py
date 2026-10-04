@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Literal, Protocol, TypeAlias, runtime_checkable
 from uuid import UUID
 
@@ -7,7 +7,6 @@ from django.db import DatabaseError, OperationalError, transaction
 
 from .models import LineChannel
 from .repositories import RepositoryProgrammingError
-
 
 ReferenceFenceStatus: TypeAlias = Literal[
     "locked",

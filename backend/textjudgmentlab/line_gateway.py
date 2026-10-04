@@ -10,7 +10,6 @@ from hmac import compare_digest
 
 import httpx
 
-
 _VERIFY_URL = "https://api.line.me/oauth2/v2.1/verify"
 _ISSUER = "https://access.line.me"
 _DEADLINE_SECONDS = 4.0
@@ -73,7 +72,7 @@ class LabLineGateway:
                     timeout=self._timeout,
                     follow_redirects=False,
                 )
-        except (TimeoutError, httpx.RequestError):
+        except TimeoutError, httpx.RequestError:
             return LineIdentityUnavailable()
 
         if response.status_code == 400:

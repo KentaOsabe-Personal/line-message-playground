@@ -38,7 +38,9 @@ export default function AppLayout({ displayName, onLogout, children }: AppLayout
     <div className="application-shell">
       <header className="application-header">
         <Link className="application-brand" to="/liff/channels">
-          <span className="application-brand-mark" aria-hidden="true">L</span>
+          <span className="application-brand-mark" aria-hidden="true">
+            L
+          </span>
           <span className="application-brand-copy">
             <strong>LINE Message Playground</strong>
             <small>OWNER CONSOLE</small>
@@ -54,17 +56,27 @@ export default function AppLayout({ displayName, onLogout, children }: AppLayout
         >
           メニュー
         </button>
-        <div id="application-navigation" className="application-navigation" data-open={menuOpen || undefined}>
+        <div
+          id="application-navigation"
+          className="application-navigation"
+          data-open={menuOpen || undefined}
+        >
           <nav aria-label="機能ナビゲーション">
             {navigationItems.map((item) => (
-              <NavLink key={item.to} to={item.to} className={({ isActive }) => isActive ? 'current' : undefined}>
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => (isActive ? 'current' : undefined)}
+              >
                 {item.label}
               </NavLink>
             ))}
           </nav>
           <div className="owner-actions">
             <span className="owner-identity">
-              <span className="owner-avatar" aria-hidden="true">{displayName.slice(0, 1).toUpperCase()}</span>
+              <span className="owner-avatar" aria-hidden="true">
+                {displayName.slice(0, 1).toUpperCase()}
+              </span>
               <span className="owner-name">{displayName}</span>
             </span>
             <button type="button" className="secondary" onClick={() => void onLogout()}>

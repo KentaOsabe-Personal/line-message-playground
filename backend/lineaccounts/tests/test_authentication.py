@@ -13,8 +13,8 @@ from lineaccounts.authentication import (
     OwnerSessionAuthentication,
 )
 from lineaccounts.gateway import VerifiedLineIdentity
-from lineaccounts.repositories import DjangoAccountRepository
 from lineaccounts.permissions import CanResumeUnlink, HasOwnerSession, IsActiveOwner
+from lineaccounts.repositories import DjangoAccountRepository
 from lineaccounts.types import LineSubject
 
 
@@ -36,12 +36,8 @@ class OwnerAuthBoundaryTests(TestCase):
             )
 
     def authenticate(self, value):
-        boundary = OwnerSessionAuthentication(
-            self.repository, clock=lambda: self.now
-        )
-        return boundary.authenticate(
-            SimpleNamespace(session={OWNER_SESSION_KEY: value})
-        )
+        boundary = OwnerSessionAuthentication(self.repository, clock=lambda: self.now)
+        return boundary.authenticate(SimpleNamespace(session={OWNER_SESSION_KEY: value}))
 
     # テストケース: 有効なopaque owner session IDで認証する
     # 期待値: identity public IDとactive stateだけを持つowner principalを返す
@@ -58,9 +54,7 @@ class OwnerAuthBoundaryTests(TestCase):
     # テストケース: session cookieにowner session IDが存在しない
     # 期待値: 匿名として扱いowner principalを生成しない
     def test_missing_owner_session_remains_anonymous(self):
-        boundary = OwnerSessionAuthentication(
-            self.repository, clock=lambda: self.now
-        )
+        boundary = OwnerSessionAuthentication(self.repository, clock=lambda: self.now)
 
         self.assertIsNone(boundary.authenticate(SimpleNamespace(session={})))
 
@@ -70,20 +64,14 @@ class OwnerAuthBoundaryTests(TestCase):
         other = None
         with transaction.atomic():
             owner = self.repository.lock_owner_account()
-            other = self.repository.create_owner_session(
-                owner, self.now + timedelta(hours=8)
-            )
-            expired = self.repository.create_owner_session(
-                owner, self.now - timedelta(seconds=1)
-            )
+            other = self.repository.create_owner_session(owner, self.now + timedelta(hours=8))
+            expired = self.repository.create_owner_session(owner, self.now - timedelta(seconds=1))
 
         for value in ("not-a-uuid", str(uuid4()), str(expired.public_id)):
             with self.subTest(value=value), self.assertRaises(AuthenticationFailed):
                 self.authenticate(value)
 
-        self.assertIsNotNone(
-            self.repository.get_session(other.public_id, self.now)
-        )
+        self.assertIsNotNone(self.repository.get_session(other.public_id, self.now))
 
     # テストケース: unlink pending sessionへ通常操作と再開permissionを評価する
     # 期待値: active通常操作を拒否しstatus/logout/unlink再開用permissionだけを許可する
@@ -104,10 +92,6 @@ class OwnerAuthBoundaryTests(TestCase):
     def test_active_owner_permission_rejects_anonymous_and_allows_owner(self):
         principal, _ = self.authenticate(str(self.session.public_id))
 
-        self.assertTrue(
-            IsActiveOwner().has_permission(SimpleNamespace(user=principal), None)
-        )
-        self.assertFalse(
-            IsActiveOwner().has_permission(SimpleNamespace(user=None), None)
-        )
+        self.assertTrue(IsActiveOwner().has_permission(SimpleNamespace(user=principal), None))
+        self.assertFalse(IsActiveOwner().has_permission(SimpleNamespace(user=None), None))
         self.assertIsInstance(principal, OwnerPrincipal)

@@ -13,19 +13,19 @@ from linerichmenus.headless import (
 
 from .admin_lifecycle_types import (
     AdvanceDeactivationRevision,
-    CompleteDeactivation,
     CompletedDeactivation,
+    CompleteDeactivation,
     DeactivationConflict,
     DeactivationFailed,
     DeactivationSucceeded,
-    RecordDeactivationRevisionConflict,
-    RecheckDeactivation,
     ReactivateChannel,
     ReactivationSucceeded,
-    ReserveDeactivation,
+    RecheckDeactivation,
+    RecordDeactivationRevisionConflict,
     ReservedDeactivation,
-    SaveDeactivationResult,
+    ReserveDeactivation,
     SavedDeactivation,
+    SaveDeactivationResult,
     StartDeactivation,
 )
 from .types import UpdateLineChannel
@@ -241,13 +241,16 @@ class DefaultChannelDeactivationCoordinator:
                 subject=(view.operation_id if operation is not None else None),
             )
 
-        reason = assessment.reason or {
-            "unlink_required": "recheck_required",
-            "external_default_blocked": "external_default",
-            "recheck_required": "recheck_required",
-            "cleanup_required": "cleanup_required",
-            "unavailable": "storage_unavailable",
-        }[assessment.status]
+        reason = (
+            assessment.reason
+            or {
+                "unlink_required": "recheck_required",
+                "external_default_blocked": "external_default",
+                "recheck_required": "recheck_required",
+                "cleanup_required": "cleanup_required",
+                "unavailable": "storage_unavailable",
+            }[assessment.status]
+        )
         return self._save_confirmation(
             proof,
             view,

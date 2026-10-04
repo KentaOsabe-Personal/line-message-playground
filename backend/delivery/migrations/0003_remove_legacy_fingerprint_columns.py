@@ -29,7 +29,6 @@ def restore_legacy_fingerprints(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("delivery", "0002_linked_recipient_delivery"),
     ]

@@ -3,12 +3,11 @@ from django.urls import path
 from .admin_views import (
     AdminChannelCollectionAPIView,
     AdminChannelConnectionCheckAPIView,
-    AdminChannelDetailAPIView,
-    AdminChannelStateAPIView,
     AdminChannelDeactivationAPIView,
     AdminChannelDeactivationRecheckAPIView,
+    AdminChannelDetailAPIView,
+    AdminChannelStateAPIView,
 )
-
 
 app_name = "linechannels"
 

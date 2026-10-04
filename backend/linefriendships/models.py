@@ -60,10 +60,7 @@ class FriendshipSyncAudit(models.Model):
                 name="linefriend_audit_time_nonnegative",
             ),
             models.CheckConstraint(
-                condition=(
-                    models.Q(event_type="follow")
-                    | models.Q(is_unblocked__isnull=True)
-                ),
+                condition=(models.Q(event_type="follow") | models.Q(is_unblocked__isnull=True)),
                 name="linefriend_audit_unfollow_no_unblock",
             ),
         ]

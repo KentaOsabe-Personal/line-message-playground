@@ -7,13 +7,13 @@ import re
 from typing import Literal
 
 from linechannels.types import ChannelSecret
+
 from .types import (
     FrozenJsonObject,
     PayloadRejected,
     VerifiedEventData,
     VerifiedWebhookPayload,
 )
-
 
 _MAX_RAW_BODY_BYTES = 256 * 1024
 _MAX_EVENTS = 10
@@ -38,7 +38,7 @@ class RawSignatureVerifier:
                 return "rejected"
             secret = channel_secret.reveal_for_use().encode("utf-8")
             expected_digest = hmac.new(secret, raw_body, hashlib.sha256).digest()
-        except (UnicodeEncodeError, binascii.Error, TypeError, ValueError):
+        except UnicodeEncodeError, binascii.Error, TypeError, ValueError:
             return "rejected"
 
         if hmac.compare_digest(expected_digest, supplied_digest):
@@ -57,7 +57,7 @@ class WebhookPayloadValidator:
 
         try:
             payload = json.loads(raw_body, parse_constant=self._reject_json_constant)
-        except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        except UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError:
             return PayloadRejected()
 
         if not isinstance(payload, dict):

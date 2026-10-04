@@ -17,6 +17,7 @@ from rest_framework.exceptions import (
     ValidationError,
 )
 from rest_framework.parsers import JSONParser
+from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -24,13 +25,9 @@ from .authentication import IsLabOwner, LabAccessError, LabBearerAuthentication
 from .container import build_judgment_service
 from .runtime import LabRuntimeConfigured
 from .serializers import JudgmentRequestSerializer
-from .types import (
-    JudgmentFailure,
-    JudgmentSuccess,
-    KnownEvidence,
-)
+from .types import JudgmentFailure, JudgmentSuccess
 
-
+_MAX_SUCCESS_BYTES = 256 * 1024
 _MAX_BODY_BYTES = 32 * 1024
 _MAX_AUTHORIZATION_BYTES = 8 * 1024
 _ERRORS = {
@@ -79,7 +76,7 @@ class LabAPIView(APIView):
             authorization = request.headers.get("Authorization", "")
             try:
                 authorization_size = len(authorization.encode("ascii"))
-            except (AttributeError, UnicodeEncodeError):
+            except AttributeError, UnicodeEncodeError:
                 authorization_size = _MAX_AUTHORIZATION_BYTES + 1
             if authorization_size > _MAX_AUTHORIZATION_BYTES:
                 raise LabBoundaryError("reauthentication_required")
@@ -124,56 +121,12 @@ def _timestamp(value) -> str:
     return value.isoformat().replace("+00:00", "Z")
 
 
-def _evidence(value):
-    if isinstance(value, KnownEvidence):
-        candidate = value.value
-        return {
-            "kind": "known",
-            "value": candidate.value if hasattr(candidate, "value") else candidate,
-        }
-    return {"kind": value.kind}
-
-
-def _choice(value):
-    return {
-        "type": value.type,
-        "choice": value.choice,
-        "probabilities": dict(value.probabilities),
-        "confidence": value.confidence,
-    }
-
-
 def _success_payload(result: JudgmentSuccess) -> dict[str, object]:
-    evidence = result.evidence
-    details = result.details
     return {
-        "contractVersion": result.contract_version,
-        "consultationId": str(result.consultation_id),
-        "requestId": str(result.request_id),
-        "revision": result.revision,
+        "contractVersion": 3,
         "model": result.model,
-        "evidence": {
-            "topic": _evidence(evidence.topic),
-            "relevance": evidence.relevance.value,
-            "change": evidence.change.value,
-            "scope": _evidence(evidence.scope),
-            "workaround": _evidence(evidence.workaround),
-            "result": _evidence(evidence.result),
-            "impact": evidence.impact,
-            "urgency": _evidence(evidence.urgency),
-        },
-        "details": {
-            "choices": {key: _choice(value) for key, value in details.choices.items()},
-            "score": {
-                "type": details.score.type,
-                "score": details.score.score,
-                "legend": dict(details.score.legend),
-                "probabilities": dict(details.score.probabilities),
-                "confidence": details.score.confidence,
-            },
-            "noul": {"type": details.noul.type, "noul": details.noul.noul},
-            "jevElapsedMs": details.jev_elapsed_ms,
-        },
+        "answers": result.answers,
+        "elapsedMs": result.elapsed_ms,
     }
 
 
@@ -181,11 +134,13 @@ class LabAccessAPIView(LabAPIView):
     def post(self, request):
         if not isinstance(request.data, dict) or request.data:
             raise ValidationError("invalid access body")
-        return Response({
-            "status": "authorized",
-            "expiresAt": _timestamp(request.user.expires_at),
-            "serverTime": _timestamp(timezone.now()),
-        })
+        return Response(
+            {
+                "status": "authorized",
+                "expiresAt": _timestamp(request.user.expires_at),
+                "serverTime": _timestamp(timezone.now()),
+            }
+        )
 
 
 class LabJudgmentAPIView(LabAPIView):
@@ -197,16 +152,20 @@ class LabJudgmentAPIView(LabAPIView):
             serializer.to_request(),
         )
         if isinstance(result, JudgmentSuccess):
-            return Response(_success_payload(result))
+            try:
+                payload = _success_payload(result)
+                if len(JSONRenderer().render(payload)) > _MAX_SUCCESS_BYTES:
+                    return self._error("judgment_failed")
+            except ValueError, TypeError, AttributeError:
+                return self._error("judgment_failed")
+            return Response(payload)
         if not isinstance(result, JudgmentFailure):
             return self._error("unexpected")
         mapping = {
-            "invalid_request": "invalid_input",
             "rate_limited": "rate_limited",
             "access_expired": "reauthentication_required",
             "judge_unavailable": "judgment_failed",
             "judge_timeout": "judgment_timeout",
-            "configuration_unavailable": "access_unavailable",
             "unexpected": "unexpected",
         }
         return self._error(mapping[result.code])

@@ -37,7 +37,9 @@ class UnlinkConfirmationTests(SimpleTestCase):
         token = confirmation.issue(snapshot, now)
 
         self.assertTrue(confirmation.verify(token, canonical, now + timedelta(minutes=4)))
-        self.assertFalse(confirmation.verify(token, canonical, now + timedelta(minutes=5, seconds=1)))
+        self.assertFalse(
+            confirmation.verify(token, canonical, now + timedelta(minutes=5, seconds=1))
+        )
 
     # テストケース: 改変tokenまたはsnapshot変更後のtokenを検証する
     # 期待値: 秘密値を返さずstale confirmationとして拒否できるFalseになる

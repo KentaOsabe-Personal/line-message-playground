@@ -35,7 +35,8 @@ export function createTextJudgmentLabConfig(input: {
     origin.pathname !== '/' ||
     origin.search !== '' ||
     origin.hash !== ''
-  ) throw new TextJudgmentLabConfigError()
+  )
+    throw new TextJudgmentLabConfigError()
 
   return Object.freeze({
     liffId: input.liffId,

@@ -124,12 +124,8 @@ class AccountBackendIntegrationTests(TestCase):
         session_service_factory.assert_called_once_with(
             gateway, repository, runtime.owner_eligibility
         )
-        recipient_service_factory.assert_called_once_with(
-            directory, repository, gateway, policy
-        )
-        unlink_service_factory.assert_called_once_with(
-            gateway, repository, lock, directory
-        )
+        recipient_service_factory.assert_called_once_with(directory, repository, gateway, policy)
+        unlink_service_factory.assert_called_once_with(gateway, repository, lock, directory)
         self.assertEqual(resolve_policy.call_count, 3)
 
     # テストケース: LIFF直結チャネルpolicyが不正な状態でsession statusを取得する。
@@ -162,9 +158,7 @@ class AccountBackendIntegrationTests(TestCase):
         requests = (
             client.delete("/api/account/session/", **unsafe_headers),
             client.get("/api/account/channels/"),
-            client.post(
-                "/api/account/recipients/", {}, format="json", **unsafe_headers
-            ),
+            client.post("/api/account/recipients/", {}, format="json", **unsafe_headers),
             client.patch(
                 "/api/account/recipients/00000000-0000-4000-8000-000000000001/",
                 {},
@@ -175,12 +169,8 @@ class AccountBackendIntegrationTests(TestCase):
                 "/api/account/recipients/00000000-0000-4000-8000-000000000001/",
                 **unsafe_headers,
             ),
-            client.post(
-                "/api/account/unlink-preview/", {}, format="json", **unsafe_headers
-            ),
-            client.post(
-                "/api/account/unlink/", {}, format="json", **unsafe_headers
-            ),
+            client.post("/api/account/unlink-preview/", {}, format="json", **unsafe_headers),
+            client.post("/api/account/unlink/", {}, format="json", **unsafe_headers),
         )
 
         self.assertTrue(all(response.status_code == 401 for response in requests))

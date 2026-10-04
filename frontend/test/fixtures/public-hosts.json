@@ -1,8 +1,5 @@
 {
-  "valid": [
-    "example.ngrok.app",
-    "a-b.example.com"
-  ],
+  "valid": ["example.ngrok.app", "a-b.example.com"],
   "invalid": [
     "",
     "https://example.ngrok.app",

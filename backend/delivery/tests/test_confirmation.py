@@ -20,7 +20,6 @@ from delivery.types import (
     TargetRevision,
 )
 
-
 NOW = datetime(2026, 7, 26, 1, 2, 3, 456789, tzinfo=timezone.utc)
 
 
@@ -97,9 +96,7 @@ class ConfirmationServiceTests(SimpleTestCase):
         issued = self.service.issue(snapshot)
 
         self.assertIsNone(issued.receipt_expires_at)
-        self.assertIsNone(
-            self.service.decode_for_test(issued.token)["receipt_expires_at"]
-        )
+        self.assertIsNone(self.service.decode_for_test(issued.token)["receipt_expires_at"])
         self.assertIsInstance(
             self.service.verify(issued.token, snapshot),
             ConfirmationVerified,
@@ -152,9 +149,7 @@ class ConfirmationServiceTests(SimpleTestCase):
                     ValueError,
                     "^invalid receipt expiry$",
                 ):
-                    self.service.issue(
-                        replace(valid, receipt_expires_at=expiry)
-                    )
+                    self.service.issue(replace(valid, receipt_expires_at=expiry))
 
     # テストケース: preview後に確認snapshotの各入力軸を一つずつ変更する
     # 期待値: channel・recipient・件名・本文・owner・identity・revision・期限の差を全て拒否する
@@ -170,21 +165,15 @@ class ConfirmationServiceTests(SimpleTestCase):
             "別owner": replace(snapshot, owner=OwnerPrincipal(8)),
             "再連携後identity": replace(
                 snapshot,
-                owner_identity=OwnerIdentitySnapshot(
-                    UUID("44444444-4444-4444-8444-444444444444")
-                ),
+                owner_identity=OwnerIdentitySnapshot(UUID("44444444-4444-4444-8444-444444444444")),
             ),
             "channel": replace(
                 snapshot,
-                channel_public_id=UUID(
-                    "55555555-5555-4555-8555-555555555555"
-                ),
+                channel_public_id=UUID("55555555-5555-4555-8555-555555555555"),
             ),
             "recipient": replace(
                 snapshot,
-                recipient_public_id=UUID(
-                    "66666666-6666-4666-8666-666666666666"
-                ),
+                recipient_public_id=UUID("66666666-6666-4666-8666-666666666666"),
             ),
             "target revision": replace(
                 snapshot,
@@ -192,20 +181,15 @@ class ConfirmationServiceTests(SimpleTestCase):
             ),
             "件名": replace(
                 snapshot,
-                message_fingerprint=format_message(
-                    "変更後件名", body
-                ).fingerprint,
+                message_fingerprint=format_message("変更後件名", body).fingerprint,
             ),
             "本文": replace(
                 snapshot,
-                message_fingerprint=format_message(
-                    subject, "変更後本文"
-                ).fingerprint,
+                message_fingerprint=format_message(subject, "変更後本文").fingerprint,
             ),
             "receipt expiry": replace(
                 snapshot,
-                receipt_expires_at=NOW
-                + timedelta(hours=24, seconds=1),
+                receipt_expires_at=NOW + timedelta(hours=24, seconds=1),
             ),
         }
 
@@ -241,9 +225,7 @@ class ConfirmationServiceTests(SimpleTestCase):
         current_snapshots = {
             "unlink/relink": replace(
                 snapshot,
-                owner_identity=OwnerIdentitySnapshot(
-                    UUID("77777777-7777-4777-8777-777777777777")
-                ),
+                owner_identity=OwnerIdentitySnapshot(UUID("77777777-7777-4777-8777-777777777777")),
             ),
             "状態往復": replace(
                 snapshot,
@@ -266,11 +248,7 @@ class ConfirmationServiceTests(SimpleTestCase):
         separator = issued.token.rfind(":")
         signature = issued.token[separator + 1 :]
         tampered_character = "A" if signature[0] != "A" else "B"
-        tampered = (
-            issued.token[: separator + 1]
-            + tampered_character
-            + signature[1:]
-        )
+        tampered = issued.token[: separator + 1] + tampered_character + signature[1:]
 
         invalid = self.service.verify(tampered, snapshot)
         self.clock.current = NOW + timedelta(minutes=10, microseconds=1)
@@ -289,8 +267,7 @@ class ConfirmationServiceTests(SimpleTestCase):
     def test_signing_error_details_are_not_exposed_or_logged(self):
         snapshot = self._snapshot(receipt_requested=True)
         secret_error = signing.BadSignature(
-            "本文canary 表示名canary U0123456789abcdef "
-            "receipt-capability-canary"
+            "本文canary 表示名canary U0123456789abcdef receipt-capability-canary"
         )
 
         with patch.object(
@@ -349,16 +326,10 @@ class ConfirmationServiceTests(SimpleTestCase):
                 "snapshot": {
                     "owner": {"slot": 7},
                     "owner_identity": {
-                        "public_id": UUID(
-                            "11111111-1111-4111-8111-111111111111"
-                        ),
+                        "public_id": UUID("11111111-1111-4111-8111-111111111111"),
                     },
-                    "channel_public_id": UUID(
-                        "22222222-2222-4222-8222-222222222222"
-                    ),
-                    "recipient_public_id": UUID(
-                        "33333333-3333-4333-8333-333333333333"
-                    ),
+                    "channel_public_id": UUID("22222222-2222-4222-8222-222222222222"),
+                    "recipient_public_id": UUID("33333333-3333-4333-8333-333333333333"),
                     "target_revision": {"digest": "a" * 64},
                     "message_fingerprint": message.fingerprint,
                     "receipt_requested": True,
@@ -410,9 +381,7 @@ class ConfirmationServiceTests(SimpleTestCase):
             "U0123456789abcdef",
             "receipt-capability-canary",
         )
-        sensitive_payload = self.service.decode_for_test(
-            self.service.issue(snapshot).token
-        )
+        sensitive_payload = self.service.decode_for_test(self.service.issue(snapshot).token)
         sensitive_payload.update(
             {
                 "subject": sensitive_values[0],
@@ -443,19 +412,11 @@ class ConfirmationServiceTests(SimpleTestCase):
     def _snapshot(self, *, receipt_requested: bool) -> ConfirmationSnapshot:
         return ConfirmationSnapshot(
             owner=OwnerPrincipal(7),
-            owner_identity=OwnerIdentitySnapshot(
-                UUID("11111111-1111-4111-8111-111111111111")
-            ),
-            channel_public_id=UUID(
-                "22222222-2222-4222-8222-222222222222"
-            ),
-            recipient_public_id=UUID(
-                "33333333-3333-4333-8333-333333333333"
-            ),
+            owner_identity=OwnerIdentitySnapshot(UUID("11111111-1111-4111-8111-111111111111")),
+            channel_public_id=UUID("22222222-2222-4222-8222-222222222222"),
+            recipient_public_id=UUID("33333333-3333-4333-8333-333333333333"),
             target_revision=TargetRevision("a" * 64),
             message_fingerprint="b" * 64,
             receipt_requested=receipt_requested,
-            receipt_expires_at=self.service.receipt_expires_at(
-                receipt_requested
-            ),
+            receipt_expires_at=self.service.receipt_expires_at(receipt_requested),
         )

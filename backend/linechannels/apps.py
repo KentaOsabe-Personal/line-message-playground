@@ -15,6 +15,4 @@ class LineChannelsConfig(AppConfig):
         try:
             load_credential_keyring()
         except CredentialKeyringConfigurationError:
-            raise ImproperlyConfigured(
-                "line channel credential configuration is invalid"
-            ) from None
+            raise ImproperlyConfigured("line channel credential configuration is invalid") from None

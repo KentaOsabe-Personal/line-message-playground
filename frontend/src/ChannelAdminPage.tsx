@@ -26,7 +26,9 @@ export default function ChannelAdminPage({ api, onSessionInvalid }: ChannelAdmin
       <ChannelAdminConsole
         api={api}
         onSessionInvalid={onSessionInvalid}
-        onNavigateRichMenu={(channelId) => navigate(richMenuPath(channelId))}
+        onNavigateRichMenu={(channelId) => {
+          void navigate(richMenuPath(channelId))
+        }}
       />
     </PageFrame>
   )

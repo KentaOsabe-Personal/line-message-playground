@@ -58,11 +58,14 @@ class AdminChannelProjectionRepositoryTests(TestCase):
         create_channel(provider_id="999999")
         broken, _ = create_channel(credentials=False)
 
-        with patch.object(
-            LineChannelCredential,
-            "from_db",
-            side_effect=AssertionError("credential row must not materialize"),
-        ), CaptureQueriesContext(connection) as queries:
+        with (
+            patch.object(
+                LineChannelCredential,
+                "from_db",
+                side_effect=AssertionError("credential row must not materialize"),
+            ),
+            CaptureQueriesContext(connection) as queries,
+        ):
             result = self.repository.list_for_owner_provider("000123")
 
         self.assertEqual(len(queries), 1)
@@ -78,9 +81,7 @@ class AdminChannelProjectionRepositoryTests(TestCase):
         self.assertEqual(projected.provider_id, "000123")
         self.assertFalse(projected.is_active)
         self.assertEqual(projected.credentials_state, "configured")
-        self.assertEqual(
-            projected.credentials_updated_at, same_credential.updated_at
-        )
+        self.assertEqual(projected.credentials_updated_at, same_credential.updated_at)
         self.assertEqual(projected.created_at, same.created_at)
         self.assertEqual(projected.updated_at, same.updated_at)
         self.assertEqual(by_id[broken.public_id].credentials_state, "repair_required")
@@ -130,13 +131,9 @@ class AdminChannelProjectionRepositoryTests(TestCase):
             self.repository.get_for_owner_provider(legacy.public_id, "000123").public_id,
             legacy.public_id,
         )
-        self.assertIsNone(
-            self.repository.get_for_owner_provider(other.public_id, "000123")
-        )
+        self.assertIsNone(self.repository.get_for_owner_provider(other.public_id, "000123"))
         self.assertIsNone(self.repository.get_for_owner_provider(uuid4(), "000123"))
-        self.assertIsNone(
-            self.repository.get_for_owner_provider(deleted_id, "000123")
-        )
+        self.assertIsNone(self.repository.get_for_owner_provider(deleted_id, "000123"))
 
 
 class AdminConnectionSnapshotRepositoryTests(TestCase):
@@ -150,9 +147,7 @@ class AdminConnectionSnapshotRepositoryTests(TestCase):
         channel, _ = create_channel(active=False)
 
         with CaptureQueriesContext(connection) as queries:
-            snapshot = self.repository.get_connection_snapshot(
-                channel.public_id, "000123"
-            )
+            snapshot = self.repository.get_connection_snapshot(channel.public_id, "000123")
 
         channel.refresh_from_db()
         self.assertEqual(len(queries), 1)
@@ -173,9 +168,7 @@ class AdminConnectionSnapshotRepositoryTests(TestCase):
         corrupt, _ = create_channel()
         other, _ = create_channel(provider_id="999999")
 
-        missing_result = self.repository.get_connection_snapshot(
-            missing.public_id, "000123"
-        )
+        missing_result = self.repository.get_connection_snapshot(missing.public_id, "000123")
         corrupt_result = DjangoAdminChannelRepository(
             RecordingCipher(unreadable=True)
         ).get_connection_snapshot(corrupt.public_id, "000123")
@@ -194,8 +187,9 @@ class AdminConnectionSnapshotRepositoryTests(TestCase):
             (OperationalError(1205, "raw-canary"), "storage_retryable"),
             (DatabaseError("raw-canary"), "storage_unavailable"),
         ):
-            with self.subTest(expected=expected), patch.object(
-                QuerySet, "first", side_effect=error
+            with (
+                self.subTest(expected=expected),
+                patch.object(QuerySet, "first", side_effect=error),
             ):
                 result = self.repository.get_connection_snapshot(uuid4(), "000123")
             self.assertEqual(result.code, expected)
@@ -211,20 +205,14 @@ class AdminConnectionRevisionRepositoryTests(TransactionTestCase):
         repository = DjangoAdminChannelRepository(RecordingCipher())
 
         with self.assertRaises(RepositoryProgrammingError):
-            repository.lock_connection_revision(
-                channel.public_id, "000123", channel.updated_at
-            )
+            repository.lock_connection_revision(channel.public_id, "000123", channel.updated_at)
         with transaction.atomic(), self.assertRaises(RepositoryProgrammingError):
-            repository.lock_connection_revision(
-                channel.public_id, "000123", datetime.now()
-            )
+            repository.lock_connection_revision(channel.public_id, "000123", datetime.now())
         with transaction.atomic():
             hidden = repository.lock_connection_revision(
                 other.public_id, "000123", other.updated_at
             )
-            absent = repository.lock_connection_revision(
-                uuid4(), "000123", timezone.now()
-            )
+            absent = repository.lock_connection_revision(uuid4(), "000123", timezone.now())
         self.assertEqual(hidden.code, "channel_not_found")
         self.assertEqual(absent.code, "channel_not_found")
 
@@ -258,12 +246,12 @@ class AdminConnectionRevisionRepositoryTests(TransactionTestCase):
             (OperationalError(1213, "raw-canary"), "storage_retryable"),
             (DatabaseError("raw-canary"), "storage_unavailable"),
         ):
-            with self.subTest(expected=expected), transaction.atomic(), patch.object(
-                QuerySet, "first", side_effect=error
+            with (
+                self.subTest(expected=expected),
+                transaction.atomic(),
+                patch.object(QuerySet, "first", side_effect=error),
             ):
-                result = repository.lock_connection_revision(
-                    uuid4(), "000123", timezone.now()
-                )
+                result = repository.lock_connection_revision(uuid4(), "000123", timezone.now())
             self.assertEqual(result.code, expected)
             self.assertNotIn("raw-canary", repr(result))
 
@@ -301,9 +289,7 @@ class AdminDeleteRepositoryTests(TransactionTestCase):
 
         self.assertEqual(deleted, (target.public_id, target.label))
         self.assertFalse(LineChannel.objects.filter(public_id=target.public_id).exists())
-        self.assertFalse(
-            LineChannelCredential.objects.filter(line_channel_id=target.pk).exists()
-        )
+        self.assertFalse(LineChannelCredential.objects.filter(line_channel_id=target.pk).exists())
         self.assertTrue(LineChannel.objects.filter(public_id=survivor.public_id).exists())
 
     # テストケース: 資格情報削除後にchannel削除のstorage失敗が起きる
@@ -318,14 +304,13 @@ class AdminDeleteRepositoryTests(TransactionTestCase):
                 raise DatabaseError("raw-canary")
             return original_delete(queryset)
 
-        with self.assertRaises(PersistenceError), patch.object(
-            QuerySet, "delete", fail_channel_delete
+        with (
+            self.assertRaises(PersistenceError),
+            patch.object(QuerySet, "delete", fail_channel_delete),
         ):
             with transaction.atomic():
                 locked = repository.lock_for_delete(target.public_id, "000123")
                 repository.delete_locked(locked)
 
         self.assertTrue(LineChannel.objects.filter(public_id=target.public_id).exists())
-        self.assertTrue(
-            LineChannelCredential.objects.filter(line_channel_id=target.pk).exists()
-        )
+        self.assertTrue(LineChannelCredential.objects.filter(line_channel_id=target.pk).exists())

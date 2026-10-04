@@ -2,14 +2,13 @@ from uuid import uuid4
 
 from django.test import SimpleTestCase
 
-from linewebhooks.types import FrozenJsonObject, VerifiedWebhookEvent
-
 from linefriendships.parsing import DefaultFriendshipEventParser
 from linefriendships.types import (
     InvalidFriendshipEvent,
     OutOfScopeSource,
     ValidatedFriendshipEvent,
 )
+from linewebhooks.types import FrozenJsonObject, VerifiedWebhookEvent
 
 
 class FriendshipEventParserTests(SimpleTestCase):
@@ -82,9 +81,7 @@ class FriendshipEventParserTests(SimpleTestCase):
     def test_classifies_group_and_room_as_out_of_scope(self):
         for source_type in ("group", "room"):
             with self.subTest(source_type=source_type):
-                result = self.parser.parse(
-                    self.event(data={"source": {"type": source_type}})
-                )
+                result = self.parser.parse(self.event(data={"source": {"type": source_type}}))
                 self.assertEqual(result, OutOfScopeSource())
 
     # テストケース: source/userIdの欠落・不正値・未知sourceを解釈する

@@ -9,7 +9,10 @@ export interface AuthApiClient {
 }
 
 export class AuthApiError extends Error {
-  constructor(public readonly error: SafeApiError, public readonly httpStatus?: number) {
+  constructor(
+    public readonly error: SafeApiError,
+    public readonly httpStatus?: number,
+  ) {
     super(error.summary)
     this.name = 'AuthApiError'
   }
@@ -20,7 +23,10 @@ async function parseResponse(response: Response): Promise<SessionStatus> {
   try {
     payload = await response.json()
   } catch {
-    throw new AuthApiError({ code: 'protocol_error', summary: '応答形式を確認できません。' }, response.status)
+    throw new AuthApiError(
+      { code: 'protocol_error', summary: '応答形式を確認できません。' },
+      response.status,
+    )
   }
 
   if (!response.ok) {
@@ -34,12 +40,17 @@ async function parseResponse(response: Response): Promise<SessionStatus> {
 
 export function createAuthApiClient(http: ProtectedHttpClient): AuthApiClient {
   return Object.freeze({
-    bootstrap: async () => parseResponse(await http.request({ path: '/api/account/session/', method: 'GET' })),
-    login: async (idToken: string) => parseResponse(await http.request({
-      path: '/api/account/session/line/',
-      method: 'POST',
-      body: { idToken },
-    })),
-    logout: async () => parseResponse(await http.request({ path: '/api/account/session/', method: 'DELETE' })),
+    bootstrap: async () =>
+      parseResponse(await http.request({ path: '/api/account/session/', method: 'GET' })),
+    login: async (idToken: string) =>
+      parseResponse(
+        await http.request({
+          path: '/api/account/session/line/',
+          method: 'POST',
+          body: { idToken },
+        }),
+      ),
+    logout: async () =>
+      parseResponse(await http.request({ path: '/api/account/session/', method: 'DELETE' })),
   })
 }

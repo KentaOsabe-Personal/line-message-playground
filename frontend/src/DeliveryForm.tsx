@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 
-import {
-  createLinkedDeliveryApiClient,
-  DeliveryApiError,
-} from './deliveryApi'
-import type {
-  LinkedDeliveryApiClient,
-} from './deliveryApi'
+import { createLinkedDeliveryApiClient, DeliveryApiError } from './deliveryApi'
+import type { LinkedDeliveryApiClient } from './deliveryApi'
 import type {
   DeliveryChannelChoice,
   DeliveryRecipientChoice,
@@ -14,18 +9,13 @@ import type {
   ReceiptState,
   SafeError,
 } from './deliveryDto'
-import {
-  initialLinkedDeliveryState,
-  transitionLinkedDelivery,
-} from './deliveryState'
+import { initialLinkedDeliveryState, transitionLinkedDelivery } from './deliveryState'
 import { createProtectedHttpClient } from './httpApi'
 import { createOwnerSessionStorage } from './ownerSessionStorage'
 import type { OwnerSessionStorage } from './ownerSessionStorage'
 
 type LoadState<T> =
-  | { status: 'loading' }
-  | { status: 'loaded'; items: T[] }
-  | { status: 'error'; error: SafeError }
+  { status: 'loading' } | { status: 'loaded'; items: T[] } | { status: 'error'; error: SafeError }
 
 type Props = {
   linkedClient?: LinkedDeliveryApiClient
@@ -52,9 +42,7 @@ const friendshipLabel = (choice: DeliveryRecipientChoice): string => {
 }
 
 const normalizeError = (error: unknown, summary: string): SafeError =>
-  error instanceof DeliveryApiError
-    ? error.error
-    : { code: 'unexpected', summary }
+  error instanceof DeliveryApiError ? error.error : { code: 'unexpected', summary }
 
 const linkedFriendshipLabel = (state: 'friend' | 'not_friend' | 'unknown'): string => {
   if (state === 'friend') return '友だち'
@@ -88,7 +76,8 @@ function ReceiptSummary({ receipt }: { receipt: ReceiptState }) {
       )}
       {receipt.confirmedAt !== null && (
         <span>
-          確認日時: <time dateTime={receipt.confirmedAt}>{formatDateTime(receipt.confirmedAt)}</time>
+          確認日時:{' '}
+          <time dateTime={receipt.confirmedAt}>{formatDateTime(receipt.confirmedAt)}</time>
         </span>
       )}
     </div>
@@ -98,8 +87,14 @@ function ReceiptSummary({ receipt }: { receipt: ReceiptState }) {
 function DeliverySnapshotSummary({ result }: { result: LinkedDeliveryStatus }) {
   return (
     <dl className="target-summary">
-      <div><dt>配信元</dt><dd>{result.snapshot.channelLabel}</dd></div>
-      <div><dt>対象状態</dt><dd>{linkedFriendshipLabel(result.snapshot.friendshipState)}</dd></div>
+      <div>
+        <dt>配信元</dt>
+        <dd>{result.snapshot.channelLabel}</dd>
+      </div>
+      <div>
+        <dt>対象状態</dt>
+        <dd>{linkedFriendshipLabel(result.snapshot.friendshipState)}</dd>
+      </div>
     </dl>
   )
 }
@@ -111,17 +106,22 @@ function LinkedDeliveryForm({
   ownerSessionStorage: suppliedOwnerSessionStorage,
 }: Props) {
   const deliveryClient = useMemo(
-    () => linkedClient ?? createLinkedDeliveryApiClient(createProtectedHttpClient({
-      onSessionInvalid,
-    })),
+    () =>
+      linkedClient ??
+      createLinkedDeliveryApiClient(
+        createProtectedHttpClient({
+          onSessionInvalid,
+        }),
+      ),
     [linkedClient, onSessionInvalid],
   )
-  const [state, dispatch] = useReducer(
-    transitionLinkedDelivery,
-    initialLinkedDeliveryState,
+  const [state, dispatch] = useReducer(transitionLinkedDelivery, initialLinkedDeliveryState)
+  const [ownerSessionStorage] = useState(
+    () => suppliedOwnerSessionStorage ?? createOwnerSessionStorage(),
   )
-  const [ownerSessionStorage] = useState(() => suppliedOwnerSessionStorage ?? createOwnerSessionStorage())
-  const [storedOperationId, setStoredOperationId] = useState(() => ownerSessionStorage.readDeliveryOperationId())
+  const [storedOperationId, setStoredOperationId] = useState(() =>
+    ownerSessionStorage.readDeliveryOperationId(),
+  )
   const [resumeMessage, setResumeMessage] = useState<string | null>(null)
   const [channels, setChannels] = useState<LoadState<DeliveryChannelChoice>>({
     status: 'loading',
@@ -139,11 +139,14 @@ function LinkedDeliveryForm({
   const statusControllers = useRef(new Set<AbortController>())
   const selectedChannelId = state.input.channelId
 
-  useEffect(() => () => {
-    lifetime.current += 1
-    statusControllers.current.forEach((controller) => controller.abort())
-    statusControllers.current.clear()
-  }, [])
+  useEffect(
+    () => () => {
+      lifetime.current += 1
+      statusControllers.current.forEach((controller) => controller.abort())
+      statusControllers.current.clear()
+    },
+    [],
+  )
 
   useEffect(() => {
     if (storedOperationId !== null) return
@@ -175,7 +178,10 @@ function LinkedDeliveryForm({
     let active = true
     if (selectedChannelId === null) {
       setRecipients({ status: 'loaded', items: [] })
-      return () => { active = false; controller.abort() }
+      return () => {
+        active = false
+        controller.abort()
+      }
     }
     setRecipients({ status: 'loading' })
     void deliveryClient.listRecipients(selectedChannelId, { signal: controller.signal }).then(
@@ -201,41 +207,48 @@ function LinkedDeliveryForm({
     if (storedOperationId === null) return
     const operationId = storedOperationId
     const controller = new AbortController()
-    statusControllers.current.add(controller)
+    const controllers = statusControllers.current
+    controllers.add(controller)
     const operationLifetime = lifetime.current
     dispatch({ type: 'hydrateStarted', operationId })
     setStatusError(null)
-    void deliveryClient.checkStatus(operationId, { signal: controller.signal }).then((result) => {
-      if (controller.signal.aborted || lifetime.current !== operationLifetime) return
-      dispatch({ type: 'deliveryUpdated', result })
-    }).catch((error: unknown) => {
-      if (controller.signal.aborted || lifetime.current !== operationLifetime) return
-      if (error instanceof DeliveryApiError && error.httpStatus === 401) {
-        if (linkedClient !== undefined) onSessionInvalid?.()
-        return
-      }
-      if (error instanceof DeliveryApiError && error.httpStatus === 404) {
-        ownerSessionStorage.clearDeliveryOperationId()
-        setStoredOperationId(null)
-        setResumeMessage('以前の配信状態を確認できませんでした。新しい配信を開始できます。')
-        dispatch({ type: 'hydrateMissing' })
-        return
-      }
-      setStatusError(normalizeError(error, '配信状態を確認できませんでした。'))
-      dispatch({ type: 'networkFailed' })
-    }).finally(() => {
-      statusControllers.current.delete(controller)
-    })
+    void deliveryClient
+      .checkStatus(operationId, { signal: controller.signal })
+      .then((result) => {
+        if (controller.signal.aborted || lifetime.current !== operationLifetime) return
+        dispatch({ type: 'deliveryUpdated', result })
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || lifetime.current !== operationLifetime) return
+        if (error instanceof DeliveryApiError && error.httpStatus === 401) {
+          if (linkedClient !== undefined) onSessionInvalid?.()
+          return
+        }
+        if (error instanceof DeliveryApiError && error.httpStatus === 404) {
+          ownerSessionStorage.clearDeliveryOperationId()
+          setStoredOperationId(null)
+          setResumeMessage('以前の配信状態を確認できませんでした。新しい配信を開始できます。')
+          dispatch({ type: 'hydrateMissing' })
+          return
+        }
+        setStatusError(normalizeError(error, '配信状態を確認できませんでした。'))
+        dispatch({ type: 'networkFailed' })
+      })
+      .finally(() => {
+        controllers.delete(controller)
+      })
     return () => {
       controller.abort()
-      statusControllers.current.delete(controller)
+      controllers.delete(controller)
     }
   }, [deliveryClient, linkedClient, onSessionInvalid, ownerSessionStorage, storedOperationId])
 
-  const selectedRecipient = recipients.status === 'loaded'
-    ? recipients.items.find((choice) =>
-        choice.recipientId === state.input.recipientId && choice.deliveryAvailable)
-    : undefined
+  const selectedRecipient =
+    recipients.status === 'loaded'
+      ? recipients.items.find(
+          (choice) => choice.recipientId === state.input.recipientId && choice.deliveryAvailable,
+        )
+      : undefined
   const canPreview =
     state.phase === 'editing' &&
     selectedRecipient !== undefined &&
@@ -274,10 +287,7 @@ function LinkedDeliveryForm({
   }
 
   const submit = async () => {
-    if (
-      state.phase !== 'preview' ||
-      submitInFlight.current
-    ) return
+    if (state.phase !== 'preview' || submitInFlight.current) return
     submitInFlight.current = true
     setStatusError(null)
     const operationId = createOperationId()
@@ -311,10 +321,12 @@ function LinkedDeliveryForm({
       state.phase !== 'unknown' &&
       state.phase !== 'succeeded' &&
       state.phase !== 'uncertain'
-    ) return
+    )
+      return
     const operationId = state.operationId
     const controller = new AbortController()
-    statusControllers.current.add(controller)
+    const controllers = statusControllers.current
+    controllers.add(controller)
     const operationLifetime = lifetime.current
     setStatusError(null)
     dispatch({ type: 'checkStarted' })
@@ -358,149 +370,182 @@ function LinkedDeliveryForm({
           <p>送信前に対象と内容を確認できます。確認画面を経ずに送信されることはありません。</p>
         </div>
       </div>
-      {resumeMessage !== null && <p className="notice" role="status">{resumeMessage}</p>}
+      {resumeMessage !== null && (
+        <p className="notice" role="status">
+          {resumeMessage}
+        </p>
+      )}
 
       {editing && (
-        <form className="delivery-form" onSubmit={(event) => { event.preventDefault(); void preview() }}>
+        <form
+          className="delivery-form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void preview()
+          }}
+        >
           <div className="delivery-target-grid">
-          <fieldset className="target-group">
-            <legend>配信元チャネル</legend>
-            {channels.status === 'loading' && (
-              <p role="status" aria-live="polite">チャネルを読み込んでいます…</p>
-            )}
-            {channels.status === 'error' && (
-              <div className="notice error" role="alert">
-                <p>{channels.error.summary}</p>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => setChannelLoadVersion((version) => version + 1)}
-                >
-                  チャネルを再読み込み
-                </button>
-              </div>
-            )}
-            {channels.status === 'loaded' && channels.items.length === 0 && (
-              <p className="notice" role="status">登録済みチャネルがありません。</p>
-            )}
-            {channels.status === 'loaded' && channels.items.length > 0 && (
-              <ul className="target-options">
-                {channels.items.map((choice) => (
-                  <li
-                    key={choice.channelId}
-                    className={choice.deliveryAvailable ? 'target-option' : 'target-option unavailable'}
-                  >
-                    <label>
-                      <input
-                        type="radio"
-                        name="channelId"
-                        value={choice.channelId}
-                        checked={state.input.channelId === choice.channelId}
-                        disabled={!choice.deliveryAvailable}
-                        onChange={() => dispatch({
-                          type: 'channelChanged',
-                          channelId: choice.channelId,
-                        })}
-                      />
-                      <span>
-                        <strong>{choice.label}</strong>
-                        <small>{choice.active ? '有効' : '無効'}</small>
-                        {channelReason(choice) !== null && (
-                          <small className="target-unavailable">{channelReason(choice)}</small>
-                        )}
-                      </span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </fieldset>
-
-          <fieldset className="target-group" disabled={selectedChannelId === null}>
-            <legend>配信先recipient</legend>
-            {selectedChannelId === null && (
-              <p className="notice">先に配信元チャネルを選択してください。</p>
-            )}
-            {selectedChannelId !== null && recipients.status === 'loading' && (
-              <p role="status" aria-live="polite">recipientを読み込んでいます…</p>
-            )}
-            {selectedChannelId !== null && recipients.status === 'error' && (
-              <div className="notice error" role="alert">
-                <p>{recipients.error.summary}</p>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => setRecipientLoadVersion((version) => version + 1)}
-                >
-                  recipientを再読み込み
-                </button>
-              </div>
-            )}
-            {selectedChannelId !== null &&
-              recipients.status === 'loaded' &&
-              recipients.items.length === 0 && (
-                <p className="notice" role="status">
-                  登録済みrecipientがありません。登録または状態確認が必要です。
+            <fieldset className="target-group">
+              <legend>配信元チャネル</legend>
+              {channels.status === 'loading' && (
+                <p role="status" aria-live="polite">
+                  チャネルを読み込んでいます…
                 </p>
               )}
-            {selectedChannelId !== null &&
-              recipients.status === 'loaded' &&
-              recipients.items.length > 0 && (
-                <>
-                  <ul className="target-options">
-                    {recipients.items.map((choice) => (
-                      <li
-                        key={choice.recipientId}
-                        className={choice.deliveryAvailable ? 'target-option' : 'target-option unavailable'}
-                      >
-                        <label>
-                          <input
-                            type="radio"
-                            name="recipientId"
-                            value={choice.recipientId}
-                            checked={state.input.recipientId === choice.recipientId}
-                            disabled={!choice.deliveryAvailable}
-                            onChange={() => dispatch({
-                              type: 'recipientChanged',
-                              recipientId: choice.recipientId,
-                            })}
-                          />
-                          <span>
-                            <strong>{choice.displayName}</strong>
-                            <small>{friendshipLabel(choice)}</small>
-                            {!choice.enabled && <small>無効</small>}
-                            {recipientReason(choice) !== null && (
-                              <small className="target-unavailable">{recipientReason(choice)}</small>
-                            )}
-                          </span>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                  {!recipients.items.some((choice) => choice.deliveryAvailable) && (
-                    <p className="notice error" role="status">
-                      配信可能なrecipientがありません。登録または状態確認が必要です。
-                    </p>
-                  )}
-                </>
+              {channels.status === 'error' && (
+                <div className="notice error" role="alert">
+                  <p>{channels.error.summary}</p>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setChannelLoadVersion((version) => version + 1)}
+                  >
+                    チャネルを再読み込み
+                  </button>
+                </div>
               )}
-          </fieldset>
+              {channels.status === 'loaded' && channels.items.length === 0 && (
+                <p className="notice" role="status">
+                  登録済みチャネルがありません。
+                </p>
+              )}
+              {channels.status === 'loaded' && channels.items.length > 0 && (
+                <ul className="target-options">
+                  {channels.items.map((choice) => (
+                    <li
+                      key={choice.channelId}
+                      className={
+                        choice.deliveryAvailable ? 'target-option' : 'target-option unavailable'
+                      }
+                    >
+                      <label>
+                        <input
+                          type="radio"
+                          name="channelId"
+                          value={choice.channelId}
+                          checked={state.input.channelId === choice.channelId}
+                          disabled={!choice.deliveryAvailable}
+                          onChange={() =>
+                            dispatch({
+                              type: 'channelChanged',
+                              channelId: choice.channelId,
+                            })
+                          }
+                        />
+                        <span>
+                          <strong>{choice.label}</strong>
+                          <small>{choice.active ? '有効' : '無効'}</small>
+                          {channelReason(choice) !== null && (
+                            <small className="target-unavailable">{channelReason(choice)}</small>
+                          )}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </fieldset>
+
+            <fieldset className="target-group" disabled={selectedChannelId === null}>
+              <legend>配信先recipient</legend>
+              {selectedChannelId === null && (
+                <p className="notice">先に配信元チャネルを選択してください。</p>
+              )}
+              {selectedChannelId !== null && recipients.status === 'loading' && (
+                <p role="status" aria-live="polite">
+                  recipientを読み込んでいます…
+                </p>
+              )}
+              {selectedChannelId !== null && recipients.status === 'error' && (
+                <div className="notice error" role="alert">
+                  <p>{recipients.error.summary}</p>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setRecipientLoadVersion((version) => version + 1)}
+                  >
+                    recipientを再読み込み
+                  </button>
+                </div>
+              )}
+              {selectedChannelId !== null &&
+                recipients.status === 'loaded' &&
+                recipients.items.length === 0 && (
+                  <p className="notice" role="status">
+                    登録済みrecipientがありません。登録または状態確認が必要です。
+                  </p>
+                )}
+              {selectedChannelId !== null &&
+                recipients.status === 'loaded' &&
+                recipients.items.length > 0 && (
+                  <>
+                    <ul className="target-options">
+                      {recipients.items.map((choice) => (
+                        <li
+                          key={choice.recipientId}
+                          className={
+                            choice.deliveryAvailable ? 'target-option' : 'target-option unavailable'
+                          }
+                        >
+                          <label>
+                            <input
+                              type="radio"
+                              name="recipientId"
+                              value={choice.recipientId}
+                              checked={state.input.recipientId === choice.recipientId}
+                              disabled={!choice.deliveryAvailable}
+                              onChange={() =>
+                                dispatch({
+                                  type: 'recipientChanged',
+                                  recipientId: choice.recipientId,
+                                })
+                              }
+                            />
+                            <span>
+                              <strong>{choice.displayName}</strong>
+                              <small>{friendshipLabel(choice)}</small>
+                              {!choice.enabled && <small>無効</small>}
+                              {recipientReason(choice) !== null && (
+                                <small className="target-unavailable">
+                                  {recipientReason(choice)}
+                                </small>
+                              )}
+                            </span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                    {!recipients.items.some((choice) => choice.deliveryAvailable) && (
+                      <p className="notice error" role="status">
+                        配信可能なrecipientがありません。登録または状態確認が必要です。
+                      </p>
+                    )}
+                  </>
+                )}
+            </fieldset>
           </div>
 
           <section className="delivery-compose-card" aria-labelledby="delivery-compose-title">
             <div className="compose-heading">
-              <span className="step-number" aria-hidden="true">2</span>
-              <div><p className="eyebrow">MESSAGE</p><h3 id="delivery-compose-title">メッセージを作成</h3></div>
+              <span className="step-number" aria-hidden="true">
+                2
+              </span>
+              <div>
+                <p className="eyebrow">MESSAGE</p>
+                <h3 id="delivery-compose-title">メッセージを作成</h3>
+              </div>
             </div>
             <label className="field-label">
               件名
               <input
                 name="subject"
                 value={state.input.subject}
-                onChange={(event) => dispatch({
-                  type: 'subjectChanged',
-                  subject: event.target.value,
-                })}
+                onChange={(event) =>
+                  dispatch({
+                    type: 'subjectChanged',
+                    subject: event.target.value,
+                  })
+                }
                 aria-invalid={Boolean(state.phase === 'editing' && state.errors.subject)}
               />
             </label>
@@ -513,10 +558,12 @@ function LinkedDeliveryForm({
                 name="body"
                 rows={7}
                 value={state.input.body}
-                onChange={(event) => dispatch({
-                  type: 'bodyChanged',
-                  body: event.target.value,
-                })}
+                onChange={(event) =>
+                  dispatch({
+                    type: 'bodyChanged',
+                    body: event.target.value,
+                  })
+                }
                 aria-invalid={Boolean(state.phase === 'editing' && state.errors.body)}
               />
             </label>
@@ -528,15 +575,22 @@ function LinkedDeliveryForm({
                 type="checkbox"
                 name="receiptRequested"
                 checked={state.input.receiptRequested}
-                onChange={(event) => dispatch({
-                  type: 'receiptChanged',
-                  receiptRequested: event.target.checked,
-                })}
+                onChange={(event) =>
+                  dispatch({
+                    type: 'receiptChanged',
+                    receiptRequested: event.target.checked,
+                  })
+                }
               />
-              <span><strong>受け取り確認を付ける</strong><small>リンクを開いたか確認できる仕組みを本文に追加します。</small></span>
+              <span>
+                <strong>受け取り確認を付ける</strong>
+                <small>リンクを開いたか確認できる仕組みを本文に追加します。</small>
+              </span>
             </label>
             {state.phase === 'editing' && state.errors.message && (
-              <p className="notice error" role="alert">{state.errors.message}</p>
+              <p className="notice error" role="alert">
+                {state.errors.message}
+              </p>
             )}
             <div className="compose-submit">
               <p>次の画面で送信対象と本文を最終確認します。</p>
@@ -552,18 +606,30 @@ function LinkedDeliveryForm({
         <div className="panel preview-panel">
           <h3>実際に送信する内容</h3>
           <dl className="target-summary">
-            <div><dt>配信元</dt><dd>{state.preview.channelLabel}</dd></div>
-            <div><dt>配信先</dt><dd>{state.preview.recipientDisplayName}</dd></div>
-            <div><dt>対象状態</dt><dd>{linkedFriendshipLabel(state.preview.friendshipState)}</dd></div>
+            <div>
+              <dt>配信元</dt>
+              <dd>{state.preview.channelLabel}</dd>
+            </div>
+            <div>
+              <dt>配信先</dt>
+              <dd>{state.preview.recipientDisplayName}</dd>
+            </div>
+            <div>
+              <dt>対象状態</dt>
+              <dd>{linkedFriendshipLabel(state.preview.friendshipState)}</dd>
+            </div>
             <div>
               <dt>受取確認</dt>
               <dd>
                 {state.preview.receiptRequested ? '受取確認あり' : '受取確認なし'}
                 {state.preview.receiptExpiresAt !== null && (
                   <>
-                    {' '}（期限: <time dateTime={state.preview.receiptExpiresAt}>
+                    {' '}
+                    （期限:{' '}
+                    <time dateTime={state.preview.receiptExpiresAt}>
                       {formatDateTime(state.preview.receiptExpiresAt)}
-                    </time>）
+                    </time>
+                    ）
                   </>
                 )}
               </dd>
@@ -588,14 +654,18 @@ function LinkedDeliveryForm({
       {state.phase === 'submitting' && (
         <div className="panel progress" role="status" aria-live="polite">
           <p>LINEへ送信中です…</p>
-          <button type="button" disabled>処理中</button>
+          <button type="button" disabled>
+            処理中
+          </button>
         </div>
       )}
 
       {state.phase === 'checking' && (
         <div className="panel progress" role="status" aria-live="polite">
           <p>配信状態を確認中です…</p>
-          <button type="button" disabled>処理中</button>
+          <button type="button" disabled>
+            処理中
+          </button>
         </div>
       )}
 
@@ -605,8 +675,14 @@ function LinkedDeliveryForm({
           <p>送信操作は受け付けられました。結果が確定するまで再送しないでください。</p>
           <DeliverySnapshotSummary result={state.result} />
           <ReceiptSummary receipt={state.result.receipt} />
-          {statusError !== null && <p className="notice error" role="alert">{statusError.summary}</p>}
-          <button type="button" onClick={() => void checkStatus()}>状態を再確認</button>
+          {statusError !== null && (
+            <p className="notice error" role="alert">
+              {statusError.summary}
+            </p>
+          )}
+          <button type="button" onClick={() => void checkStatus()}>
+            状態を再確認
+          </button>
         </div>
       )}
 
@@ -614,13 +690,24 @@ function LinkedDeliveryForm({
         <div className="panel success" aria-live="polite">
           <h3>LINEに受け付けられました</h3>
           <p>これはLINEによる受付結果です。recipientによる受取確認とは別の状態です。</p>
-          <div className="delivery-status-line"><strong>配信状態</strong><span>LINE受付済み</span></div>
+          <div className="delivery-status-line">
+            <strong>配信状態</strong>
+            <span>LINE受付済み</span>
+          </div>
           <DeliverySnapshotSummary result={state.result} />
           <ReceiptSummary receipt={state.result.receipt} />
-          {statusError !== null && <p className="notice error" role="alert">{statusError.summary}</p>}
+          {statusError !== null && (
+            <p className="notice error" role="alert">
+              {statusError.summary}
+            </p>
+          )}
           <div className="actions">
-            <button type="button" onClick={() => void checkStatus()}>状態を再確認</button>
-            <button type="button" className="secondary" onClick={startNewDelivery}>新しい配信</button>
+            <button type="button" onClick={() => void checkStatus()}>
+              状態を再確認
+            </button>
+            <button type="button" className="secondary" onClick={startNewDelivery}>
+              新しい配信
+            </button>
           </div>
         </div>
       )}
@@ -630,11 +717,20 @@ function LinkedDeliveryForm({
           <h3>送信結果を確認できません</h3>
           <p>{state.result.error.summary}</p>
           <p>成功または失敗を推測せず、この送信操作の状態だけを再確認してください。</p>
-          <div className="delivery-status-line"><strong>配信状態</strong><span>結果不明</span></div>
+          <div className="delivery-status-line">
+            <strong>配信状態</strong>
+            <span>結果不明</span>
+          </div>
           <DeliverySnapshotSummary result={state.result} />
           <ReceiptSummary receipt={state.result.receipt} />
-          {statusError !== null && <p className="notice error" role="alert">{statusError.summary}</p>}
-          <button type="button" onClick={() => void checkStatus()}>状態を再確認</button>
+          {statusError !== null && (
+            <p className="notice error" role="alert">
+              {statusError.summary}
+            </p>
+          )}
+          <button type="button" onClick={() => void checkStatus()}>
+            状態を再確認
+          </button>
         </div>
       )}
 
@@ -643,8 +739,14 @@ function LinkedDeliveryForm({
           <h3>送信結果を確認できません</h3>
           <p>{state.error.summary}</p>
           <p>同じ送信操作の状態を確認してください。自動再送は行いません。</p>
-          {statusError !== null && <p className="notice error" role="alert">{statusError.summary}</p>}
-          <button type="button" onClick={() => void checkStatus()}>状態を再確認</button>
+          {statusError !== null && (
+            <p className="notice error" role="alert">
+              {statusError.summary}
+            </p>
+          )}
+          <button type="button" onClick={() => void checkStatus()}>
+            状態を再確認
+          </button>
         </div>
       )}
 
@@ -652,10 +754,15 @@ function LinkedDeliveryForm({
         <div className="panel error" aria-live="polite">
           <h3>配信を完了できませんでした</h3>
           <p>{state.result.error.summary}</p>
-          <div className="delivery-status-line"><strong>配信状態</strong><span>失敗</span></div>
+          <div className="delivery-status-line">
+            <strong>配信状態</strong>
+            <span>失敗</span>
+          </div>
           <DeliverySnapshotSummary result={state.result} />
           <ReceiptSummary receipt={state.result.receipt} />
-          <button type="button" onClick={startNewDelivery}>新しい配信</button>
+          <button type="button" onClick={startNewDelivery}>
+            新しい配信
+          </button>
         </div>
       )}
 
@@ -664,8 +771,16 @@ function LinkedDeliveryForm({
           <h3>送信を受け付けられませんでした</h3>
           <p>{state.error.summary}</p>
           <div className="actions">
-            <button type="button" className="secondary" onClick={() => dispatch({ type: 'backToEditing' })}>入力へ戻る</button>
-            <button type="button" onClick={startNewDelivery}>新しい配信</button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => dispatch({ type: 'backToEditing' })}
+            >
+              入力へ戻る
+            </button>
+            <button type="button" onClick={startNewDelivery}>
+              新しい配信
+            </button>
           </div>
         </div>
       )}

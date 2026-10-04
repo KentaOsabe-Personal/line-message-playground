@@ -48,9 +48,7 @@ class GetPassManageLineChannelPrompts:
         if not self._input_stream.isatty():
             return ManageLineChannelInputInvalid()
         try:
-            action = self._ask(
-                "Action (register/update/enable/disable/cancel): "
-            ).lower()
+            action = self._ask("Action (register/update/enable/disable/cancel): ").lower()
             if action == "register":
                 value = self._collect_register()
             elif action == "update":
@@ -76,9 +74,7 @@ class GetPassManageLineChannelPrompts:
             return ManageLineChannelInputInvalid()
 
     def _collect_register(self) -> RegisterLineChannel:
-        channel_id = validate_messaging_api_channel_id(
-            self._ask("Messaging API channel ID: ")
-        )
+        channel_id = validate_messaging_api_channel_id(self._ask("Messaging API channel ID: "))
         provider_id = validate_provider_id(self._ask("LINE provider ID: "))
         bot_user_id = validate_bot_user_id(self._ask("Bot user ID: "))
         label = validate_label(self._ask("Operator label: "))
@@ -106,21 +102,13 @@ class GetPassManageLineChannelPrompts:
         command = UpdateLineChannel(
             channel_public_id=public_id,
             messaging_api_channel_id=(
-                validate_messaging_api_channel_id(channel_id_raw)
-                if channel_id_raw
-                else None
+                validate_messaging_api_channel_id(channel_id_raw) if channel_id_raw else None
             ),
-            bot_user_id=(
-                validate_bot_user_id(bot_user_id_raw) if bot_user_id_raw else None
-            ),
+            bot_user_id=(validate_bot_user_id(bot_user_id_raw) if bot_user_id_raw else None),
             label=validate_label(label_raw) if label_raw else None,
             credentials=self._collect_credentials() if replace else None,
-            is_active=(
-                None if state == "keep" else state == "enable"
-            ),
-            provider_id=(
-                validate_provider_id(provider_id_raw) if provider_id_raw else None
-            ),
+            is_active=(None if state == "keep" else state == "enable"),
+            provider_id=(validate_provider_id(provider_id_raw) if provider_id_raw else None),
         )
         if all(
             value is None

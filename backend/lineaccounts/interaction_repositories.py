@@ -20,10 +20,7 @@ class DjangoInteractionAccountDirectory:
         provider_id: str,
         subject: LineSubject,
     ) -> VerifiedInteractionUser | LinkedInteractionUserMissing:
-        if (
-            not isinstance(provider_id, str)
-            or not isinstance(subject, LineSubject)
-        ):
+        if not isinstance(provider_id, str) or not isinstance(subject, LineSubject):
             return LinkedInteractionUserMissing()
         row = (
             DeliveryRecipient.objects.using(self.using)

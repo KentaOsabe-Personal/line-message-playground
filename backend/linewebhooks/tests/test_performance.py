@@ -17,10 +17,7 @@ from linewebhooks.tests.support import (
 from linewebhooks.types import IngressAccepted
 from linewebhooks.views import WebhookAPIView
 
-
-PERFORMANCE_EVENT_IDS = tuple(
-    f"01ARZ3NDEKTSV4RRFFQ69G5FA{suffix}" for suffix in "23456789AB"
-)
+PERFORMANCE_EVENT_IDS = tuple(f"01ARZ3NDEKTSV4RRFFQ69G5FA{suffix}" for suffix in "23456789AB")
 EVENT_QUERY_BUDGETS = {1: 6, 5: 22, 10: 42}
 PATH_QUERY_BUDGETS = {"empty": 0, "duplicate": 7, "unsupported": 5}
 
@@ -71,22 +68,15 @@ class WebhookPerformanceIntegrationTests(TransactionTestCase):
                 self.assertLess(elapsed_ms, 2000)
                 self.assertEqual(len(handler.events), event_count)
                 self.assertEqual(
-                    [
-                        context.response_deadline_monotonic
-                        for context in handler.contexts
-                    ],
-                    [handler.contexts[0].response_deadline_monotonic]
-                    * event_count,
+                    [context.response_deadline_monotonic for context in handler.contexts],
+                    [handler.contexts[0].response_deadline_monotonic] * event_count,
                 )
                 self.assertEqual(
                     [context.dispatch_index for context in handler.contexts],
                     list(range(event_count)),
                 )
                 self.assertEqual(
-                    [
-                        context.remaining_dispatch_count
-                        for context in handler.contexts
-                    ],
+                    [context.remaining_dispatch_count for context in handler.contexts],
                     list(reversed(range(event_count))),
                 )
                 self.assertTrue(
@@ -97,9 +87,7 @@ class WebhookPerformanceIntegrationTests(TransactionTestCase):
                 )
                 self.assertEqual(WebhookEventReceipt.objects.count(), event_count)
                 query_counts[event_count] = len(queries)
-                self.assertLessEqual(
-                    len(queries), EVENT_QUERY_BUDGETS[event_count]
-                )
+                self.assertLessEqual(len(queries), EVENT_QUERY_BUDGETS[event_count])
 
         self.assertEqual(query_counts[5] - query_counts[1], 4 * (5 - 1))
         self.assertEqual(query_counts[10] - query_counts[5], 4 * (10 - 5))
@@ -114,9 +102,7 @@ class WebhookPerformanceIntegrationTests(TransactionTestCase):
             handler=handler,
             monotonic_clock=_SequenceClock(10.1, 10.2, 10.9, 11.0),
         )
-        raw_body, signature = signed_payload(
-            [event(item) for item in PERFORMANCE_EVENT_IDS]
-        )
+        raw_body, signature = signed_payload([event(item) for item in PERFORMANCE_EVENT_IDS])
 
         result = service.ingest(
             str(CHANNEL_ID),
@@ -150,10 +136,7 @@ class WebhookPerformanceIntegrationTests(TransactionTestCase):
             8,
         )
         self.assertEqual(
-            sum(
-                entry.outcome == "dispatch_deadline_exceeded"
-                for entry in audit.entries
-            ),
+            sum(entry.outcome == "dispatch_deadline_exceeded" for entry in audit.entries),
             8,
         )
 
@@ -187,17 +170,13 @@ class WebhookPerformanceIntegrationTests(TransactionTestCase):
         )
         started_at = perf_counter()
         with CaptureQueriesContext(connection) as unsupported_queries:
-            unsupported = self._post(
-                unsupported_service, unsupported_body, unsupported_signature
-            )
+            unsupported = self._post(unsupported_service, unsupported_body, unsupported_signature)
         unsupported_elapsed_ms = (perf_counter() - started_at) * 1000
 
         self.assertEqual(unsupported.status_code, 200)
         self.assertEqual(unsupported.content, b"")
         self.assertLess(unsupported_elapsed_ms, 2000)
-        self.assertLessEqual(
-            len(unsupported_queries), PATH_QUERY_BUDGETS["unsupported"]
-        )
+        self.assertLessEqual(len(unsupported_queries), PATH_QUERY_BUDGETS["unsupported"])
         self.assertEqual(handler.events, [])
 
     # テストケース: handler callback内でDB transaction状態を観測する
@@ -208,9 +187,7 @@ class WebhookPerformanceIntegrationTests(TransactionTestCase):
             callback=lambda event: atomic_states.append(connection.in_atomic_block)
         )
         service, _ = build_service(handler=handler)
-        raw_body, signature = signed_payload(
-            [event(EVENT_IDS[0]), event(EVENT_IDS[1])]
-        )
+        raw_body, signature = signed_payload([event(EVENT_IDS[0]), event(EVENT_IDS[1])])
 
         response = self._post(service, raw_body, signature)
 
@@ -220,9 +197,7 @@ class WebhookPerformanceIntegrationTests(TransactionTestCase):
     # テストケース: monotonic clock上で受付処理を2,000ms以上経過させる
     # 期待値: request結果を変えず、非負elapsed millisecondsだけを持つdeadline監査を残す
     def test_deadline_overrun_records_content_free_elapsed_audit(self) -> None:
-        service, audit = build_service(
-            monotonic_clock=_SequenceClock(10.0, 12.001)
-        )
+        service, audit = build_service(monotonic_clock=_SequenceClock(10.0, 12.001))
         raw_body, signature = signed_payload([])
 
         result = service.ingest(str(CHANNEL_ID), raw_body, signature)

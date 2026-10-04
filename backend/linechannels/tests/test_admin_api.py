@@ -18,7 +18,6 @@ from linechannels.admin_types import (
     ConnectionCheckCompleted,
 )
 
-
 NOW = datetime(2026, 8, 1, 3, 4, 5, tzinfo=timezone.utc)
 CHANNEL_ID = UUID("12345678-1234-4234-8234-123456789abc")
 
@@ -48,15 +47,26 @@ class AdminPresenterTests(SimpleTestCase):
         self.assertEqual(
             set(dto),
             {
-                "channelId", "label", "messagingApiChannelId", "botUserId",
-                "providerId", "active", "credentialsState", "credentialsUpdatedAt",
-                "createdAt", "updatedAt", "webhookUrl", "deactivationSummary",
+                "channelId",
+                "label",
+                "messagingApiChannelId",
+                "botUserId",
+                "providerId",
+                "active",
+                "credentialsState",
+                "credentialsUpdatedAt",
+                "createdAt",
+                "updatedAt",
+                "webhookUrl",
+                "deactivationSummary",
                 "richMenuRefreshRequired",
             },
         )
         self.assertIsNone(dto["deactivationSummary"])
         self.assertFalse(dto["richMenuRefreshRequired"])
-        self.assertEqual(dto["webhookUrl"], f"https://public.example.ngrok.app/api/line/webhooks/{CHANNEL_ID}/")
+        self.assertEqual(
+            dto["webhookUrl"], f"https://public.example.ngrok.app/api/line/webhooks/{CHANNEL_ID}/"
+        )
         self.assertNotIn("cipher", str(dto).lower())
         self.assertNotIn("token", str(dto).lower())
         self.assertNotIn("secret", str(dto).lower())
@@ -69,7 +79,9 @@ class AdminAPITests(APITestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.principal)
         self.service = Mock()
-        self.patch = patch("linechannels.admin_views.build_channel_admin_service", return_value=self.service)
+        self.patch = patch(
+            "linechannels.admin_views.build_channel_admin_service", return_value=self.service
+        )
         self.patch.start()
         self.addCleanup(self.patch.stop)
 
@@ -97,14 +109,27 @@ class AdminAPITests(APITestCase):
 
         listed = self.client.get("/api/line/channels/")
         detailed = self.client.get(f"/api/line/channels/{CHANNEL_ID}/")
-        created = self.unsafe("post", "/api/line/channels/", {
-            "label": "通知チャネル", "messagingApiChannelId": "1234567890",
-            "botUserId": "U" + "a" * 32, "providerId": "0012345678",
-            "accessToken": "api-token-canary", "channelSecret": "api-secret-canary", "active": True,
-        })
-        updated = self.unsafe("patch", f"/api/line/channels/{CHANNEL_ID}/", {
-            "expectedUpdatedAt": NOW.isoformat(), "label": "更新後",
-        })
+        created = self.unsafe(
+            "post",
+            "/api/line/channels/",
+            {
+                "label": "通知チャネル",
+                "messagingApiChannelId": "1234567890",
+                "botUserId": "U" + "a" * 32,
+                "providerId": "0012345678",
+                "accessToken": "api-token-canary",
+                "channelSecret": "api-secret-canary",
+                "active": True,
+            },
+        )
+        updated = self.unsafe(
+            "patch",
+            f"/api/line/channels/{CHANNEL_ID}/",
+            {
+                "expectedUpdatedAt": NOW.isoformat(),
+                "label": "更新後",
+            },
+        )
 
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(detailed.status_code, 200)
@@ -121,13 +146,29 @@ class AdminAPITests(APITestCase):
         self.service.delete.return_value = ChannelDeleteSucceeded(CHANNEL_ID, "通知チャネル")
         self.service.check_connection.return_value = ConnectionCheckCompleted("connected", NOW)
 
-        state = self.unsafe("post", f"/api/line/channels/{CHANNEL_ID}/state/", {"expectedUpdatedAt": NOW.isoformat(), "active": False})
-        deleted = self.unsafe("delete", f"/api/line/channels/{CHANNEL_ID}/", {"expectedUpdatedAt": NOW.isoformat()})
+        state = self.unsafe(
+            "post",
+            f"/api/line/channels/{CHANNEL_ID}/state/",
+            {"expectedUpdatedAt": NOW.isoformat(), "active": False},
+        )
+        deleted = self.unsafe(
+            "delete", f"/api/line/channels/{CHANNEL_ID}/", {"expectedUpdatedAt": NOW.isoformat()}
+        )
         checked = self.unsafe("post", f"/api/line/channels/{CHANNEL_ID}/connection-check/", {})
 
         self.assertEqual(state.status_code, 200)
-        self.assertEqual(deleted.json(), {"channelId": str(CHANNEL_ID), "label": "通知チャネル", "deleted": True})
-        self.assertEqual(checked.json(), {"channelId": str(CHANNEL_ID), "status": "connected", "checkedAt": NOW.isoformat().replace("+00:00", "Z"), "scope": "access_token_and_bot_identity_only"})
+        self.assertEqual(
+            deleted.json(), {"channelId": str(CHANNEL_ID), "label": "通知チャネル", "deleted": True}
+        )
+        self.assertEqual(
+            checked.json(),
+            {
+                "channelId": str(CHANNEL_ID),
+                "status": "connected",
+                "checkedAt": NOW.isoformat().replace("+00:00", "Z"),
+                "scope": "access_token_and_bot_identity_only",
+            },
+        )
 
     # テストケース: serviceの各safe failure分類をHTTP境界へ返す
     # 期待値: 固定status/codeへ一貫して写像され外部分類や秘密値を含めない
@@ -215,9 +256,7 @@ class AdminAPITests(APITestCase):
     # テストケース: 将来の未知なservice failure分類がHTTP境界へ到達する
     # 期待値: code構築例外を起こさず秘密なしのstorage_unavailableへfail closedする
     def test_unknown_service_failure_fails_closed(self):
-        self.service.get_channel.return_value = AdminServiceFailed(
-            "future_internal_failure"
-        )
+        self.service.get_channel.return_value = AdminServiceFailed("future_internal_failure")
 
         response = self.client.get(f"/api/line/channels/{CHANNEL_ID}/")
 
@@ -227,8 +266,14 @@ class AdminAPITests(APITestCase):
     # テストケース: 不正originとunknown request fieldでunsafe endpointを呼ぶ
     # 期待値: service前に403 CSRFまたは400 exact validationで拒否される
     def test_mutations_validate_origin_and_shape_before_service(self):
-        bad_origin = self.client.post("/api/line/channels/", {}, format="json", HTTP_ORIGIN="https://evil.example")
-        unknown = self.unsafe("post", f"/api/line/channels/{CHANNEL_ID}/connection-check/", {"accessToken": "leak-canary"})
+        bad_origin = self.client.post(
+            "/api/line/channels/", {}, format="json", HTTP_ORIGIN="https://evil.example"
+        )
+        unknown = self.unsafe(
+            "post",
+            f"/api/line/channels/{CHANNEL_ID}/connection-check/",
+            {"accessToken": "leak-canary"},
+        )
         self.assertEqual(bad_origin.status_code, 403)
         self.assertEqual(bad_origin.json()["error"]["code"], "csrf_failed")
         self.assertEqual(unknown.status_code, 400)
@@ -241,7 +286,8 @@ class AdminRouteTests(SimpleTestCase):
     # 期待値: collection/detail/state/connection-checkが相対api配下の管理Viewへ解決される
     def test_all_admin_routes_resolve(self):
         paths = (
-            "/api/line/channels/", f"/api/line/channels/{CHANNEL_ID}/",
+            "/api/line/channels/",
+            f"/api/line/channels/{CHANNEL_ID}/",
             f"/api/line/channels/{CHANNEL_ID}/state/",
             f"/api/line/channels/{CHANNEL_ID}/connection-check/",
         )

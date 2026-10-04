@@ -1,6 +1,7 @@
 import math
 
 from django.db import transaction
+
 from linechannels.repositories import LineChannelDirectory
 from linewebhooks.types import (
     HandlerExecutionContext,
@@ -90,9 +91,7 @@ class DefaultFriendshipSyncService:
                 return HandlerSucceeded()
 
             with transaction.atomic(using=self.using):
-                locked_reference = self.audit_repository.lock_reference(
-                    parsed.channel_public_id
-                )
+                locked_reference = self.audit_repository.lock_reference(parsed.channel_public_id)
                 target = self.account_repository.lock_target(
                     channel_public_id=parsed.channel_public_id,
                     provider_id=channel.provider_id,

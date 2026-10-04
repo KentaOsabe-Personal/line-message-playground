@@ -20,7 +20,6 @@ from linefriendships.models import FriendshipSyncAudit
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.types import FrozenJsonObject, HandlerSucceeded, VerifiedWebhookEvent
 
-
 SINGLE_EVENT_RUNS = 5
 TEN_EVENT_REQUEST_BUDGET_MS = 2_000
 SINGLE_EVENT_QUERY_BUDGETS = {
@@ -173,9 +172,7 @@ class FriendshipPerformanceIntegrationTests(TransactionTestCase):
                 "deliveryContext": {"isRedelivery": sequence % 2 == 0},
                 "source": {"type": "user", "userId": self.subject},
             }
-            for sequence, (event_id, event_type) in reversed(
-                list(enumerate(ordered, start=1))
-            )
+            for sequence, (event_id, event_type) in reversed(list(enumerate(ordered, start=1)))
         ]
 
         started_at = perf_counter()

@@ -10,13 +10,13 @@ from django.test import SimpleTestCase
 from linechannels.types import AccessToken, ChannelSecret
 from linerichmenus.gateway import (
     CreateAccepted,
+    ResourceListAccepted,
+    ResourceSummary,
     RichMenuArea,
     RichMenuBounds,
     RichMenuGatewayContext,
     RichMenuObject,
     RichMenuUriAction,
-    ResourceListAccepted,
-    ResourceSummary,
 )
 from linerichmenus.presenters import RichMenuPresenter
 from linerichmenus.services import HistorySucceeded, ServiceFailed
@@ -29,17 +29,16 @@ from linerichmenus.types import (
     IssuedConfirmation,
     NextAllowedAction,
     NormalizedTemplate,
-    OperationKind,
     OperationCommand,
+    OperationKind,
     OperationStatus,
     OperationView,
-    SafeResultCode,
     PreviewSnapshot,
     RenderedImage,
+    SafeResultCode,
     TemplateFieldValue,
     TemplateReference,
 )
-
 
 NOW = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 ACCESS_TOKEN = "access-token-security-canary"
@@ -74,9 +73,7 @@ class RichMenuCrossBoundarySecurityTests(SimpleTestCase):
             menu,
             CreateAccepted(LINE_ID),
             ResourceSummary(LINE_ID, "ownership-marker-security-canary"),
-            ResourceListAccepted(
-                (ResourceSummary(LINE_ID, "ownership-marker-security-canary"),)
-            ),
+            ResourceListAccepted((ResourceSummary(LINE_ID, "ownership-marker-security-canary"),)),
         )
 
         rendered = " ".join(f"{value!r} {value!s}" for value in values)

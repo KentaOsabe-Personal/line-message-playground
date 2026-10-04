@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
+from lineaccounts.admin_authorization import DjangoOwnerOperationFence
 from linechannels import container
 from linechannels.admin_gateway import DefaultLineBotInfoGateway
 from linechannels.admin_repositories import DjangoAdminChannelRepository
@@ -18,7 +19,6 @@ from linechannels.rotation_item import DefaultCredentialRotationItemProcessor
 from linechannels.rotation_lock import MySQLRotationLock
 from linechannels.rotation_repository import DjangoRotationCredentialRepository
 from linechannels.services import DefaultLineChannelService
-from lineaccounts.admin_authorization import DjangoOwnerOperationFence
 
 
 class CompositionRootTests(TestCase):
@@ -48,9 +48,7 @@ class CompositionRootTests(TestCase):
         self.assertIsInstance(service, DefaultCredentialRotationService)
         self.assertIsInstance(service._repository, DjangoRotationCredentialRepository)
         self.assertIsInstance(service._rotation_lock, MySQLRotationLock)
-        self.assertIsInstance(
-            service._item_processor, DefaultCredentialRotationItemProcessor
-        )
+        self.assertIsInstance(service._item_processor, DefaultCredentialRotationItemProcessor)
         self.assertIs(service._cipher, service._item_processor._cipher)
 
     # テストケース: 対話prompt factoryを呼び出す

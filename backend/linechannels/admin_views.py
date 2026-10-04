@@ -1,22 +1,22 @@
-from rest_framework.response import Response
 from django.http import JsonResponse
+from rest_framework.response import Response
 
 from lineaccounts.admin_authorization import OwnerOperationContext
 from lineaccounts.authentication import OwnerPrincipal
 from lineaccounts.errors import SafeAPIError
 from lineaccounts.views import OwnerProtectedAPIView
 
+from .admin_lifecycle_types import DeactivationFailed, DeactivationSucceeded
 from .admin_presenters import AdminPresenter
 from .admin_serializers import (
     ConnectionCheckRequestSerializer,
     CreateChannelRequestSerializer,
     DeleteChannelRequestSerializer,
-    SetChannelStateRequestSerializer,
-    UpdateChannelRequestSerializer,
     RecheckDeactivationRequestSerializer,
+    SetChannelStateRequestSerializer,
     StartDeactivationRequestSerializer,
+    UpdateChannelRequestSerializer,
 )
-from .admin_lifecycle_types import DeactivationFailed, DeactivationSucceeded
 from .admin_types import (
     AdminChannelMutationSucceeded,
     AdminServiceFailed,
@@ -74,9 +74,14 @@ def _lifecycle_succeeded(result):
             "recovery_conflict": "deactivation_conflict",
         }.get(result.code, result.code)
         if code not in {
-            "authentication_required", "owner_operation_blocked", "channel_not_found",
-            "channel_unavailable", "stale_channel", "deactivation_conflict",
-            "storage_retryable", "storage_unavailable",
+            "authentication_required",
+            "owner_operation_blocked",
+            "channel_not_found",
+            "channel_unavailable",
+            "stale_channel",
+            "deactivation_conflict",
+            "storage_retryable",
+            "storage_unavailable",
         }:
             code = "storage_unavailable"
         raise SafeAPIError(code)
@@ -97,12 +102,8 @@ class AdminAPIView(OwnerProtectedAPIView):
 
 class AdminChannelCollectionAPIView(AdminAPIView):
     def get(self, request):
-        result = _succeeded(
-            self.service().list_channels(_owner(request)), ChannelListSucceeded
-        )
-        return Response(
-            {"items": [self.presenter().channel(item) for item in result.channels]}
-        )
+        result = _succeeded(self.service().list_channels(_owner(request)), ChannelListSucceeded)
+        return Response({"items": [self.presenter().channel(item) for item in result.channels]})
 
     def post(self, request):
         serializer = CreateChannelRequestSerializer(data=request.data)
@@ -170,9 +171,7 @@ class AdminChannelDeactivationAPIView(AdminAPIView):
         return build_channel_deactivation_coordinator()
 
     def get(self, request, channel_id):
-        result = _lifecycle_succeeded(
-            self.coordinator().get(_owner(request), channel_id)
-        )
+        result = _lifecycle_succeeded(self.coordinator().get(_owner(request), channel_id))
         if result.view is None:
             return JsonResponse(None, safe=False)
         return Response(self.presenter().deactivation(result.view))
@@ -181,9 +180,7 @@ class AdminChannelDeactivationAPIView(AdminAPIView):
         serializer = StartDeactivationRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         result = _lifecycle_succeeded(
-            self.coordinator().start(
-                _owner(request), serializer.to_command(channel_id)
-            )
+            self.coordinator().start(_owner(request), serializer.to_command(channel_id))
         )
         return Response(self.presenter().deactivation(result.view))
 
@@ -196,8 +193,6 @@ class AdminChannelDeactivationRecheckAPIView(AdminAPIView):
         serializer = RecheckDeactivationRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         result = _lifecycle_succeeded(
-            self.coordinator().recheck(
-                _owner(request), serializer.to_command(channel_id)
-            )
+            self.coordinator().recheck(_owner(request), serializer.to_command(channel_id))
         )
         return Response(self.presenter().deactivation(result.view))

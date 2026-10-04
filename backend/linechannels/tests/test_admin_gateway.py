@@ -57,9 +57,9 @@ class LineBotInfoGatewayTests(SimpleTestCase):
             with self.subTest(expected=expected):
                 client = Mock()
                 client.get_bot_info.side_effect = error
-                result = DefaultLineBotInfoGateway(
-                    RecordingFactory(client)
-                ).get_bot_identity(AccessToken("gateway-token"))
+                result = DefaultLineBotInfoGateway(RecordingFactory(client)).get_bot_identity(
+                    AccessToken("gateway-token")
+                )
                 self.assertEqual(result.code, expected)
                 self.assertNotIn("raw-canary", repr(result))
                 self.assertNotIn("connection-canary", repr(result))
@@ -69,7 +69,7 @@ class LineBotInfoGatewayTests(SimpleTestCase):
 
         client = Mock()
         client.get_bot_info.return_value = Mock(user_id="unexpected")
-        malformed = DefaultLineBotInfoGateway(
-            RecordingFactory(client)
-        ).get_bot_identity(AccessToken("gateway-token"))
+        malformed = DefaultLineBotInfoGateway(RecordingFactory(client)).get_bot_identity(
+            AccessToken("gateway-token")
+        )
         self.assertEqual(malformed.code, "line_unavailable")

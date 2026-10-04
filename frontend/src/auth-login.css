@@ -216,7 +216,10 @@
   font: inherit;
   font-weight: 800;
   cursor: pointer;
-  transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .auth-page .line-login-button::after {

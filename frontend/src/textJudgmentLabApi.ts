@@ -1,6 +1,10 @@
 import { parseJudgmentResponse, parseLabAccessResponse } from './textJudgmentLabDto'
-import type { JudgmentRequest, JudgmentResponse, LabAccessResponse, Parsed } from './textJudgmentLabTypes'
-
+import type {
+  JudgmentRequest,
+  JudgmentResponse,
+  LabAccessResponse,
+  Parsed,
+} from './textJudgmentLabTypes'
 
 export type LabHttpFailureCode =
   | 'reauthentication_required'
@@ -38,11 +42,16 @@ const errorCode = async (response: Response): Promise<string | null> => {
   }
 }
 
-const mapFailure = async (response: Response, operation: 'access' | 'judgment'): Promise<LabHttpError> => {
+const mapFailure = async (
+  response: Response,
+  operation: 'access' | 'judgment',
+): Promise<LabHttpError> => {
   const backendCode = await errorCode(response)
   if (response.status === 401) return new LabHttpError('reauthentication_required')
-  if (response.status === 403 && backendCode === 'wrong_channel') return new LabHttpError('wrong_channel')
-  if (response.status === 403 && backendCode === 'not_allowed') return new LabHttpError('not_allowed')
+  if (response.status === 403 && backendCode === 'wrong_channel')
+    return new LabHttpError('wrong_channel')
+  if (response.status === 403 && backendCode === 'not_allowed')
+    return new LabHttpError('not_allowed')
   if (response.status === 429) return new LabHttpError('rate_limited')
   if (response.status === 502 || response.status === 504) return new LabHttpError('judgment_failed')
   if (response.status === 503) return new LabHttpError('access_unavailable')
@@ -50,7 +59,11 @@ const mapFailure = async (response: Response, operation: 'access' | 'judgment'):
   return new LabHttpError('protocol_error')
 }
 
-const parseSuccess = async <T>(response: Response, operation: 'access' | 'judgment', parser: (value: unknown) => Parsed<T>): Promise<T> => {
+const parseSuccess = async <T>(
+  response: Response,
+  operation: 'access' | 'judgment',
+  parser: (value: unknown) => Parsed<T>,
+): Promise<T> => {
   if (!response.ok) throw await mapFailure(response, operation)
   let payload: unknown
   try {
@@ -96,11 +109,18 @@ export function createLabHttpClient(fetcher: Fetcher = fetch): LabHttpClient {
   }
 
   return Object.freeze({
-    checkAccess: (idToken: string, signal?: AbortSignal) => post(
-      '/api/labs/text-judgment/access', idToken, {}, 'access', parseLabAccessResponse, signal,
-    ),
-    judge: (idToken: string, request: JudgmentRequest, signal?: AbortSignal) => post(
-      '/api/labs/text-judgment/judgments', idToken, request, 'judgment', parseJudgmentResponse, signal,
-    ),
+    checkAccess: (idToken: string, signal?: AbortSignal) =>
+      post('/api/labs/text-judgment/access', idToken, {}, 'access', parseLabAccessResponse, signal),
+    judge: (idToken: string, request: JudgmentRequest, signal?: AbortSignal) => {
+      const sentRequest = structuredClone(request)
+      return post(
+        '/api/labs/text-judgment/judgments',
+        idToken,
+        sentRequest,
+        'judgment',
+        parseJudgmentResponse,
+        signal,
+      )
+    },
   })
 }

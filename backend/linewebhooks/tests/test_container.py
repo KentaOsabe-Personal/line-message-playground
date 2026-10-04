@@ -17,8 +17,7 @@ from linechannels.types import AccessToken, ChannelSecret, CredentialContext
 from linefriendships.services import DefaultFriendshipSyncService
 from lineinteractions.services import DefaultInteractionService
 from linewebhooks.audit import SafeWebhookAuditLogger
-from linewebhooks.container import build_webhook_ingress_service
-from linewebhooks.container import get_webhook_ingress_service
+from linewebhooks.container import build_webhook_ingress_service, get_webhook_ingress_service
 from linewebhooks.handlers import StaticHandlerRegistry
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.repositories import DjangoEventReceiptRepository

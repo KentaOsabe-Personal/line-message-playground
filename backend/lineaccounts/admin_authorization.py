@@ -45,9 +45,7 @@ OwnerFenceResult = OwnerActiveProof | OwnerFenceFailed
 
 
 class OwnerOperationFence(Protocol):
-    def lock_active(
-        self, context: OwnerOperationContext, now: datetime
-    ) -> OwnerFenceResult: ...
+    def lock_active(self, context: OwnerOperationContext, now: datetime) -> OwnerFenceResult: ...
 
 
 class DjangoOwnerOperationFence:
@@ -55,9 +53,7 @@ class DjangoOwnerOperationFence:
         self._repository = repository
         self._using = using
 
-    def lock_active(
-        self, context: OwnerOperationContext, now: datetime
-    ) -> OwnerFenceResult:
+    def lock_active(self, context: OwnerOperationContext, now: datetime) -> OwnerFenceResult:
         if (
             not isinstance(context, OwnerOperationContext)
             or not isinstance(now, datetime)
@@ -81,9 +77,5 @@ class DjangoOwnerOperationFence:
                 return OwnerFenceFailed("owner_operation_blocked")
             return OwnerActiveProof(session.identity_id, session.provider_id)
         except AccountPersistenceError as error:
-            code = (
-                "storage_retryable"
-                if error.code == "retryable"
-                else "storage_unavailable"
-            )
+            code = "storage_retryable" if error.code == "retryable" else "storage_unavailable"
             return OwnerFenceFailed(code)

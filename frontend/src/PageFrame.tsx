@@ -35,14 +35,22 @@ export default function PageFrame({
   }, [routeFocusKey])
 
   return (
-    <main ref={mainRef} className={`page-frame${className ? ` ${className}` : ''}`} tabIndex={-1} aria-labelledby="page-heading">
+    <main
+      ref={mainRef}
+      className={`page-frame${className ? ` ${className}` : ''}`}
+      tabIndex={-1}
+      aria-labelledby="page-heading"
+    >
       <header className="page-heading">
         <p className="eyebrow">LINE MESSAGE PLAYGROUND</p>
         <h1 id="page-heading">{heading}</h1>
         {description && <p className="page-description">{description}</p>}
       </header>
       {status && (
-        <p className={`page-status page-status-${status.kind}`} role={status.kind === 'error' ? 'alert' : 'status'}>
+        <p
+          className={`page-status page-status-${status.kind}`}
+          role={status.kind === 'error' ? 'alert' : 'status'}
+        >
           {status.message}
         </p>
       )}

@@ -3,16 +3,16 @@ from django.utils import timezone
 
 from .admin_lifecycle_types import (
     AdvanceDeactivationRevision,
-    CompleteDeactivation,
     CompletedDeactivation,
+    CompleteDeactivation,
     DeactivationConflict,
     DeactivationView,
     LockedDeactivation,
     RecordDeactivationRevisionConflict,
-    ReserveDeactivation,
     ReservedDeactivation,
-    SaveDeactivationResult,
+    ReserveDeactivation,
     SavedDeactivation,
+    SaveDeactivationResult,
 )
 from .models import ChannelDeactivationState, LineChannel
 
@@ -38,10 +38,14 @@ class DjangoChannelDeactivationRepository:
             )
             if state is not None:
                 return self._view(state)
-            exists = LineChannel.objects.using(self.using).filter(
-                public_id=channel_public_id,
-                provider_id=provider_id,
-            ).exists()
+            exists = (
+                LineChannel.objects.using(self.using)
+                .filter(
+                    public_id=channel_public_id,
+                    provider_id=provider_id,
+                )
+                .exists()
+            )
             return None if exists else DeactivationConflict("channel_not_found")
         except DatabaseError:
             return DeactivationConflict("storage_unavailable")
@@ -60,8 +64,7 @@ class DjangoChannelDeactivationRepository:
                         state.owner_identity_public_id == command.owner_identity_public_id
                         and state.provider_id == command.provider_id
                         and state.operation_id == command.operation_id
-                        and state.expected_channel_revision
-                        == command.expected_channel_revision
+                        and state.expected_channel_revision == command.expected_channel_revision
                     )
                     if same:
                         return ReservedDeactivation(self._view(state), replayed=True)
@@ -85,10 +88,17 @@ class DjangoChannelDeactivationRepository:
                     state.full_clean(validate_unique=False)
                     state.save(
                         update_fields=(
-                            "operation_id", "owner_identity_public_id", "provider_id",
-                            "expected_channel_revision", "status", "safe_reason",
-                            "subject_rich_operation_id", "latest_recovery_operation_id",
-                            "recovery_result_ready", "accepted_at", "updated_at",
+                            "operation_id",
+                            "owner_identity_public_id",
+                            "provider_id",
+                            "expected_channel_revision",
+                            "status",
+                            "safe_reason",
+                            "subject_rich_operation_id",
+                            "latest_recovery_operation_id",
+                            "recovery_result_ready",
+                            "accepted_at",
+                            "updated_at",
                             "completed_at",
                         )
                     )
@@ -104,7 +114,7 @@ class DjangoChannelDeactivationRepository:
                     status=ChannelDeactivationState.Status.CHECKING,
                 )
                 return ReservedDeactivation(self._view(state))
-        except (OperationalError, DatabaseError):
+        except OperationalError, DatabaseError:
             return DeactivationConflict("storage_unavailable")
 
     def save_result(self, command: SaveDeactivationResult):
@@ -126,7 +136,8 @@ class DjangoChannelDeactivationRepository:
                 state.subject_rich_operation_id = command.subject_rich_operation_id
                 if command.recovery_operation_id is not None:
                     if state.latest_recovery_operation_id not in {
-                        None, command.recovery_operation_id
+                        None,
+                        command.recovery_operation_id,
                     }:
                         return DeactivationConflict("recovery_conflict")
                     state.latest_recovery_operation_id = command.recovery_operation_id
@@ -135,13 +146,16 @@ class DjangoChannelDeactivationRepository:
                 state.full_clean(validate_unique=False)
                 state.save(
                     update_fields=(
-                        "status", "safe_reason", "subject_rich_operation_id",
-                        "latest_recovery_operation_id", "updated_at",
+                        "status",
+                        "safe_reason",
+                        "subject_rich_operation_id",
+                        "latest_recovery_operation_id",
+                        "updated_at",
                         "recovery_result_ready",
                     )
                 )
                 return SavedDeactivation(self._view(state))
-        except (OperationalError, DatabaseError):
+        except OperationalError, DatabaseError:
             return DeactivationConflict("storage_unavailable")
 
     def record_revision_conflict(self, command: RecordDeactivationRevisionConflict):
@@ -157,9 +171,11 @@ class DjangoChannelDeactivationRepository:
                     state.recovery_result_ready = True
                 state.updated_at = timezone.now()
                 state.full_clean(validate_unique=False)
-                state.save(update_fields=("status", "safe_reason", "recovery_result_ready", "updated_at"))
+                state.save(
+                    update_fields=("status", "safe_reason", "recovery_result_ready", "updated_at")
+                )
                 return SavedDeactivation(self._view(state))
-        except (OperationalError, DatabaseError):
+        except OperationalError, DatabaseError:
             return DeactivationConflict("storage_unavailable")
 
     def advance_recheck_revision(self, command: AdvanceDeactivationRevision):
@@ -179,9 +195,7 @@ class DjangoChannelDeactivationRepository:
                     if state.expected_channel_revision != command.presented_channel_revision:
                         state.expected_channel_revision = command.presented_channel_revision
                         state.updated_at = timezone.now()
-                        state.save(
-                            update_fields=("expected_channel_revision", "updated_at")
-                        )
+                        state.save(update_fields=("expected_channel_revision", "updated_at"))
                     return LockedDeactivation(self._view(state))
                 state.expected_channel_revision = command.presented_channel_revision
                 state.latest_recovery_operation_id = command.recovery_operation_id
@@ -196,7 +210,7 @@ class DjangoChannelDeactivationRepository:
                     )
                 )
                 return LockedDeactivation(self._view(state))
-        except (OperationalError, DatabaseError):
+        except OperationalError, DatabaseError:
             return DeactivationConflict("storage_unavailable")
 
     def complete_inactive(self, command: CompleteDeactivation):
@@ -222,13 +236,17 @@ class DjangoChannelDeactivationRepository:
                 state.full_clean(validate_unique=False)
                 state.save(
                     update_fields=(
-                        "status", "safe_reason", "subject_rich_operation_id",
-                        "latest_recovery_operation_id", "completed_at", "updated_at",
+                        "status",
+                        "safe_reason",
+                        "subject_rich_operation_id",
+                        "latest_recovery_operation_id",
+                        "completed_at",
+                        "updated_at",
                         "recovery_result_ready",
                     )
                 )
                 return CompletedDeactivation(self._view(state), channel.updated_at)
-        except (OperationalError, DatabaseError):
+        except OperationalError, DatabaseError:
             return DeactivationConflict("storage_unavailable")
 
     def _lock_current(self, command, *, require_revision=True):
@@ -246,7 +264,10 @@ class DjangoChannelDeactivationRepository:
             or state.operation_id != command.operation_id
         ):
             return DeactivationConflict("deactivation_conflict")
-        if require_revision and state.expected_channel_revision != command.expected_channel_revision:
+        if (
+            require_revision
+            and state.expected_channel_revision != command.expected_channel_revision
+        ):
             return DeactivationConflict("stale_channel")
         return channel, state
 

@@ -19,15 +19,12 @@ from .services import WebhookIngressService
 from .types import HandlerRegistration
 from .verification import RawSignatureVerifier, WebhookPayloadValidator
 
-
 _cached_service: WebhookIngressService | None = None
 
 
 def build_webhook_ingress_service(
     *,
-    action_registrations: Iterable[
-        tuple[str, PostbackActionHandler]
-    ] = (),
+    action_registrations: Iterable[tuple[str, PostbackActionHandler]] = (),
     monotonic_clock: Callable[[], float] = monotonic,
 ) -> WebhookIngressService:
     friendship_handler = build_friendship_sync_handler()

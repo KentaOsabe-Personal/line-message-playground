@@ -7,7 +7,9 @@ import ChannelAdminConsole from '../src/ChannelAdminConsole'
 import { ChannelAdminApiError, type ChannelAdminApiClient } from '../src/channelAdminApi'
 import type { ChannelAdminItem } from '../src/channelAdminDto'
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 let container: HTMLDivElement
 let root: Root
@@ -55,10 +57,14 @@ afterEach(async () => {
 test('6.1 scopes channel reads to the console lifetime without changing mutation calls', async () => {
   let resolveRead!: (value: ChannelAdminItem[]) => void
   const client = api([])
-  vi.mocked(client.listChannels).mockReturnValue(new Promise((resolve) => { resolveRead = resolve }))
+  vi.mocked(client).listChannels.mockReturnValue(
+    new Promise((resolve) => {
+      resolveRead = resolve
+    }),
+  )
   await act(async () => root.render(<ChannelAdminConsole api={client} />))
 
-  const signal = vi.mocked(client.listChannels).mock.calls[0]?.[0]?.signal as AbortSignal
+  const signal = vi.mocked(client).listChannels.mock.calls[0]?.[0]?.signal as AbortSignal
   expect(signal).toBeInstanceOf(AbortSignal)
   await act(async () => root.render(<p>移動先</p>))
   expect(signal.aborted).toBe(true)
@@ -91,10 +97,16 @@ test('renders empty and ready states without treating inactive channels as avail
 test('exposes one channel rich-menu detail link without inline mounting its console', async () => {
   const scoped = { ...channel(), providerId: '456' }
   const client = api([scoped])
-  await act(async () => root.render(
-    <MemoryRouter><ChannelAdminConsole api={client} onNavigateRichMenu={vi.fn()} /></MemoryRouter>,
-  ))
-  const open = [...container.querySelectorAll('a')].find(link => link.textContent === 'リッチメニューを管理')
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <ChannelAdminConsole api={client} onNavigateRichMenu={vi.fn()} />
+      </MemoryRouter>,
+    ),
+  )
+  const open = [...container.querySelectorAll('a')].find(
+    (link) => link.textContent === 'リッチメニューを管理',
+  )
   expect(open?.getAttribute('href')).toBe(`/liff/rich-menus/${scoped.channelId}`)
   expect(open?.classList.contains('button-link')).toBe(true)
   expect(open?.classList.contains('secondary')).toBe(false)
@@ -107,18 +119,29 @@ test('exposes one channel rich-menu detail link without inline mounting its cons
 test('does not expose rich-menu lifecycle navigation for a legacy null-provider channel', async () => {
   const client = api([channel()])
   await act(async () => root.render(<ChannelAdminConsole api={client} />))
-  expect([...container.querySelectorAll('button')].some(button => button.textContent === 'リッチメニューを管理')).toBe(false)
+  expect(
+    [...container.querySelectorAll('button')].some(
+      (button) => button.textContent === 'リッチメニューを管理',
+    ),
+  ).toBe(false)
 })
 
 // テストケース: 設定済みinactiveチャネルの再有効化導線を選ぶ。
 // 期待値: 直接更新せず、channel detail routeへ対象IDを渡す。
 test('routes configured reactivation through the composite lifecycle refresh gate', async () => {
   const scoped = { ...channel(), providerId: '456', credentialsState: 'configured' as const }
-  const client = api([scoped]); const navigate = vi.fn()
-  await act(async () => root.render(
-    <MemoryRouter><ChannelAdminConsole api={client} onNavigateRichMenu={navigate} /></MemoryRouter>,
-  ))
-  const enable = [...container.querySelectorAll('button')].find(button => button.textContent === '有効化')
+  const client = api([scoped])
+  const navigate = vi.fn()
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <ChannelAdminConsole api={client} onNavigateRichMenu={navigate} />
+      </MemoryRouter>,
+    ),
+  )
+  const enable = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === '有効化',
+  )
   await act(async () => enable?.click())
   expect(client.setState).not.toHaveBeenCalled()
   expect(navigate).toHaveBeenCalledWith(scoped.channelId)
@@ -127,13 +150,23 @@ test('routes configured reactivation through the composite lifecycle refresh gat
 // テストケース: 保存済み無効化intentがあるチャネルカードを描画する。
 // 期待値: 競合するcard mutationを閉じ、現在intentの状態を表示する。
 test('keeps channel-card mutations closed for a persisted deactivation intent', async () => {
-  const pending = { ...channel(), providerId: '456', active: true, deactivationSummary: {
-    operationId: '223e4567-e89b-42d3-a456-426614174001', status: 'checking' as const,
-    reason: null, updatedAt: channel().updatedAt,
-  } }
-  const client = api([pending]); vi.mocked(client.getChannel).mockResolvedValue(pending)
+  const pending = {
+    ...channel(),
+    providerId: '456',
+    active: true,
+    deactivationSummary: {
+      operationId: '223e4567-e89b-42d3-a456-426614174001',
+      status: 'checking' as const,
+      reason: null,
+      updatedAt: channel().updatedAt,
+    },
+  }
+  const client = api([pending])
+  vi.mocked(client).getChannel.mockResolvedValue(pending)
   await act(async () => root.render(<ChannelAdminConsole api={client} />))
-  const edit = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '設定を編集')
+  const edit = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent === '設定を編集',
+  )
   expect(edit?.disabled).toBe(true)
   expect(container.textContent).toContain('無効化 checking')
 })
@@ -141,7 +174,8 @@ test('keeps channel-card mutations closed for a persisted deactivation intent', 
 // テストケース: チャネル一覧取得を失敗させた後、ownerが明示再取得する。
 // 期待値: 古い一覧を表示せず、安全な失敗からclick時だけ一度再試行する。
 test('shows a safe load failure and retries only after an explicit click', async () => {
-  const listChannels = vi.fn()
+  const listChannels = vi
+    .fn()
     .mockRejectedValueOnce(new Error('private failure'))
     .mockResolvedValueOnce([])
   const client = { ...api([]), listChannels }
@@ -150,7 +184,9 @@ test('shows a safe load failure and retries only after an explicit click', async
   expect(container.textContent).not.toContain('private failure')
   expect(listChannels).toHaveBeenCalledTimes(1)
 
-  const retry = [...container.querySelectorAll('button')].find((item) => item.textContent === '再取得')
+  const retry = [...container.querySelectorAll('button')].find(
+    (item) => item.textContent === '再取得',
+  )
   await act(async () => retry?.click())
   expect(listChannels).toHaveBeenCalledTimes(2)
   expect(container.textContent).toContain('登録済みチャネルはありません')
@@ -160,16 +196,27 @@ test('shows a safe load failure and retries only after an explicit click', async
 // 期待値: 同じoperation keyのPOSTを一件だけ開始する。
 test('starts the same create operation only once before React can rerender', async () => {
   let resolveRegister: ((item: ChannelAdminItem) => void) | undefined
-  const register = vi.fn().mockReturnValue(new Promise<ChannelAdminItem>((resolve) => { resolveRegister = resolve }))
+  const register = vi.fn().mockReturnValue(
+    new Promise<ChannelAdminItem>((resolve) => {
+      resolveRegister = resolve
+    }),
+  )
   const client = { ...api([]), register }
   await act(async () => root.render(<ChannelAdminConsole api={client} />))
-  const open = [...container.querySelectorAll('button')].find((item) => item.textContent === '新しいチャネルを登録')
+  const open = [...container.querySelectorAll('button')].find(
+    (item) => item.textContent === '新しいチャネルを登録',
+  )
   await act(async () => open?.click())
   const values: Record<string, string> = {
-    label: '新規', messagingApiChannelId: '123', botUserId: `U${'d'.repeat(32)}`,
-    providerId: '456', accessToken: 'one-shot-token', channelSecret: 'one-shot-secret',
+    label: '新規',
+    messagingApiChannelId: '123',
+    botUserId: `U${'d'.repeat(32)}`,
+    providerId: '456',
+    accessToken: 'one-shot-token',
+    channelSecret: 'one-shot-secret',
   }
-  for (const [name, value] of Object.entries(values)) container.querySelector<HTMLInputElement>(`input[name="${name}"]`)!.value = value
+  for (const [name, value] of Object.entries(values))
+    container.querySelector<HTMLInputElement>(`input[name="${name}"]`)!.value = value
   const form = container.querySelector('form')!
   await act(async () => {
     form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }))
@@ -183,12 +230,19 @@ test('starts the same create operation only once before React can rerender', asy
 // 期待値: 旧DELETEを直接呼ばず、参照状態を確認できる専用画面へ収束する。
 test('routes card deletion through the rich-menu lifecycle screen', async () => {
   const scoped = { ...channel(), providerId: '456' }
-  const client = api([scoped]); vi.mocked(client.getChannel).mockResolvedValue(scoped)
+  const client = api([scoped])
+  vi.mocked(client).getChannel.mockResolvedValue(scoped)
   const navigate = vi.fn()
-  await act(async () => root.render(
-    <MemoryRouter><ChannelAdminConsole api={client} onNavigateRichMenu={navigate} /></MemoryRouter>,
-  ))
-  const remove = [...container.querySelectorAll('button')].find(button => button.textContent === '削除')
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <ChannelAdminConsole api={client} onNavigateRichMenu={navigate} />
+      </MemoryRouter>,
+    ),
+  )
+  const remove = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === '削除',
+  )
   await act(async () => remove?.click())
   expect(client.delete).not.toHaveBeenCalled()
   expect(navigate).toHaveBeenCalledWith(scoped.channelId)
@@ -198,18 +252,24 @@ test('routes card deletion through the rich-menu lifecycle screen', async () => 
 // 期待値: 外部分類を表示せずrefresh_requiredへ遷移し、owner clickでだけ再取得する
 test('moves stale connection checks to refresh-required and reloads only after owner click', async () => {
   const listChannels = vi.fn().mockResolvedValueOnce([channel()]).mockResolvedValueOnce([])
-  const checkConnection = vi.fn().mockRejectedValue(
-    new ChannelAdminApiError({ code: 'stale_channel', summary: '更新競合です。' }, 409),
-  )
+  const checkConnection = vi
+    .fn()
+    .mockRejectedValue(
+      new ChannelAdminApiError({ code: 'stale_channel', summary: '更新競合です。' }, 409),
+    )
   const client = { ...api([]), listChannels, checkConnection }
   await act(async () => root.render(<ChannelAdminConsole api={client} />))
-  const check = [...container.querySelectorAll('button')].find((button) => button.textContent === '接続を確認')
+  const check = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === '接続を確認',
+  )
   await act(async () => check?.click())
 
   expect(container.textContent).toContain('操作結果を確定できません')
   expect(container.textContent).not.toContain('接続できました')
   expect(listChannels).toHaveBeenCalledTimes(1)
-  const refresh = [...container.querySelectorAll('button')].find((button) => button.textContent === '最新状態を再取得')
+  const refresh = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === '最新状態を再取得',
+  )
   await act(async () => refresh?.click())
   expect(listChannels).toHaveBeenCalledTimes(2)
   expect(container.textContent).toContain('登録済みチャネルはありません')

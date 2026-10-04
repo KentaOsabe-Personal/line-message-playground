@@ -15,7 +15,6 @@ from linerichmenus.repository import (
 )
 from linerichmenus.types import OperationKind, OperationStatus
 
-
 NOW = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 
 
@@ -38,9 +37,7 @@ class RichMenuRepositoryAcceptanceTests(TransactionTestCase):
     reset_sequences = True
 
     def setUp(self):
-        self.repository = DjangoRichMenuRepository(
-            reference_fence=LockedFence(), clock=lambda: NOW
-        )
+        self.repository = DjangoRichMenuRepository(reference_fence=LockedFence(), clock=lambda: NOW)
         self.command = AcceptedOperation(
             operation_id=uuid4(),
             channel_public_id=uuid4(),
@@ -105,9 +102,7 @@ class RichMenuRepositoryAcceptanceTests(TransactionTestCase):
     # 期待値: 外部作用前のconflictとなり保存済み行を変更しない。
     def test_same_id_with_different_fingerprint_conflicts(self):
         self.repository.accept(self.command)
-        conflict = self.repository.accept(
-            replace(self.command, request_fingerprint="d" * 64)
-        )
+        conflict = self.repository.accept(replace(self.command, request_fingerprint="d" * 64))
 
         self.assertIsInstance(conflict, OperationConflict)
         self.assertEqual(conflict.reason, "operation_conflict")
@@ -160,11 +155,15 @@ class RichMenuRepositoryAcceptanceTests(TransactionTestCase):
         state.save(update_fields=("active_operation", "current_resource"))
 
         unlink = AcceptedOperation(
-            operation_id=uuid4(), channel_public_id=self.command.channel_public_id,
+            operation_id=uuid4(),
+            channel_public_id=self.command.channel_public_id,
             owner_identity_public_id=self.command.owner_identity_public_id,
-            provider_id=self.command.provider_id, expected_channel_revision=NOW,
-            kind=OperationKind.UNLINK, subject_operation_id=None,
-            target_resource_id=resource.public_id, request_fingerprint="2" * 64,
+            provider_id=self.command.provider_id,
+            expected_channel_revision=NOW,
+            kind=OperationKind.UNLINK,
+            subject_operation_id=None,
+            target_resource_id=resource.public_id,
+            request_fingerprint="2" * 64,
         )
         result = self.repository.accept(unlink)
         self.assertIsInstance(result, OperationAccepted)
@@ -176,7 +175,9 @@ class RichMenuRepositoryAcceptanceTests(TransactionTestCase):
         state.active_operation = None
         state.save(update_fields=("active_operation",))
         release = replace(
-            unlink, operation_id=uuid4(), kind=OperationKind.RELEASE,
+            unlink,
+            operation_id=uuid4(),
+            kind=OperationKind.RELEASE,
             request_fingerprint="3" * 64,
         )
         result = self.repository.accept(release)
@@ -190,11 +191,15 @@ class RichMenuRepositoryAcceptanceTests(TransactionTestCase):
     # 期待値: operation rowを作らずinvalid relationで拒否する。
     def test_unlink_rejects_unrelated_target(self):
         command = AcceptedOperation(
-            operation_id=uuid4(), channel_public_id=self.command.channel_public_id,
+            operation_id=uuid4(),
+            channel_public_id=self.command.channel_public_id,
             owner_identity_public_id=self.command.owner_identity_public_id,
-            provider_id=self.command.provider_id, expected_channel_revision=NOW,
-            kind=OperationKind.UNLINK, subject_operation_id=None,
-            target_resource_id=uuid4(), request_fingerprint="4" * 64,
+            provider_id=self.command.provider_id,
+            expected_channel_revision=NOW,
+            kind=OperationKind.UNLINK,
+            subject_operation_id=None,
+            target_resource_id=uuid4(),
+            request_fingerprint="4" * 64,
         )
         result = self.repository.accept(command)
         self.assertIsInstance(result, OperationConflict)

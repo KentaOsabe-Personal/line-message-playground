@@ -17,7 +17,6 @@ from lineaccounts.models import DeliveryRecipient, LineIdentity, OwnerAccount
 from lineaccounts.types import LineSubject
 from linechannels.models import LineChannel
 
-
 _FRIENDSHIP_STATES = frozenset(("friend", "not_friend", "unknown"))
 
 
@@ -42,9 +41,7 @@ class DeliveryTargetDirectory:
                 label=channel.label,
                 active=channel.is_active,
                 available=channel.is_active,
-                unavailable_reason=(
-                    None if channel.is_active else "channel_inactive"
-                ),
+                unavailable_reason=(None if channel.is_active else "channel_inactive"),
             )
             for channel in channels
         )
@@ -110,8 +107,7 @@ class DeliveryTargetDirectory:
                 available=(
                     recipient.line_channel.is_active
                     and recipient.enabled
-                    and recipient.friendship_state
-                    == DeliveryRecipient.FriendshipState.FRIEND
+                    and recipient.friendship_state == DeliveryRecipient.FriendshipState.FRIEND
                 ),
                 unavailable_reason=_recipient_unavailable_reason(
                     channel_active=recipient.line_channel.is_active,
@@ -183,8 +179,7 @@ class DeliveryTargetDirectory:
             delivery_available=(
                 snapshot.channel_active
                 and snapshot.recipient_enabled
-                and snapshot.friendship_state
-                == DeliveryRecipient.FriendshipState.FRIEND
+                and snapshot.friendship_state == DeliveryRecipient.FriendshipState.FRIEND
             ),
         )
 
@@ -254,10 +249,6 @@ def build_target_revision(
 
 
 def _canonical_datetime(value: datetime) -> str:
-    if (
-        not isinstance(value, datetime)
-        or value.tzinfo is None
-        or value.utcoffset() is None
-    ):
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("target revision datetime must be timezone-aware")
     return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import secrets
-from hashlib import sha256
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from hashlib import sha256
 from typing import Callable, Mapping, Protocol
 from uuid import UUID
 
@@ -24,7 +24,6 @@ from .models import (
 from .reconciliation import ManagedResourceTarget
 from .state_machine import InvalidStateTransition, transition_operation, transition_resource
 from .types import (
-    NextAllowedAction,
     ChannelStateView,
     CleanupRelation,
     DefaultObservation,
@@ -33,6 +32,7 @@ from .types import (
     HistoryPage,
     HistorySummary,
     ManagedResourceView,
+    NextAllowedAction,
     NormalizedTemplate,
     ObservationKind,
     OperationKind,
@@ -90,7 +90,12 @@ class StageConflict:
     reason: str
 
     def __post_init__(self) -> None:
-        if self.reason not in {"operation_not_found", "stage_in_flight", "stale_stage", "invalid_transition"}:
+        if self.reason not in {
+            "operation_not_found",
+            "stage_in_flight",
+            "stale_stage",
+            "invalid_transition",
+        }:
             raise ValueError("invalid stage conflict")
 
 
@@ -187,9 +192,7 @@ class HistoryQuery:
             raise ValueError("invalid history scope")
         if type(self.limit) is not int or not 1 <= self.limit <= 50:
             raise ValueError("invalid history limit")
-        if self.cursor is not None and (
-            not isinstance(self.cursor, str) or not self.cursor
-        ):
+        if self.cursor is not None and (not isinstance(self.cursor, str) or not self.cursor):
             raise ValueError("invalid history cursor")
 
 
@@ -393,8 +396,10 @@ class DjangoRichMenuRepository:
             )
             if operation is None:
                 return StageConflict("operation_not_found")
-            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
-                channel_public_id=operation.channel_state_id
+            state = (
+                RichMenuChannelState.objects.using(self.using)
+                .select_for_update()
+                .get(channel_public_id=operation.channel_state_id)
             )
             if operation.stage_started_at is not None:
                 if self._clock() - operation.stage_started_at >= self._in_flight_timeout:
@@ -406,9 +411,7 @@ class DjangoRichMenuRepository:
                             or state.blocking_operation_id != operation.subject_operation_id
                         ):
                             return StageConflict("stale_stage")
-                        return StageExpired(
-                            self._expire_recovery(operation=operation, state=state)
-                        )
+                        return StageExpired(self._expire_recovery(operation=operation, state=state))
                     return StageExpired(self._make_unknown(operation=operation, state=state))
                 return StageConflict("stage_in_flight")
             current_status = OperationStatus(operation.status)
@@ -447,9 +450,7 @@ class DjangoRichMenuRepository:
                 state.save(using=self.using, update_fields=("active_operation", "updated_at"))
             return StageClaimed(_operation_view(operation), _fence_snapshot(operation))
 
-    def complete_stage(
-        self, outcome: StageOutcome
-    ) -> OperationView | StageConflict:
+    def complete_stage(self, outcome: StageOutcome) -> OperationView | StageConflict:
         if not isinstance(outcome, StageOutcome):
             raise TypeError("invalid stage outcome")
         with transaction.atomic(using=self.using):
@@ -462,8 +463,10 @@ class DjangoRichMenuRepository:
             )
             if operation is None:
                 return StageConflict("operation_not_found")
-            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
-                channel_public_id=operation.channel_state_id
+            state = (
+                RichMenuChannelState.objects.using(self.using)
+                .select_for_update()
+                .get(channel_public_id=operation.channel_state_id)
             )
             if (
                 operation.status != OperationStatus.PROCESSING.value
@@ -505,7 +508,14 @@ class DjangoRichMenuRepository:
                 state.active_operation = None
             operation.save(
                 using=self.using,
-                update_fields=("status", "stage", "stage_started_at", "result_code", "completed_at", "updated_at"),
+                update_fields=(
+                    "status",
+                    "stage",
+                    "stage_started_at",
+                    "result_code",
+                    "completed_at",
+                    "updated_at",
+                ),
             )
             state.save(
                 using=self.using,
@@ -513,7 +523,9 @@ class DjangoRichMenuRepository:
             )
             return _operation_view(operation)
 
-    def _make_unknown(self, *, operation: RichMenuOperation, state: RichMenuChannelState) -> OperationView:
+    def _make_unknown(
+        self, *, operation: RichMenuOperation, state: RichMenuChannelState
+    ) -> OperationView:
         self._append_transition(
             operation=operation,
             from_status=OperationStatus.PROCESSING,
@@ -541,9 +553,7 @@ class DjangoRichMenuRepository:
     ) -> OperationView:
         kind = OperationKind(operation.kind)
         next_status = (
-            OperationStatus.FAILED
-            if kind is OperationKind.RECHECK
-            else OperationStatus.UNKNOWN
+            OperationStatus.FAILED if kind is OperationKind.RECHECK else OperationStatus.UNKNOWN
         )
         self._append_transition(
             operation=operation,
@@ -611,9 +621,7 @@ class DjangoRichMenuRepository:
             fence = self._reference_fence.lock_existing(command.channel_public_id)
             if fence.status != "locked":
                 return OperationConflict(
-                    "channel_unavailable"
-                    if fence.status == "channel_not_found"
-                    else fence.status
+                    "channel_unavailable" if fence.status == "channel_not_found" else fence.status
                 )
             if not self._deactivation_fence.allows(command):
                 return OperationConflict("operation_in_progress")
@@ -632,8 +640,10 @@ class DjangoRichMenuRepository:
             state, _ = RichMenuChannelState.objects.using(self.using).get_or_create(
                 channel_public_id=command.channel_public_id
             )
-            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
-                channel_public_id=state.channel_public_id
+            state = (
+                RichMenuChannelState.objects.using(self.using)
+                .select_for_update()
+                .get(channel_public_id=state.channel_public_id)
             )
             target = None
             if command.kind in {OperationKind.UNLINK, OperationKind.RELEASE}:
@@ -682,9 +692,11 @@ class DjangoRichMenuRepository:
                         accepted_at=now,
                     )
             except IntegrityError:
-                replay = RichMenuOperation.objects.using(self.using).filter(
-                    operation_id=command.operation_id
-                ).first()
+                replay = (
+                    RichMenuOperation.objects.using(self.using)
+                    .filter(operation_id=command.operation_id)
+                    .first()
+                )
                 if replay is not None and replay.request_fingerprint == command.request_fingerprint:
                     return OperationReplay(_operation_view(replay))
                 return OperationConflict(
@@ -727,9 +739,7 @@ class DjangoRichMenuRepository:
             )
             if channel_fence.status != "matched":
                 return DisableUnlinkRejected(
-                    "stale_assessment"
-                    if channel_fence.status == "stale"
-                    else "unavailable"
+                    "stale_assessment" if channel_fence.status == "stale" else "unavailable"
                 )
             existing = (
                 RichMenuOperation.objects.using(self.using)
@@ -764,10 +774,14 @@ class DjangoRichMenuRepository:
                 return DisableUnlinkRejected("unavailable")
             if state.active_operation_id is not None or state.blocking_operation_id is not None:
                 return DisableUnlinkRejected("recheck_required")
-            if ManagedRichMenu.objects.using(self.using).filter(
-                channel_state=state,
-                lifecycle=ResourceLifecycle.CLEANUP_REQUIRED.value,
-            ).exists():
+            if (
+                ManagedRichMenu.objects.using(self.using)
+                .filter(
+                    channel_state=state,
+                    lifecycle=ResourceLifecycle.CLEANUP_REQUIRED.value,
+                )
+                .exists()
+            ):
                 return DisableUnlinkRejected("cleanup_required")
             if state.last_observation_kind in {None, ObservationKind.UNKNOWN.value}:
                 return DisableUnlinkRejected("recheck_required")
@@ -854,9 +868,7 @@ class DjangoRichMenuRepository:
             ownership_marker=resource.ownership_marker,
         )
 
-    def list_managed_resources(
-        self, scope: OwnerChannelScope
-    ) -> tuple[ManagedResourceTarget, ...]:
+    def list_managed_resources(self, scope: OwnerChannelScope) -> tuple[ManagedResourceTarget, ...]:
         if not isinstance(scope, OwnerChannelScope):
             raise TypeError("invalid owner channel scope")
         resources = (
@@ -871,9 +883,7 @@ class DjangoRichMenuRepository:
         )
         return tuple(_resource_target(resource) for resource in resources)
 
-    def record_observation(
-        self, scope: OwnerChannelScope, observation: DefaultObservation
-    ) -> bool:
+    def record_observation(self, scope: OwnerChannelScope, observation: DefaultObservation) -> bool:
         if not isinstance(scope, OwnerChannelScope) or not isinstance(
             observation, DefaultObservation
         ):
@@ -954,7 +964,11 @@ class DjangoRichMenuRepository:
         return _resource_target(resources[0])
 
     def bind_resource_line_id(self, resource_id: UUID, line_rich_menu_id: str) -> bool:
-        if not isinstance(resource_id, UUID) or not isinstance(line_rich_menu_id, str) or not line_rich_menu_id:
+        if (
+            not isinstance(resource_id, UUID)
+            or not isinstance(line_rich_menu_id, str)
+            or not line_rich_menu_id
+        ):
             raise TypeError("invalid line resource binding")
         with transaction.atomic(using=self.using):
             resource = (
@@ -1039,16 +1053,16 @@ class DjangoRichMenuRepository:
             if lifecycle is ResourceLifecycle.CLEANUP_REQUIRED:
                 return True
             try:
-                next_lifecycle = transition_resource(
-                    lifecycle, ResourceLifecycle.CLEANUP_REQUIRED
-                )
+                next_lifecycle = transition_resource(lifecycle, ResourceLifecycle.CLEANUP_REQUIRED)
             except InvalidStateTransition:
                 return OperationConflict("invalid_relation")
             resource.lifecycle = next_lifecycle.value
             resource.save(using=self.using, update_fields=("lifecycle", "updated_at"))
             if resource.channel_state.current_resource_id == resource.public_id:
-                state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
-                    channel_public_id=resource.channel_state_id
+                state = (
+                    RichMenuChannelState.objects.using(self.using)
+                    .select_for_update()
+                    .get(channel_public_id=resource.channel_state_id)
                 )
                 state.current_resource = None
                 state.save(using=self.using, update_fields=("current_resource", "updated_at"))
@@ -1091,8 +1105,10 @@ class DjangoRichMenuRepository:
             )
             if operation is None:
                 return OperationConflict("operation_not_found")
-            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
-                channel_public_id=operation.channel_state_id
+            state = (
+                RichMenuChannelState.objects.using(self.using)
+                .select_for_update()
+                .get(channel_public_id=operation.channel_state_id)
             )
             candidate = (
                 ManagedRichMenu.objects.using(self.using)
@@ -1146,8 +1162,10 @@ class DjangoRichMenuRepository:
                 return OperationConflict("invalid_relation")
             resource.lifecycle = ResourceLifecycle.CLEANUP_REQUIRED.value
             resource.save(using=self.using, update_fields=("lifecycle", "updated_at"))
-            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
-                channel_public_id=resource.channel_state_id
+            state = (
+                RichMenuChannelState.objects.using(self.using)
+                .select_for_update()
+                .get(channel_public_id=resource.channel_state_id)
             )
             if state.current_resource_id == resource.public_id:
                 state.current_resource = None
@@ -1169,9 +1187,13 @@ class DjangoRichMenuRepository:
                 return OperationConflict("invalid_relation")
             resource.lifecycle = ResourceLifecycle.RELEASED.value
             resource.released_at = self._clock()
-            resource.save(using=self.using, update_fields=("lifecycle", "released_at", "updated_at"))
-            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
-                channel_public_id=resource.channel_state_id
+            resource.save(
+                using=self.using, update_fields=("lifecycle", "released_at", "updated_at")
+            )
+            state = (
+                RichMenuChannelState.objects.using(self.using)
+                .select_for_update()
+                .get(channel_public_id=resource.channel_state_id)
             )
             if state.current_resource_id == resource.public_id:
                 state.current_resource = None
@@ -1217,8 +1239,10 @@ class DjangoRichMenuRepository:
             )
             if operation is None or operation.status != OperationStatus.RECOVERY_ACTIVE.value:
                 return StageConflict("stale_stage")
-            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
-                channel_public_id=operation.channel_state_id
+            state = (
+                RichMenuChannelState.objects.using(self.using)
+                .select_for_update()
+                .get(channel_public_id=operation.channel_state_id)
             )
             if next_status not in {OperationStatus.UNKNOWN, OperationStatus.FAILED}:
                 return StageConflict("invalid_transition")
@@ -1236,15 +1260,22 @@ class DjangoRichMenuRepository:
                 operation.completed_at = self._clock()
             state.active_operation = None
             state.blocking_operation = (
-                operation
-                if next_status is OperationStatus.UNKNOWN
-                else operation.subject_operation
+                operation if next_status is OperationStatus.UNKNOWN else operation.subject_operation
             )
             operation.save(
                 using=self.using,
-                update_fields=("status", "stage_started_at", "result_code", "completed_at", "updated_at"),
+                update_fields=(
+                    "status",
+                    "stage_started_at",
+                    "result_code",
+                    "completed_at",
+                    "updated_at",
+                ),
             )
-            state.save(using=self.using, update_fields=("active_operation", "blocking_operation", "updated_at"))
+            state.save(
+                using=self.using,
+                update_fields=("active_operation", "blocking_operation", "updated_at"),
+            )
             return _operation_view(operation)
 
     def complete_cleanup_recovery(
@@ -1262,15 +1293,22 @@ class DjangoRichMenuRepository:
             )
             if operation is None or operation.status != OperationStatus.RECOVERY_ACTIVE.value:
                 return StageConflict("stale_stage")
-            target = ManagedRichMenu.objects.using(self.using).select_for_update().filter(
-                public_id=resource_id,
-                channel_state_id=operation.channel_state_id,
-                lifecycle=ResourceLifecycle.DELETED.value,
-            ).first()
+            target = (
+                ManagedRichMenu.objects.using(self.using)
+                .select_for_update()
+                .filter(
+                    public_id=resource_id,
+                    channel_state_id=operation.channel_state_id,
+                    lifecycle=ResourceLifecycle.DELETED.value,
+                )
+                .first()
+            )
             if target is None:
                 return StageConflict("invalid_transition")
-            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
-                channel_public_id=operation.channel_state_id
+            state = (
+                RichMenuChannelState.objects.using(self.using)
+                .select_for_update()
+                .get(channel_public_id=operation.channel_state_id)
             )
             self._append_transition(
                 operation=operation,
@@ -1285,7 +1323,13 @@ class DjangoRichMenuRepository:
             operation.completed_at = self._clock()
             operation.save(
                 using=self.using,
-                update_fields=("status", "stage_started_at", "result_code", "completed_at", "updated_at"),
+                update_fields=(
+                    "status",
+                    "stage_started_at",
+                    "result_code",
+                    "completed_at",
+                    "updated_at",
+                ),
             )
             if state.active_operation_id == operation.operation_id:
                 state.active_operation = None
@@ -1294,7 +1338,10 @@ class DjangoRichMenuRepository:
                 operation.subject_operation_id,
             }:
                 state.blocking_operation = None
-            state.save(using=self.using, update_fields=("active_operation", "blocking_operation", "updated_at"))
+            state.save(
+                using=self.using,
+                update_fields=("active_operation", "blocking_operation", "updated_at"),
+            )
             return _operation_view(operation)
 
     def accept_recovery(
@@ -1339,7 +1386,10 @@ class DjangoRichMenuRepository:
                 .filter(
                     operation_id=command.subject_operation_id,
                     channel_state=state,
-                    status__in=(OperationStatus.UNKNOWN.value, OperationStatus.CLEANUP_REQUIRED.value),
+                    status__in=(
+                        OperationStatus.UNKNOWN.value,
+                        OperationStatus.CLEANUP_REQUIRED.value,
+                    ),
                 )
                 .first()
             )
@@ -1388,9 +1438,7 @@ class DjangoRichMenuRepository:
             )
             if recovery_fence.status != "matched":
                 return OperationConflict(
-                    "stale_channel"
-                    if recovery_fence.status == "stale"
-                    else "storage_unavailable"
+                    "stale_channel" if recovery_fence.status == "stale" else "storage_unavailable"
                 )
             now = self._clock()
             stage = (
@@ -1425,9 +1473,7 @@ class DjangoRichMenuRepository:
             state.save(using=self.using, update_fields=("active_operation", "updated_at"))
             return RecoveryAccepted(_operation_view(operation))
 
-    def handoff_recovery(
-        self, outcome: RecoveryOutcome
-    ) -> RecoveryHandoffResult | StageConflict:
+    def handoff_recovery(self, outcome: RecoveryOutcome) -> RecoveryHandoffResult | StageConflict:
         if not isinstance(outcome, RecoveryOutcome):
             raise TypeError("invalid recovery outcome")
         with transaction.atomic(using=self.using):
@@ -1440,8 +1486,10 @@ class DjangoRichMenuRepository:
             )
             if recovery is None:
                 return StageConflict("operation_not_found")
-            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
-                channel_public_id=recovery.channel_state_id
+            state = (
+                RichMenuChannelState.objects.using(self.using)
+                .select_for_update()
+                .get(channel_public_id=recovery.channel_state_id)
             )
             subject = (
                 RichMenuOperation.objects.using(self.using)
@@ -1500,7 +1548,10 @@ class DjangoRichMenuRepository:
                 subject.stage = outcome.subject_next_stage.value
                 subject.stage_started_at = None
                 subject.result_code = outcome.subject_result.value
-                if outcome.subject_next_status in {OperationStatus.SUCCEEDED, OperationStatus.FAILED}:
+                if outcome.subject_next_status in {
+                    OperationStatus.SUCCEEDED,
+                    OperationStatus.FAILED,
+                }:
                     subject.completed_at = now
                     state.active_operation = None
                     state.blocking_operation = None
@@ -1531,11 +1582,24 @@ class DjangoRichMenuRepository:
             )
             recovery.save(
                 using=self.using,
-                update_fields=("status", "result_code", "stage_started_at", "completed_at", "updated_at"),
+                update_fields=(
+                    "status",
+                    "result_code",
+                    "stage_started_at",
+                    "completed_at",
+                    "updated_at",
+                ),
             )
             subject.save(
                 using=self.using,
-                update_fields=("status", "stage", "stage_started_at", "result_code", "completed_at", "updated_at"),
+                update_fields=(
+                    "status",
+                    "stage",
+                    "stage_started_at",
+                    "result_code",
+                    "completed_at",
+                    "updated_at",
+                ),
             )
             state.save(
                 using=self.using,
@@ -1608,8 +1672,10 @@ class DjangoRichMenuRepository:
             )
             if operation is None:
                 return OperationConflict("invalid_relation")
-            state = RichMenuChannelState.objects.using(self.using).select_for_update().get(
-                channel_public_id=operation.channel_state_id
+            state = (
+                RichMenuChannelState.objects.using(self.using)
+                .select_for_update()
+                .get(channel_public_id=operation.channel_state_id)
             )
             resources = {
                 resource.public_id: resource
@@ -1636,9 +1702,7 @@ class DjangoRichMenuRepository:
                 or old_resource.replacement_operation_id is not None
             ):
                 return OperationConflict("invalid_relation")
-            replacement_fence = self._operation_fence.lock_exact(
-                _fence_snapshot(operation)
-            )
+            replacement_fence = self._operation_fence.lock_exact(_fence_snapshot(operation))
             if replacement_fence.status != "matched":
                 return OperationConflict(
                     "stale_channel"
@@ -1718,18 +1782,24 @@ class DjangoRichMenuRepository:
             else None
         )
         active = (
-            state.active_operation
-            if _operation_in_scope(state.active_operation, scope)
-            else None
+            state.active_operation if _operation_in_scope(state.active_operation, scope) else None
         )
         observation = _observation_view(state)
         next_actions = (
             (NextAllowedAction.GET_STATE, NextAllowedAction.VIEW_HISTORY)
             if active is not None
-            else (NextAllowedAction.RECHECK, NextAllowedAction.GET_STATE, NextAllowedAction.VIEW_HISTORY)
+            else (
+                NextAllowedAction.RECHECK,
+                NextAllowedAction.GET_STATE,
+                NextAllowedAction.VIEW_HISTORY,
+            )
             if blocking is not None and blocking.status == OperationStatus.UNKNOWN.value
             else (
-                (NextAllowedAction.CLEANUP, NextAllowedAction.GET_STATE, NextAllowedAction.VIEW_HISTORY)
+                (
+                    NextAllowedAction.CLEANUP,
+                    NextAllowedAction.GET_STATE,
+                    NextAllowedAction.VIEW_HISTORY,
+                )
                 if blocking is not None
                 else (
                     (NextAllowedAction.GET_STATE, NextAllowedAction.VIEW_HISTORY)
@@ -1774,7 +1844,9 @@ class DjangoRichMenuRepository:
             .prefetch_related(
                 Prefetch(
                     "transitions",
-                    queryset=RichMenuOperationTransition.objects.using(self.using).order_by("sequence"),
+                    queryset=RichMenuOperationTransition.objects.using(self.using).order_by(
+                        "sequence"
+                    ),
                 )
             )
             .order_by("-accepted_at", "-operation_id")
@@ -1789,9 +1861,7 @@ class DjangoRichMenuRepository:
         has_more = len(rows) > query.limit
         page_rows = rows[: query.limit]
         entries = tuple(_history_entry(operation) for operation in page_rows)
-        next_cursor = (
-            _encode_cursor(page_rows[-1]) if has_more and page_rows else None
-        )
+        next_cursor = _encode_cursor(page_rows[-1]) if has_more and page_rows else None
         return HistoryPage(entries=entries, next_cursor=next_cursor, has_more=has_more)
 
 
@@ -1830,9 +1900,7 @@ def _resource_target(resource: ManagedRichMenu) -> ManagedResourceTarget:
     )
 
 
-def _operation_in_scope(
-    operation: RichMenuOperation | None, scope: OwnerChannelScope
-) -> bool:
+def _operation_in_scope(operation: RichMenuOperation | None, scope: OwnerChannelScope) -> bool:
     return operation is not None and (
         operation.owner_identity_public_id == scope.owner_identity_public_id
         and operation.provider_id == scope.provider_id
@@ -1859,9 +1927,7 @@ def _observation_view(state: RichMenuChannelState) -> DefaultObservation | None:
 
 
 def _history_entry(operation: RichMenuOperation) -> HistoryEntry:
-    configuration, channel_label = _configuration_from_snapshot(
-        operation.configuration_snapshot
-    )
+    configuration, channel_label = _configuration_from_snapshot(operation.configuration_snapshot)
     transitions = tuple(
         SafeResultCode(transition.safe_reason) for transition in operation.transitions.all()
     )
@@ -1916,9 +1982,7 @@ def _configuration_from_snapshot(
         if not isinstance(raw_fields, list) or not raw_fields:
             return None, channel_label
         fields = tuple(
-            TemplateFieldValue(
-                display_name=field["displayName"], uri=field["uri"]
-            )
+            TemplateFieldValue(display_name=field["displayName"], uri=field["uri"])
             for field in raw_fields
             if isinstance(field, dict)
         )
@@ -1931,7 +1995,7 @@ def _configuration_from_snapshot(
             ),
             channel_label,
         )
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None, channel_label
 
 
@@ -1940,7 +2004,10 @@ _HISTORY_CURSOR_SALT = "linerichmenus.history.v1"
 
 def _encode_cursor(operation: RichMenuOperation) -> str:
     return signing.dumps(
-        {"acceptedAt": operation.accepted_at.isoformat(), "operationId": str(operation.operation_id)},
+        {
+            "acceptedAt": operation.accepted_at.isoformat(),
+            "operationId": str(operation.operation_id),
+        },
         salt=_HISTORY_CURSOR_SALT,
         compress=True,
     )
@@ -1967,9 +2034,7 @@ def _fence_snapshot(operation: RichMenuOperation) -> OperationFenceSnapshot:
     )
 
 
-def _valid_recovery_subject_handoff(
-    subject: RichMenuOperation, outcome: RecoveryOutcome
-) -> bool:
+def _valid_recovery_subject_handoff(subject: RichMenuOperation, outcome: RecoveryOutcome) -> bool:
     current_status = OperationStatus(subject.status)
     if current_status not in {OperationStatus.UNKNOWN, OperationStatus.CLEANUP_REQUIRED}:
         return False

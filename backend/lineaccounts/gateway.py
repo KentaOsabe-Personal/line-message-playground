@@ -15,7 +15,6 @@ import httpx
 from .runtime import LineAccountRuntime
 from .types import ChannelAccessToken, IdToken, LineSubject, UserAccessToken
 
-
 _API_ORIGIN = "https://api.line.me"
 _ID_TOKEN_ISSUER = "https://access.line.me"
 _REQUIRED_USER_TOKEN_SCOPES = frozenset(("openid", "profile"))
@@ -70,18 +69,11 @@ class DeauthorizeUncertain:
     """認可取消の外部作用を断定できないことを表す。"""
 
 
-VerifyIdentityResult = (
-    VerifyIdentitySucceeded | InvalidLineProof | LinePlatformUnavailable
-)
-VerifyUserTokenResult = (
-    VerifyUserTokenSucceeded | InvalidLineProof | LinePlatformUnavailable
-)
+VerifyIdentityResult = VerifyIdentitySucceeded | InvalidLineProof | LinePlatformUnavailable
+VerifyUserTokenResult = VerifyUserTokenSucceeded | InvalidLineProof | LinePlatformUnavailable
 FriendshipResult = FriendshipSucceeded | InvalidLineProof | LinePlatformUnavailable
 DeauthorizeResult = (
-    DeauthorizeSucceeded
-    | DeauthorizeRejected
-    | DeauthorizeUncertain
-    | LinePlatformUnavailable
+    DeauthorizeSucceeded | DeauthorizeRejected | DeauthorizeUncertain | LinePlatformUnavailable
 )
 
 
@@ -158,9 +150,7 @@ class HttpxLinePlatformGateway:
             return failure
         assert isinstance(verification, httpx.Response)
         verification_payload = self._json_object(verification)
-        if verification_payload is None or not self._valid_user_token(
-            verification_payload
-        ):
+        if verification_payload is None or not self._valid_user_token(verification_payload):
             return InvalidLineProof()
 
         profile = self._read_only_request(

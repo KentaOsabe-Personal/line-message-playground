@@ -7,13 +7,13 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 
+from .admin_lifecycle_types import RecheckDeactivation, StartDeactivation
 from .admin_types import (
     DeleteAdminChannel,
     RegisterAdminChannel,
     SetAdminChannelState,
     UpdateAdminChannel,
 )
-from .admin_lifecycle_types import RecheckDeactivation, StartDeactivation
 from .types import AccessToken, ChannelSecret, CredentialPair
 from .validators import (
     BoundaryValidationError,
@@ -22,7 +22,6 @@ from .validators import (
     validate_messaging_api_channel_id,
     validate_provider_id,
 )
-
 
 _INVALID = "入力値が不正です。"
 _MAX_CREDENTIAL_BYTES = 16 * 1024
@@ -34,9 +33,7 @@ class ExactRequestSerializer(serializers.Serializer):
             raise serializers.ValidationError({"request": [_INVALID]})
         unknown = set(data) - set(self.fields)
         if unknown:
-            raise serializers.ValidationError(
-                {field: [_INVALID] for field in sorted(unknown)}
-            )
+            raise serializers.ValidationError({field: [_INVALID] for field in sorted(unknown)})
         return super().to_internal_value(data)
 
 
@@ -59,7 +56,7 @@ class CanonicalUUIDField(serializers.Field):
             raise serializers.ValidationError(_INVALID)
         try:
             parsed = UUID(data)
-        except (ValueError, TypeError, AttributeError):
+        except ValueError, TypeError, AttributeError:
             raise serializers.ValidationError(_INVALID) from None
         if str(parsed) != data or parsed.version != 4:
             raise serializers.ValidationError(_INVALID)
@@ -136,12 +133,8 @@ class CreateChannelRequestSerializer(ExactRequestSerializer):
     messagingApiChannelId = serializers.CharField(
         validators=[_boundary_validator(validate_messaging_api_channel_id)]
     )
-    botUserId = serializers.CharField(
-        validators=[_boundary_validator(validate_bot_user_id)]
-    )
-    providerId = serializers.CharField(
-        validators=[_boundary_validator(validate_provider_id)]
-    )
+    botUserId = serializers.CharField(validators=[_boundary_validator(validate_bot_user_id)])
+    providerId = serializers.CharField(validators=[_boundary_validator(validate_provider_id)])
     accessToken = serializers.CharField(write_only=True, trim_whitespace=False)
     channelSecret = serializers.CharField(write_only=True, trim_whitespace=False)
     active = serializers.BooleanField()
@@ -197,10 +190,13 @@ class UpdateChannelRequestSerializer(CredentialPairSerializerMixin):
             if str(parsed) != raw_channel_id:
                 raise serializers.ValidationError({"channelId": [_INVALID]})
         attrs = self._validate_optional_pair(attrs)
-        changed = any(
-            field in attrs
-            for field in ("label", "messagingApiChannelId", "botUserId", "providerId")
-        ) or attrs["credentialPair"] is not None
+        changed = (
+            any(
+                field in attrs
+                for field in ("label", "messagingApiChannelId", "botUserId", "providerId")
+            )
+            or attrs["credentialPair"] is not None
+        )
         if not changed:
             raise serializers.ValidationError({"request": [_INVALID]})
         return attrs

@@ -25,6 +25,10 @@ React Router への依存は composition root、共通 shell、route page、お�
 - JavaScript を混在させず、API レスポンス等の境界データには型を与える
 - Production build は `tsc -b` を Vite build より先に実行し、型エラーをビルドの失敗とする
 
+## 静的チェック
+
+コード・テスト・設定・依存の変更後は、rootから `sh scripts/check.sh frontend` を実行します。ESLintの型情報を使うLint、React Hooks検査、Prettierの整形チェック、TypeScript型検査をFrontend全体へ適用します。準備・修正・対象範囲は [READMEのローカル品質チェック](../README.md#ローカル品質チェック) が正本です。Lintを通すための一括無効化や、Promiseの失敗・Hooksの依存を無視する修正は行いません。
+
 ## 画面境界
 
 - `BrowserRouter` と静的 route registry を画面選択の基準とし、認証済み機能は route-driven shell の配下へ置く

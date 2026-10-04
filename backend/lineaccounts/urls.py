@@ -10,7 +10,6 @@ from .views import (
     UnlinkPreviewAPIView,
 )
 
-
 app_name = "lineaccounts"
 
 urlpatterns = [

@@ -14,10 +14,10 @@ from lineaccounts.admin_authorization import (
 )
 from lineaccounts.gateway import VerifiedLineIdentity
 from lineaccounts.models import OwnerAccount
-from lineaccounts.repositories import DjangoAccountRepository
 from lineaccounts.repositories import (
     AccountPersistenceError,
     AccountRepositoryProgrammingError,
+    DjangoAccountRepository,
     LockedOwnerAccount,
     LockedOwnerSession,
 )
@@ -116,9 +116,7 @@ class OwnerOperationFenceContractTests(TransactionTestCase):
     def test_requires_caller_transaction_and_calls_owner_before_session(self):
         repository = Mock()
         calls = []
-        repository.lock_owner_account.side_effect = lambda: (
-            calls.append("owner") or self.owner
-        )
+        repository.lock_owner_account.side_effect = lambda: calls.append("owner") or self.owner
         repository.lock_owner_session.side_effect = lambda *args: (
             calls.append("session") or self.session
         )
@@ -142,9 +140,7 @@ class OwnerOperationFenceContractTests(TransactionTestCase):
         ):
             with self.subTest(source_code=source_code):
                 repository = Mock()
-                repository.lock_owner_account.side_effect = AccountPersistenceError(
-                    source_code
-                )
+                repository.lock_owner_account.side_effect = AccountPersistenceError(source_code)
                 fence = DjangoOwnerOperationFence(repository)
                 with transaction.atomic():
                     result = fence.lock_active(
@@ -175,9 +171,7 @@ class OwnerOperationFenceConcurrencyTests(TransactionTestCase):
             self.session = self.repository.create_owner_session(
                 owner, self.now + timedelta(hours=1)
             )
-        self.context = OwnerOperationContext(
-            self.session.public_id, self.identity.public_id
-        )
+        self.context = OwnerOperationContext(self.session.public_id, self.identity.public_id)
 
     # テストケース: active proof取得中に別transactionからunlinkを開始する
     # 期待値: 先行proof完了後にunlinkが進み、後続proofはoperation blockedになる
@@ -190,9 +184,9 @@ class OwnerOperationFenceConcurrencyTests(TransactionTestCase):
             close_old_connections()
             try:
                 with transaction.atomic():
-                    result = DjangoOwnerOperationFence(
-                        DjangoAccountRepository()
-                    ).lock_active(self.context, self.now)
+                    result = DjangoOwnerOperationFence(DjangoAccountRepository()).lock_active(
+                        self.context, self.now
+                    )
                     proof_ready.set()
                     self.assertTrue(release_proof.wait(5))
                     return result
@@ -239,9 +233,9 @@ class OwnerOperationFenceConcurrencyTests(TransactionTestCase):
             close_old_connections()
             try:
                 with transaction.atomic():
-                    result = DjangoOwnerOperationFence(
-                        DjangoAccountRepository()
-                    ).lock_active(self.context, self.now)
+                    result = DjangoOwnerOperationFence(DjangoAccountRepository()).lock_active(
+                        self.context, self.now
+                    )
                     proof_ready.set()
                     self.assertTrue(release_proof.wait(5))
                     return result
@@ -253,9 +247,7 @@ class OwnerOperationFenceConcurrencyTests(TransactionTestCase):
             try:
                 self.assertTrue(proof_ready.wait(5))
                 with transaction.atomic():
-                    return DjangoAccountRepository().delete_owner_session(
-                        self.session.public_id
-                    )
+                    return DjangoAccountRepository().delete_owner_session(self.session.public_id)
             finally:
                 close_old_connections()
 

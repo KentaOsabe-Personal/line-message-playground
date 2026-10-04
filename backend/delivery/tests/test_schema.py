@@ -236,9 +236,7 @@ class DeliveryAttemptSchemaTests(TestCase):
         self.assertTrue(domain_failures.issubset(model_failures))
         self.assertIn("service_unavailable", model_failures)
 
-        for index, failure_type in enumerate(
-            sorted(domain_failures | {"service_unavailable"})
-        ):
+        for index, failure_type in enumerate(sorted(domain_failures | {"service_unavailable"})):
             with self.subTest(failure_type=failure_type):
                 attempt = self.make_attempt(
                     operation_id=uuid.uuid4(),

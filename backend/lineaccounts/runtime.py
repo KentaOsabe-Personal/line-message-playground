@@ -12,7 +12,6 @@ from django.core.exceptions import ImproperlyConfigured
 from linechannels.repositories import LineChannelDirectory
 from linechannels.validators import BoundaryValidationError, validate_provider_id
 
-
 _OPAQUE_NUMERIC_ID = re.compile(r"[0-9]{1,64}\Z", re.ASCII)
 _LOWERCASE_SHA256 = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 _KNOWN_DJANGO_SECRET = "local-development-secret-key"
@@ -133,12 +132,7 @@ def load_line_account_runtime(
 
 
 def validate_django_secret(secret: str) -> str:
-    if (
-        not secret
-        or len(secret) < 32
-        or secret == _KNOWN_DJANGO_SECRET
-        or secret != secret.strip()
-    ):
+    if not secret or len(secret) < 32 or secret == _KNOWN_DJANGO_SECRET or secret != secret.strip():
         raise ImproperlyConfigured("DJANGO_SECRET_KEY_INVALID")
     return secret
 

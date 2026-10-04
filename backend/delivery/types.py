@@ -9,15 +9,10 @@ from uuid import UUID
 from lineaccounts.types import LineSubject
 from linechannels.types import AccessToken
 
-
 TargetMode: TypeAlias = Literal["fixed_user", "linked_recipient"]
 FriendshipState: TypeAlias = Literal["friend", "not_friend", "unknown"]
-DeliveryStatus: TypeAlias = Literal[
-    "processing", "succeeded", "failed", "unknown"
-]
-ReceiptStatus: TypeAlias = Literal[
-    "not_requested", "pending", "confirmed", "expired"
-]
+DeliveryStatus: TypeAlias = Literal["processing", "succeeded", "failed", "unknown"]
+ReceiptStatus: TypeAlias = Literal["not_requested", "pending", "confirmed", "expired"]
 TargetUnavailableReason: TypeAlias = Literal[
     "target_not_available",
     "channel_inactive",
@@ -64,12 +59,8 @@ ReceiptRejectionReason: TypeAlias = Literal[
 ]
 
 _FRIENDSHIP_STATES = frozenset(("friend", "not_friend", "unknown"))
-_DELIVERY_STATUSES = frozenset(
-    ("processing", "succeeded", "failed", "unknown")
-)
-_RECEIPT_STATUSES = frozenset(
-    ("not_requested", "pending", "confirmed", "expired")
-)
+_DELIVERY_STATUSES = frozenset(("processing", "succeeded", "failed", "unknown"))
+_RECEIPT_STATUSES = frozenset(("not_requested", "pending", "confirmed", "expired"))
 _TARGET_UNAVAILABLE_REASONS = frozenset(
     (
         "target_not_available",
@@ -89,9 +80,7 @@ _REJECTED_PUSH_FAILURE_TYPES = frozenset(
         "rate_limited",
     )
 )
-_UNKNOWN_PUSH_FAILURE_TYPES = frozenset(
-    ("service_unknown", "timeout_unknown", "response_unknown")
-)
+_UNKNOWN_PUSH_FAILURE_TYPES = frozenset(("service_unknown", "timeout_unknown", "response_unknown"))
 _DELIVERY_FAILURE_TYPES = frozenset(
     (
         "configuration",
@@ -203,10 +192,7 @@ class MessageSnapshot(_SerializationDisabled):
         formatted_text: str,
         fingerprint: str,
     ) -> None:
-        if not all(
-            isinstance(value, str)
-            for value in (subject, body, formatted_text)
-        ):
+        if not all(isinstance(value, str) for value in (subject, body, formatted_text)):
             raise ValueError("invalid message snapshot")
         _validate_sha256(fingerprint, "message fingerprint")
         object.__setattr__(self, "_MessageSnapshot__subject", subject)
@@ -242,10 +228,7 @@ class MessageSnapshot(_SerializationDisabled):
         return self.__fingerprint
 
     def __repr__(self) -> str:
-        return (
-            "<MessageSnapshot "
-            f"fingerprint={self.fingerprint} content=redacted>"
-        )
+        return f"<MessageSnapshot fingerprint={self.fingerprint} content=redacted>"
 
     __str__ = __repr__
 
@@ -452,10 +435,7 @@ class SubmitLinkedDelivery(_SerializationDisabled):
             raise ValueError("invalid confirmation snapshot")
         if not isinstance(self.message, MessageSnapshot):
             raise ValueError("invalid message snapshot")
-        if (
-            self.message.fingerprint
-            != self.confirmation.message_fingerprint
-        ):
+        if self.message.fingerprint != self.confirmation.message_fingerprint:
             raise ValueError("message does not match confirmation")
 
     def __repr__(self) -> str:
@@ -569,9 +549,7 @@ class LinePushAccepted:
         if self.status != "accepted":
             raise ValueError("invalid accepted push status")
         for request_id in (self.request_id, self.accepted_request_id):
-            if request_id is not None and (
-                not isinstance(request_id, str) or not request_id
-            ):
+            if request_id is not None and (not isinstance(request_id, str) or not request_id):
                 raise ValueError("invalid LINE request ID")
 
 
@@ -599,9 +577,7 @@ class LinePushUnknown:
             raise ValueError("invalid unknown push failure type")
 
 
-LinePushResult: TypeAlias = (
-    LinePushAccepted | LinePushRejected | LinePushUnknown
-)
+LinePushResult: TypeAlias = LinePushAccepted | LinePushRejected | LinePushUnknown
 
 
 PrePushFailureType: TypeAlias = Literal["configuration", "target_changed"]
@@ -683,9 +659,7 @@ class DeliverySnapshot(_SerializationDisabled):
             self.line_request_id,
             self.line_accepted_request_id,
         ):
-            if request_id is not None and (
-                not isinstance(request_id, str) or not request_id
-            ):
+            if request_id is not None and (not isinstance(request_id, str) or not request_id):
                 raise ValueError("invalid LINE request ID")
         _validate_receipt_snapshot(
             self.receipt_status,
@@ -849,10 +823,7 @@ class LinkedPushPrevented(_SerializationDisabled):
             raise ValueError("invalid delivery snapshot")
         if self.failure_type not in ("configuration", "target_changed"):
             raise ValueError("invalid pre-push failure type")
-        if (
-            self.snapshot.status != "failed"
-            or self.snapshot.failure != self.failure_type
-        ):
+        if self.snapshot.status != "failed" or self.snapshot.failure != self.failure_type:
             raise ValueError("pre-push failure does not match stored snapshot")
         if self.status != "prevented":
             raise ValueError("invalid linked push prevention status")
@@ -889,10 +860,7 @@ class LinkedPushStored(_SerializationDisabled):
 
 
 LinkedDeliveryAcceptResult: TypeAlias = (
-    AcceptedLinkedAttempt
-    | ExistingAttempt
-    | AttemptConflict
-    | TargetUnavailable
+    AcceptedLinkedAttempt | ExistingAttempt | AttemptConflict | TargetUnavailable
 )
 
 
@@ -968,11 +936,7 @@ def _validate_aware_datetime(
     value: datetime | None,
     label: str,
 ) -> None:
-    if (
-        not isinstance(value, datetime)
-        or value.tzinfo is None
-        or value.utcoffset() is None
-    ):
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"invalid {label}")
 
 
@@ -1014,10 +978,7 @@ def _validate_receipt_snapshot(
     if status not in _RECEIPT_STATUSES:
         raise ValueError("invalid receipt status")
     if status == "not_requested":
-        if any(
-            value is not None
-            for value in (expires_at, confirmed_at, webhook_event_id)
-        ):
+        if any(value is not None for value in (expires_at, confirmed_at, webhook_event_id)):
             raise ValueError("non-requested receipt cannot have state")
         return
     _validate_aware_datetime(expires_at, "receipt expiry")

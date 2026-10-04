@@ -9,7 +9,6 @@ from .rotation_item import CredentialRotationItemProcessor
 from .rotation_lock import RotationLock
 from .rotation_repository import RotationCredentialRepository
 
-
 RotationFailureCode = Literal[
     "credential_missing",
     "credential_unreadable",
@@ -86,8 +85,7 @@ class DefaultCredentialRotationService:
                     failures.setdefault(public_id, failure)
 
             failure_results = tuple(
-                RotationItemFailure(public_id, code)
-                for public_id, code in failures.items()
+                RotationItemFailure(public_id, code) for public_id, code in failures.items()
             )
             complete = not failure_results
             return RotationSummary(
@@ -113,9 +111,7 @@ class DefaultCredentialRotationService:
                 if result.status == "verified":
                     return "verified", None
                 if result.status == "rotated":
-                    self._repository.replace_credentials_locked(
-                        public_id, result.credentials
-                    )
+                    self._repository.replace_credentials_locked(public_id, result.credentials)
                     return "rotated", None
                 transaction.set_rollback(True, using=self._using)
                 return "failed", result.code
@@ -130,9 +126,7 @@ class DefaultCredentialRotationService:
                 credentials = self._repository.get_credentials_for_update(public_id)
                 if credentials is None:
                     return "credential_missing"
-                result = self._item_processor.verify_with_primary(
-                    public_id, credentials
-                )
+                result = self._item_processor.verify_with_primary(public_id, credentials)
                 if result.status == "verified":
                     return None
                 return result.code

@@ -47,6 +47,4 @@ class CredentialBoundaryTests(SimpleTestCase):
     def test_credentials_reveal_only_for_remote_call(self):
         token = UserAccessToken("user-access-token-canary")
 
-        self.assertEqual(
-            token.reveal_for_remote_call(), "user-access-token-canary"
-        )
+        self.assertEqual(token.reveal_for_remote_call(), "user-access-token-canary")

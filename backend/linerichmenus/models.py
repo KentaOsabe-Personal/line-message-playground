@@ -38,9 +38,7 @@ class RichMenuChannelState(models.Model):
     last_observation_kind = models.CharField(
         max_length=32, choices=ObservationKind.choices, null=True, blank=True
     )
-    last_observation_fingerprint = models.CharField(
-        max_length=64, null=True, blank=True
-    )
+    last_observation_fingerprint = models.CharField(max_length=64, null=True, blank=True)
     last_observed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -135,14 +133,10 @@ class RichMenuOperation(models.Model):
         related_name="targeted_operations",
     )
     request_fingerprint = models.CharField(max_length=64)
-    confirmation_usage_digest = models.CharField(
-        max_length=64, null=True, blank=True, unique=True
-    )
+    confirmation_usage_digest = models.CharField(max_length=64, null=True, blank=True, unique=True)
     expected_channel_revision = models.DateTimeField()
     status = models.CharField(max_length=32, choices=Status.choices)
-    stage = models.CharField(
-        max_length=32, choices=Stage.choices, null=True, blank=True
-    )
+    stage = models.CharField(max_length=32, choices=Stage.choices, null=True, blank=True)
     stage_started_at = models.DateTimeField(null=True, blank=True)
     result_code = models.CharField(max_length=64)
     configuration_snapshot = models.JSONField(null=True, blank=True)
@@ -154,9 +148,7 @@ class RichMenuOperation(models.Model):
     class Meta:
         db_table = "linerichmenus_operation"
         indexes = [
-            models.Index(
-                fields=("channel_state", "accepted_at"), name="lrm_op_channel_time_idx"
-            ),
+            models.Index(fields=("channel_state", "accepted_at"), name="lrm_op_channel_time_idx"),
             models.Index(fields=("subject_operation",), name="lrm_op_subject_idx"),
             models.Index(fields=("target_resource",), name="lrm_op_target_idx"),
         ]
@@ -185,7 +177,17 @@ class RichMenuOperation(models.Model):
             models.CheckConstraint(
                 condition=(
                     Q(status="accepted", stage__isnull=True)
-                    | Q(status__in=("processing", "failed", "unknown", "cleanup_required", "recovery_active", "succeeded"), stage__isnull=False)
+                    | Q(
+                        status__in=(
+                            "processing",
+                            "failed",
+                            "unknown",
+                            "cleanup_required",
+                            "recovery_active",
+                            "succeeded",
+                        ),
+                        stage__isnull=False,
+                    )
                 ),
                 name="lrm_operation_stage_valid",
             ),
@@ -236,9 +238,7 @@ class ManagedRichMenu(models.Model):
         on_delete=models.PROTECT,
         related_name="replaced_resource",
     )
-    line_rich_menu_id = models.CharField(
-        max_length=128, null=True, blank=True, unique=True
-    )
+    line_rich_menu_id = models.CharField(max_length=128, null=True, blank=True, unique=True)
     ownership_marker = models.CharField(max_length=128, unique=True)
     lifecycle = models.CharField(max_length=32, choices=Lifecycle.choices)
     image_digest = models.CharField(max_length=64)
@@ -250,9 +250,7 @@ class ManagedRichMenu(models.Model):
     class Meta:
         db_table = "linerichmenus_resource"
         indexes = [
-            models.Index(
-                fields=("channel_state", "lifecycle"), name="lrm_res_channel_life_idx"
-            ),
+            models.Index(fields=("channel_state", "lifecycle"), name="lrm_res_channel_life_idx"),
         ]
         constraints = [
             models.CheckConstraint(
@@ -309,9 +307,7 @@ class RichMenuOperationTransition(models.Model):
 
     class Meta:
         db_table = "linerichmenus_transition"
-        indexes = [
-            models.Index(fields=("operation", "created_at"), name="lrm_trans_op_time_idx")
-        ]
+        indexes = [models.Index(fields=("operation", "created_at"), name="lrm_trans_op_time_idx")]
         constraints = [
             models.UniqueConstraint(
                 fields=("operation", "sequence"), name="lrm_transition_sequence_uniq"

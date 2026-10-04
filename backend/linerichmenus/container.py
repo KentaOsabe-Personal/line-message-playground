@@ -5,8 +5,8 @@ from django.conf import settings
 from lineaccounts.admin_authorization import DjangoOwnerOperationFence
 from lineaccounts.repositories import DjangoAccountRepository
 from linechannels import runtime as channel_runtime
-from linechannels.admin_repositories import DjangoAdminChannelRepository
 from linechannels.admin_lifecycle_repositories import DjangoPendingDeactivationFence
+from linechannels.admin_repositories import DjangoAdminChannelRepository
 from linechannels.admin_types import ChannelRevisionProof, ChannelRevisionUnchanged
 from linechannels.crypto import FernetCredentialCipher
 
@@ -22,7 +22,6 @@ from .repository import (
     OperationFenceSnapshot,
 )
 from .services import DefaultMutationReadiness, DefaultRichMenuService, MutationReadiness
-
 
 LIFECYCLE_INTEGRATION_MARKER = "line-rich-menu-admin-lifecycle-v1"
 
@@ -65,8 +64,7 @@ def build_configured_mutation_readiness() -> MutationReadiness:
     )
 
 
-def validate_mutation_readiness_configuration(
-) -> tuple[ReadinessConfigurationFailure, ...]:
+def validate_mutation_readiness_configuration() -> tuple[ReadinessConfigurationFailure, ...]:
     readiness = build_configured_mutation_readiness()
     if readiness.configuration_valid:
         return ()

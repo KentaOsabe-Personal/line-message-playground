@@ -18,7 +18,7 @@ class Command(BaseCommand):
         try:
             service = build_rotation_service()
             summary = service.rotate_all()
-        except (KeyboardInterrupt, Exception):
+        except KeyboardInterrupt, Exception:
             raise CommandError("credential rotation failed") from None
 
         if not isinstance(summary, RotationSummary):

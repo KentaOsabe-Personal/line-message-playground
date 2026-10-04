@@ -15,9 +15,7 @@ class ProviderMigrationTests(TransactionTestCase):
         self.executor.migrate(self.migrate_from)
         old_apps = self.executor.loader.project_state(self.migrate_from).apps
         channel_model = old_apps.get_model("linechannels", "LineChannel")
-        credential_model = old_apps.get_model(
-            "linechannels", "LineChannelCredential"
-        )
+        credential_model = old_apps.get_model("linechannels", "LineChannelCredential")
         self.public_id = uuid4()
         channel = channel_model.objects.create(
             public_id=self.public_id,
@@ -44,9 +42,7 @@ class ProviderMigrationTests(TransactionTestCase):
         self.executor.migrate(self.migrate_to)
         apps = self.executor.loader.project_state(self.migrate_to).apps
         channel_model = apps.get_model("linechannels", "LineChannel")
-        credential_model = apps.get_model(
-            "linechannels", "LineChannelCredential"
-        )
+        credential_model = apps.get_model("linechannels", "LineChannelCredential")
 
         channel = channel_model.objects.get(public_id=self.public_id)
         credential = credential_model.objects.get(line_channel_id=channel.id)
@@ -64,20 +60,14 @@ class ProviderMigrationTests(TransactionTestCase):
         self.executor.migrate(self.migrate_to)
         new_apps = self.executor.loader.project_state(self.migrate_to).apps
         channel_model = new_apps.get_model("linechannels", "LineChannel")
-        channel_model.objects.filter(public_id=self.public_id).update(
-            provider_id=None
-        )
+        channel_model.objects.filter(public_id=self.public_id).update(provider_id=None)
 
         self.executor = MigrationExecutor(connection)
         self.executor.migrate(self.migrate_from)
         old_apps = self.executor.loader.project_state(self.migrate_from).apps
         old_channel_model = old_apps.get_model("linechannels", "LineChannel")
-        old_credential_model = old_apps.get_model(
-            "linechannels", "LineChannelCredential"
-        )
+        old_credential_model = old_apps.get_model("linechannels", "LineChannelCredential")
 
         channel = old_channel_model.objects.get(public_id=self.public_id)
         self.assertEqual(channel.label, "既存チャネル")
-        self.assertTrue(
-            old_credential_model.objects.filter(line_channel_id=channel.id).exists()
-        )
+        self.assertTrue(old_credential_model.objects.filter(line_channel_id=channel.id).exists())

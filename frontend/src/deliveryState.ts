@@ -1,8 +1,4 @@
-import type {
-  LinkedDeliveryStatus,
-  LinkedPreviewResponse,
-  SafeError,
-} from './deliveryDto'
+import type { LinkedDeliveryStatus, LinkedPreviewResponse, SafeError } from './deliveryDto'
 
 export type LinkedEditingInput = {
   channelId: string | null
@@ -34,7 +30,11 @@ export type LinkedDeliveryUIState =
   | ({ phase: 'submitting' } & LinkedOperationContext)
   | ({ phase: 'processing'; result: LinkedStatus<'processing'> } & LinkedOperationContext)
   | ({ phase: 'checking'; previous: LinkedDeliveryStatus | null } & LinkedOperationContext)
-  | ({ phase: 'uncertain'; error: SafeError; canRetrySameOperation: boolean } & LinkedOperationContext)
+  | ({
+      phase: 'uncertain'
+      error: SafeError
+      canRetrySameOperation: boolean
+    } & LinkedOperationContext)
   | ({ phase: 'rejected'; error: SafeError } & LinkedOperationContext)
   | ({ phase: 'unknown'; result: LinkedStatus<'unknown'> } & LinkedOperationContext)
   | ({ phase: 'succeeded'; result: LinkedStatus<'succeeded'> } & LinkedOperationContext)
@@ -76,14 +76,22 @@ const hydratedOperationContext = (operationId: string): LinkedOperationContext =
   operationId,
   input: { ...initialLinkedDeliveryState.input },
   preview: {
-    channelId: '', channelLabel: '', recipientId: '', recipientDisplayName: '',
-    friendshipState: 'unknown', formattedText: '', receiptRequested: false,
-    receiptExpiresAt: null, confirmationToken: '',
+    channelId: '',
+    channelLabel: '',
+    recipientId: '',
+    recipientDisplayName: '',
+    friendshipState: 'unknown',
+    formattedText: '',
+    receiptRequested: false,
+    receiptExpiresAt: null,
+    confirmationToken: '',
   },
 })
 
 const copyLinkedInput = (input: LinkedEditingInput): LinkedEditingInput => ({ ...input })
-const copyLinkedPreview = (preview: LinkedPreviewResponse): LinkedPreviewResponse => ({ ...preview })
+const copyLinkedPreview = (preview: LinkedPreviewResponse): LinkedPreviewResponse => ({
+  ...preview,
+})
 const copyLinkedError = (error: SafeError): SafeError => ({
   code: error.code,
   summary: error.summary,
@@ -100,7 +108,7 @@ const copyLinkedStatus = <T extends LinkedDeliveryStatus>(result: T): T => ({
   snapshot: { ...result.snapshot },
   receipt: { ...result.receipt },
   ...('error' in result ? { error: copyLinkedError(result.error) } : {}),
-}) as T
+})
 
 const editableInput = (state: LinkedDeliveryUIState): LinkedEditingInput | null =>
   state.phase === 'editing' || state.phase === 'previewing' || state.phase === 'preview'
@@ -120,7 +128,8 @@ const editLinkedInput = (
     input.subject === current.subject &&
     input.body === current.body &&
     input.receiptRequested === current.receiptRequested
-  ) return state
+  )
+    return state
   return { phase: 'editing', input, errors: {} }
 }
 
@@ -138,10 +147,7 @@ const linkedFieldErrors = (error: SafeError): LinkedFieldErrors => {
   }
 }
 
-const previewMatchesInput = (
-  preview: LinkedPreviewResponse,
-  input: LinkedEditingInput,
-): boolean =>
+const previewMatchesInput = (preview: LinkedPreviewResponse, input: LinkedEditingInput): boolean =>
   preview.channelId === input.channelId &&
   preview.recipientId === input.recipientId &&
   preview.receiptRequested === input.receiptRequested
@@ -230,10 +236,7 @@ export function transitionLinkedDelivery(
       errors: linkedFieldErrors(copyLinkedError(event.error)),
     }
   }
-  if (
-    event.type === 'backToEditing' &&
-    (state.phase === 'preview' || state.phase === 'rejected')
-  ) {
+  if (event.type === 'backToEditing' && (state.phase === 'preview' || state.phase === 'rejected')) {
     return { phase: 'editing', input: copyLinkedInput(state.input), errors: {} }
   }
   if (event.type === 'submitted' && state.phase === 'preview') {
@@ -272,18 +275,19 @@ export function transitionLinkedDelivery(
       input: copyLinkedInput(state.input),
       preview: copyLinkedPreview(state.preview),
       operationId: state.operationId,
-      error: { code: 'network_error', summary: '送信結果を確認できません。状態を確認してください。' },
+      error: {
+        code: 'network_error',
+        summary: '送信結果を確認できません。状態を確認してください。',
+      },
       canRetrySameOperation: false,
     }
   }
   if (
     event.type === 'checkStarted' &&
-    (
-      state.phase === 'processing' ||
+    (state.phase === 'processing' ||
       state.phase === 'unknown' ||
       state.phase === 'succeeded' ||
-      state.phase === 'uncertain'
-    )
+      state.phase === 'uncertain')
   ) {
     return {
       phase: 'checking',

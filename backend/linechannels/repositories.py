@@ -55,8 +55,7 @@ class PersistedChannelMutation:
         )
         credentials = self.encrypted_credentials is not None
         return (
-            "<PersistedChannelMutation "
-            f"fields=[{specified}] encrypted_credentials={credentials}>"
+            f"<PersistedChannelMutation fields=[{specified}] encrypted_credentials={credentials}>"
         )
 
 
@@ -120,15 +119,21 @@ class DjangoLineChannelDirectory:
         self.using = using
 
     def list_active_bound(self) -> tuple[LinkableChannelSummary, ...]:
-        rows = LineChannel.objects.using(self.using).filter(
-            is_active=True, provider_id__isnull=False
-        ).order_by("id").values("public_id", "label", "provider_id", "is_active")
+        rows = (
+            LineChannel.objects.using(self.using)
+            .filter(is_active=True, provider_id__isnull=False)
+            .order_by("id")
+            .values("public_id", "label", "provider_id", "is_active")
+        )
         return tuple(self._summary(row) for row in rows)
 
     def get(self, public_id: UUID) -> LinkableChannelSummary | None:
-        row = LineChannel.objects.using(self.using).filter(
-            public_id=public_id, provider_id__isnull=False
-        ).values("public_id", "label", "provider_id", "is_active").first()
+        row = (
+            LineChannel.objects.using(self.using)
+            .filter(public_id=public_id, provider_id__isnull=False)
+            .values("public_id", "label", "provider_id", "is_active")
+            .first()
+        )
         return None if row is None else self._summary(row)
 
     @staticmethod
@@ -418,7 +423,7 @@ class DjangoCredentialRepository:
                 kind=kind,
             )
             secret = self._cipher.decrypt(encrypted, context)
-        except (CredentialCryptoError, TypeError, ValueError):
+        except CredentialCryptoError, TypeError, ValueError:
             return CredentialUnavailable("credential_unreadable")
 
         if not isinstance(secret, expected_type):
@@ -468,7 +473,7 @@ class DjangoWebhookCredentialRepository:
                     kind="channel_secret",
                 ),
             )
-        except (CredentialCryptoError, TypeError, ValueError):
+        except CredentialCryptoError, TypeError, ValueError:
             return CredentialUnavailable("credential_unreadable")
         if not isinstance(secret, ChannelSecret):
             return CredentialUnavailable("credential_unreadable")

@@ -58,9 +58,7 @@ class RecordingFence:
         self.calls = []
 
     def lock_active(self, context, now):
-        self.calls.append(
-            (context, now, transaction.get_connection().in_atomic_block)
-        )
+        self.calls.append((context, now, transaction.get_connection().in_atomic_block))
         return self.result
 
 
@@ -98,9 +96,7 @@ class AdminChannelServiceTests(TransactionTestCase):
         self.assertEqual(detail.channel, item)
         self.assertTrue(all(call[2] for call in self.fence.calls))
         self.repository.list_for_owner_provider.assert_called_once_with("000123")
-        self.repository.get_for_owner_provider.assert_called_once_with(
-            item.public_id, "000123"
-        )
+        self.repository.get_for_owner_provider.assert_called_once_with(item.public_id, "000123")
 
         blocked_repository = Mock()
         blocked = DefaultChannelAdminService(
@@ -191,9 +187,7 @@ class AdminChannelServiceTests(TransactionTestCase):
     def test_set_state_integrates_optional_credential_repair(self):
         view = channel_view(active=False)
         credentials = build_credential_pair("repair-token", "repair-secret")
-        command = SetAdminChannelState(
-            view.public_id, view.updated_at, True, credentials
-        )
+        command = SetAdminChannelState(view.public_id, view.updated_at, True, credentials)
         summary = PublicChannelSummary(
             view.public_id,
             view.messaging_api_channel_id,
@@ -233,15 +227,11 @@ class AdminChannelServiceTests(TransactionTestCase):
     # 2.2 remediation RED: pending deactivation中は競合するchannel更新を拒否する。
     def test_update_rejects_channel_mutation_during_pending_deactivation(self):
         view = channel_view(active=True)
-        self.repository.lock_mutation_if_no_pending.return_value = (
-            "deactivation_conflict"
-        )
+        self.repository.lock_mutation_if_no_pending.return_value = "deactivation_conflict"
 
         result = self.service.update(
             self.owner,
-            UpdateAdminChannel(
-                view.public_id, view.updated_at, label="競合更新"
-            ),
+            UpdateAdminChannel(view.public_id, view.updated_at, label="競合更新"),
         )
 
         self.assertEqual(result.code, "deactivation_conflict")
@@ -284,9 +274,7 @@ class AdminChannelServiceTests(TransactionTestCase):
             with self.subTest(purge_status=purge_status):
                 self.history_purge.reset_mock()
                 self.repository.delete_locked.reset_mock()
-                self.history_purge.purge_history.return_value = HistoryPurgeResult(
-                    purge_status
-                )
+                self.history_purge.purge_history.return_value = HistoryPurgeResult(purge_status)
 
                 result = self.service.delete(self.owner, command)
 
@@ -311,9 +299,7 @@ class AdminChannelServiceTests(TransactionTestCase):
             expected_updated_at=timezone.now(),
         )
         self.repository.get_connection_snapshot.return_value = SnapshotAvailable(snapshot)
-        self.repository.lock_connection_revision.return_value = (
-            ConnectionRevisionUnchanged()
-        )
+        self.repository.lock_connection_revision.return_value = ConnectionRevisionUnchanged()
 
         def gateway_call(token):
             self.assertFalse(transaction.get_connection().in_atomic_block)
@@ -361,9 +347,7 @@ class AdminChannelServiceTests(TransactionTestCase):
             expected_updated_at=timezone.now(),
         )
         self.repository.get_connection_snapshot.return_value = SnapshotAvailable(snapshot)
-        self.repository.lock_connection_revision.return_value = (
-            ConnectionRevisionUnchanged()
-        )
+        self.repository.lock_connection_revision.return_value = ConnectionRevisionUnchanged()
         cases = (
             (BotIdentityReceived("U" + uuid4().hex), "identity_mismatch"),
             (BotInfoFailed("authentication_failed"), "authentication_failed"),
@@ -376,15 +360,13 @@ class AdminChannelServiceTests(TransactionTestCase):
                 self.gateway.get_bot_identity.return_value = gateway_result
                 result = self.service.check_connection(self.owner, uuid4())
                 self.assertEqual(result.status, expected)
-                self.assertEqual(
-                    result.scope, "access_token_and_bot_identity_only"
-                )
+                self.assertEqual(result.scope, "access_token_and_bot_identity_only")
 
     # テストケース: 資格情報snapshotを安全に取得できない
     # 期待値: LINEを呼ばずcredential_unavailableの限定scope結果を返す
     def test_connection_check_does_not_call_line_for_unavailable_credentials(self):
-        self.repository.get_connection_snapshot.return_value = (
-            AdminRepositoryUnavailable("credential_unavailable")
+        self.repository.get_connection_snapshot.return_value = AdminRepositoryUnavailable(
+            "credential_unavailable"
         )
 
         result = self.service.check_connection(self.owner, uuid4())

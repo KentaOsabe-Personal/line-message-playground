@@ -16,7 +16,7 @@ from linechannels.admin_types import (
 )
 from linechannels.crypto import CredentialCryptoError
 from linechannels.models import LineChannel, LineChannelCredential
-from linechannels.types import AccessToken, EncryptedCredential
+from linechannels.types import AccessToken
 
 
 class RecordingCipher:
@@ -123,9 +123,7 @@ class ExactProviderSnapshotPortTests(TestCase):
         channel = create_channel()
         stale_revision = channel.updated_at - timedelta(seconds=1)
 
-        result = repository.snapshot_exact(
-            snapshot_command(channel, revision=stale_revision)
-        )
+        result = repository.snapshot_exact(snapshot_command(channel, revision=stale_revision))
 
         self.assertEqual(result, ExactChannelSnapshotRejected("stale_channel"))
         self.assertEqual(cipher.calls, [])

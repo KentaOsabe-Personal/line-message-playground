@@ -7,7 +7,13 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix --max-warnings 0",
+    "format": "prettier --write \"{src,test}/**/*.{ts,tsx,css,json}\" \"*.{json,mjs,ts,html}\"",
+    "format:check": "prettier --check \"{src,test}/**/*.{ts,tsx,css,json}\" \"*.{json,mjs,ts,html}\"",
+    "typecheck": "tsc -b",
+    "check": "npm run lint && npm run format:check && npm run typecheck"
   },
   "dependencies": {
     "@line/liff": "2.29.1",
@@ -16,13 +22,20 @@
     "react-router": "8.3.1"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "@tailwindcss/vite": "4.3.3",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.3",
+    "@vitest/eslint-plugin": "1.6.27",
+    "eslint": "10.12.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react-hooks": "7.1.1",
     "jsdom": "28.1.0",
+    "prettier": "3.9.9",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
+    "typescript-eslint": "8.71.0",
     "vite": "8.1.4",
     "vitest": "4.1.10"
   }

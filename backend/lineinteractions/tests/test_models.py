@@ -43,8 +43,7 @@ class InteractionAuditModelTests(TestCase):
     # 期待値: 全safe outcomeだけを両境界が受理し不正/NULL/空値を両方が拒否する
     def test_application_and_database_accept_the_same_result_matrix(self):
         valid_overrides = [
-            {"reply_outcome": reply}
-            for reply in ("accepted", "rejected", "unknown")
+            {"reply_outcome": reply} for reply in ("accepted", "rejected", "unknown")
         ]
         valid_overrides.extend(
             {

@@ -16,21 +16,21 @@ from .formatters import format_message_snapshot
 from .models import DeliveryAttempt
 from .types import (
     AcceptedDeliveryCommand,
-    AttemptFinalizationResult,
-    AttemptAcceptResult,
     AttemptAccepted,
+    AttemptAcceptResult,
     AttemptConflict,
+    AttemptFinalizationResult,
     AttemptStorageFailed,
     AttemptTargetUnavailable,
     ConfirmReceiptCommand,
-    DeliverySnapshot,
     DeliveryPrePushFailure,
+    DeliverySnapshot,
     ExistingAttempt,
     FixedTargetSnapshot,
-    LinkedTargetSnapshot,
     LinePushAccepted,
     LinePushRejected,
     LinePushUnknown,
+    LinkedTargetSnapshot,
     MessageSnapshot,
     OwnerIdentitySnapshot,
     OwnerPrincipal,
@@ -40,7 +40,6 @@ from .types import (
     ReceiptUnchanged,
     RequestFingerprint,
 )
-
 
 PROCESSING_TIMEOUT = timedelta(seconds=30)
 _REQUEST_FINGERPRINT_VERSION = "v1"
@@ -105,8 +104,7 @@ def build_request_fingerprint(
         ("receipt-requested", "true" if receipt_requested else "false"),
     )
     canonical = b"".join(
-        _length_prefixed(label) + _length_prefixed(value)
-        for label, value in fields
+        _length_prefixed(label) + _length_prefixed(value) for label, value in fields
     )
     return RequestFingerprint(hashlib.sha256(canonical).hexdigest())
 
@@ -138,9 +136,7 @@ class DjangoAttemptRepository:
         if command.request_fingerprint != expected_fingerprint:
             raise ValueError("request fingerprint does not match command")
 
-        existing = DeliveryAttempt.objects.filter(
-            operation_id=command.operation_id
-        ).first()
+        existing = DeliveryAttempt.objects.filter(operation_id=command.operation_id).first()
         if existing is not None:
             return self._classify_operation(existing, command)
 
@@ -148,9 +144,7 @@ class DjangoAttemptRepository:
         commitment = command.receipt_commitment
         try:
             with transaction.atomic():
-                fence_result = self._reference_fence.lock_existing(
-                    command.target.channel_public_id
-                )
+                fence_result = self._reference_fence.lock_existing(command.target.channel_public_id)
                 if fence_result.status == "channel_not_found":
                     return AttemptTargetUnavailable()
                 if fence_result.status in (
@@ -166,9 +160,7 @@ class DjangoAttemptRepository:
                     body=command.message.body,
                     formatted_text=command.message.formatted_text,
                     request_fingerprint=command.request_fingerprint.digest,
-                    active_request_fingerprint=(
-                        command.request_fingerprint.digest
-                    ),
+                    active_request_fingerprint=(command.request_fingerprint.digest),
                     target_mode=DeliveryAttempt.TargetMode.LINKED_RECIPIENT,
                     owner_principal_slot=command.owner.slot,
                     owner_identity_public_id=command.owner_identity.public_id,
@@ -176,27 +168,13 @@ class DjangoAttemptRepository:
                     channel_label_snapshot=command.target.channel_label,
                     recipient_public_id=command.target.recipient_public_id,
                     channel_active_snapshot=command.target.channel_active,
-                    recipient_enabled_snapshot=(
-                        command.target.recipient_enabled
-                    ),
-                    friendship_state_snapshot=(
-                        command.target.friendship_state
-                    ),
+                    recipient_enabled_snapshot=(command.target.recipient_enabled),
+                    friendship_state_snapshot=(command.target.friendship_state),
                     accepted_at=accepted_at,
-                    processing_expires_at=(
-                        accepted_at + PROCESSING_TIMEOUT
-                    ),
+                    processing_expires_at=(accepted_at + PROCESSING_TIMEOUT),
                     receipt_requested=commitment is not None,
-                    receipt_expires_at=(
-                        commitment.expires_at
-                        if commitment is not None
-                        else None
-                    ),
-                    receipt_token_digest=(
-                        commitment.digest
-                        if commitment is not None
-                        else None
-                    ),
+                    receipt_expires_at=(commitment.expires_at if commitment is not None else None),
+                    receipt_token_digest=(commitment.digest if commitment is not None else None),
                 )
             return AttemptAccepted(
                 attempt_id=attempt.pk,
@@ -214,9 +192,7 @@ class DjangoAttemptRepository:
                     command,
                 )
             canonical_attempt = DeliveryAttempt.objects.filter(
-                active_request_fingerprint=(
-                    command.request_fingerprint.digest
-                )
+                active_request_fingerprint=(command.request_fingerprint.digest)
             ).first()
             if canonical_attempt is not None:
                 return ExistingAttempt(
@@ -288,10 +264,7 @@ class DjangoAttemptRepository:
         owner_principal_slot: int,
         operation_id: UUID,
     ) -> DeliverySnapshot | None:
-        if (
-            type(owner_principal_slot) is not int
-            or owner_principal_slot <= 0
-        ):
+        if type(owner_principal_slot) is not int or owner_principal_slot <= 0:
             raise ValueError("invalid owner principal slot")
         if not isinstance(operation_id, UUID):
             raise ValueError("invalid operation ID")
@@ -318,9 +291,7 @@ class DjangoAttemptRepository:
                 processing_expires_at__lte=now,
             ).update(
                 status=DeliveryAttempt.Status.UNKNOWN,
-                failure_type=(
-                    DeliveryAttempt.FailureType.PROCESSING_EXPIRED
-                ),
+                failure_type=(DeliveryAttempt.FailureType.PROCESSING_EXPIRED),
                 active_request_fingerprint=None,
                 failed_at=now,
                 completed_at=now,
@@ -382,6 +353,7 @@ class DjangoAttemptRepository:
         if classified is not None:
             return classified
         return ReceiptRejected("invalid")
+
     def _classify_operation(
         self,
         attempt: DeliveryAttempt,
@@ -402,8 +374,7 @@ class DjangoAttemptRepository:
         command: ConfirmReceiptCommand,
     ) -> ReceiptResult | None:
         if (
-            attempt.target_mode
-            != DeliveryAttempt.TargetMode.LINKED_RECIPIENT
+            attempt.target_mode != DeliveryAttempt.TargetMode.LINKED_RECIPIENT
             or attempt.channel_public_id != command.channel_public_id
             or attempt.recipient_public_id != command.recipient_public_id
         ):
@@ -417,10 +388,7 @@ class DjangoAttemptRepository:
                     now=_aware_datetime(self._clock()),
                 )
             )
-        if (
-            attempt.receipt_expires_at is None
-            or command.occurred_at >= attempt.receipt_expires_at
-        ):
+        if attempt.receipt_expires_at is None or command.occurred_at >= attempt.receipt_expires_at:
             return ReceiptRejected("expired")
         if attempt.status == DeliveryAttempt.Status.FAILED:
             return ReceiptRejected("delivery_failed")
@@ -473,10 +441,7 @@ class DjangoAttemptRepository:
         if attempt.receipt_requested:
             if attempt.receipt_confirmed_at is not None:
                 receipt_status = "confirmed"
-            elif (
-                attempt.receipt_expires_at is not None
-                and attempt.receipt_expires_at <= now
-            ):
+            elif attempt.receipt_expires_at is not None and attempt.receipt_expires_at <= now:
                 receipt_status = "expired"
             else:
                 receipt_status = "pending"
@@ -525,6 +490,8 @@ class DjangoDeliveryReferenceProbe:
         self.using = using
 
     def is_referenced(self, channel_public_id: UUID) -> bool:
-        return DeliveryAttempt.objects.using(self.using).filter(
-            channel_public_id=channel_public_id
-        ).exists()
+        return (
+            DeliveryAttempt.objects.using(self.using)
+            .filter(channel_public_id=channel_public_id)
+            .exists()
+        )

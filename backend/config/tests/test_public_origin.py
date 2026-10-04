@@ -24,8 +24,9 @@ class PublicOriginTests(SimpleTestCase):
     # 期待値: すべて設定エラーとして拒否され、暗黙の正規化は行われない。
     def test_rejects_noncanonical_public_hosts(self):
         for host in self.public_host_fixture()["invalid"]:
-            with self.subTest(host=host), self.assertRaisesMessage(
-                ValueError, "PUBLIC_HOST_INVALID"
+            with (
+                self.subTest(host=host),
+                self.assertRaisesMessage(ValueError, "PUBLIC_HOST_INVALID"),
             ):
                 validate_public_host(host)
 
@@ -43,6 +44,4 @@ class PublicOriginTests(SimpleTestCase):
     def test_settings_use_exact_trusted_origin(self):
         from django.conf import settings
 
-        self.assertEqual(
-            settings.CSRF_TRUSTED_ORIGINS, ["https://test.example.ngrok.app"]
-        )
+        self.assertEqual(settings.CSRF_TRUSTED_ORIGINS, ["https://test.example.ngrok.app"])

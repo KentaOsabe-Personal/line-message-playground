@@ -17,7 +17,9 @@ class LineChannel(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        indexes = [models.Index(fields=("provider_id", "is_active"), name="linech_provider_active_idx")]
+        indexes = [
+            models.Index(fields=("provider_id", "is_active"), name="linech_provider_active_idx")
+        ]
 
     @classmethod
     def from_db(cls, db, field_names, values):
@@ -155,9 +157,6 @@ class ChannelDeactivationState(models.Model):
         ]
 
     def __str__(self) -> str:
-        return (
-            f"ChannelDeactivationState(operation_id={self.operation_id}, "
-            f"status={self.status})"
-        )
+        return f"ChannelDeactivationState(operation_id={self.operation_id}, status={self.status})"
 
     __repr__ = __str__

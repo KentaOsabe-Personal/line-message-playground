@@ -5,7 +5,6 @@ from types import MappingProxyType
 from typing import Mapping
 from urllib.parse import urlsplit
 
-
 _OPAQUE_NUMERIC_ID = re.compile(r"[0-9]{1,64}\Z", re.ASCII)
 _LOWERCASE_SHA256 = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 _MODEL = "jev-1.13.0"
@@ -108,9 +107,7 @@ def _load_configured(environment: Mapping[str, str]) -> LabRuntimeConfigured:
     return LabRuntimeConfigured(
         channel_id=channel_id,
         owner_digest=OwnerDigest(owner_digest),
-        origin=_canonical_https_origin(
-            _required(environment, "TEXT_JUDGMENT_LAB_ORIGIN")
-        ),
+        origin=_canonical_https_origin(_required(environment, "TEXT_JUDGMENT_LAB_ORIGIN")),
         api_key=SecretValue(api_key),
         model=model,
     )
@@ -137,5 +134,5 @@ def load_lab_runtime(environment: Mapping[str, str], *, debug: bool) -> LabRunti
         return LabRuntimeUnavailable("debug_enabled")
     try:
         return _load_configured(safe_environment)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return LabRuntimeUnavailable("invalid_configuration")

@@ -57,9 +57,7 @@ class SafeWebhookAuditLoggerTests(SimpleTestCase):
                     "audit_channel_public_id": str(channel_public_id),
                     "audit_webhook_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
                     "audit_event_type": "message",
-                    "audit_elapsed_ms": (
-                        2000 if outcome == "response_deadline_exceeded" else None
-                    ),
+                    "audit_elapsed_ms": (2000 if outcome == "response_deadline_exceeded" else None),
                 },
             )
 
@@ -93,9 +91,7 @@ class SafeWebhookAuditLoggerTests(SimpleTestCase):
             "context",
         }
 
-        self.assertTrue(
-            forbidden.isdisjoint(inspect.signature(WebhookAuditEntry).parameters)
-        )
+        self.assertTrue(forbidden.isdisjoint(inspect.signature(WebhookAuditEntry).parameters))
         self.assertEqual(
             tuple(inspect.signature(SafeWebhookAuditLogger.record).parameters),
             ("self", "entry"),

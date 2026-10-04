@@ -8,14 +8,12 @@ from .services import (
     StateSucceeded,
 )
 from .types import (
-    ChannelStateView,
     DefaultObservation,
     HistoryEntry,
     ManagedResourceView,
     OperationView,
     TemplateDescriptor,
 )
-
 
 _DOMAIN_TO_API_FIELDS = {
     "request": "request",
@@ -41,11 +39,7 @@ def _api_field_path(value: str) -> str | None:
     if value in _SAFE_AREA_FIELDS:
         return value
     parts = value.split(".")
-    if (
-        len(parts) == 2
-        and parts[0] in _SAFE_AREA_FIELDS
-        and parts[1] in {"displayName", "uri"}
-    ):
+    if len(parts) == 2 and parts[0] in _SAFE_AREA_FIELDS and parts[1] in {"displayName", "uri"}:
         return value
     return None
 
@@ -68,8 +62,10 @@ class RichMenuPresenter:
                             "field": area.field_name,
                             "description": area.description,
                             "bounds": {
-                                "x": area.x, "y": area.y,
-                                "width": area.width, "height": area.height,
+                                "x": area.x,
+                                "y": area.y,
+                                "width": area.width,
+                                "height": area.height,
                             },
                         }
                         for area in item.areas
@@ -121,24 +117,23 @@ class RichMenuPresenter:
             "historySummary": {
                 "totalCount": state.history_summary.total_count,
                 "latestOperationId": (
-                    None if state.history_summary.latest_operation_id is None
+                    None
+                    if state.history_summary.latest_operation_id is None
                     else str(state.history_summary.latest_operation_id)
                 ),
                 "latestStatus": (
-                    None if state.history_summary.latest_status is None
+                    None
+                    if state.history_summary.latest_status is None
                     else state.history_summary.latest_status.value
                 ),
             },
             "nextAllowedActions": [item.value for item in state.next_allowed_actions],
             "mode": "unavailable" if capabilities is None else capabilities.mode,
             "effectiveActions": (
-                [] if capabilities is None
-                else [item.value for item in capabilities.actions]
+                [] if capabilities is None else [item.value for item in capabilities.actions]
             ),
             "unavailableReason": (
-                "integration_not_ready"
-                if capabilities is None
-                else capabilities.unavailable_reason
+                "integration_not_ready" if capabilities is None else capabilities.unavailable_reason
             ),
         }
 
@@ -202,12 +197,12 @@ class RichMenuPresenter:
             "stage": None if operation.stage is None else operation.stage.value,
             "result": operation.result.value,
             "subjectOperationId": (
-                None if operation.subject_operation_id is None
+                None
+                if operation.subject_operation_id is None
                 else str(operation.subject_operation_id)
             ),
             "targetResourceId": (
-                None if operation.target_resource_id is None
-                else str(operation.target_resource_id)
+                None if operation.target_resource_id is None else str(operation.target_resource_id)
             ),
             "acceptedAt": _iso(operation.accepted_at),
             "completedAt": _iso(operation.completed_at),
@@ -234,7 +229,8 @@ class RichMenuPresenter:
             "observedAt": observation.observed_at.isoformat(),
             "fingerprint": observation.fingerprint,
             "managedResourceId": (
-                None if observation.managed_resource_id is None
+                None
+                if observation.managed_resource_id is None
                 else str(observation.managed_resource_id)
             ),
         }

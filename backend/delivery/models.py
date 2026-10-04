@@ -134,9 +134,7 @@ class DeliveryAttempt(models.Model):
                     models.Q(
                         status="processing",
                         active_request_fingerprint__isnull=False,
-                        active_request_fingerprint=models.F(
-                            "request_fingerprint"
-                        ),
+                        active_request_fingerprint=models.F("request_fingerprint"),
                         failure_type__isnull=True,
                         sent_at__isnull=True,
                         failed_at__isnull=True,

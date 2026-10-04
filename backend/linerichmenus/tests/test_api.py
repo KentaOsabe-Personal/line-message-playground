@@ -2,8 +2,8 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
-from django.db import transaction
 from django.conf import settings
+from django.db import transaction
 from django.middleware.csrf import get_token
 from django.test import SimpleTestCase
 from django.utils import timezone as django_timezone
@@ -14,14 +14,14 @@ from lineaccounts.gateway import VerifiedLineIdentity
 from lineaccounts.models import OwnerAccount
 from lineaccounts.repositories import DjangoAccountRepository
 from lineaccounts.types import LineSubject
+from linerichmenus.catalog import DefaultTemplateCatalog
 from linerichmenus.services import (
     OperationSucceeded,
     PreviewSucceeded,
     ServiceFailed,
     StateSucceeded,
+    TemplateListSucceeded,
 )
-from linerichmenus.services import TemplateListSucceeded
-from linerichmenus.catalog import DefaultTemplateCatalog
 from linerichmenus.types import (
     ChannelStateView,
     DefaultObservation,
@@ -48,7 +48,6 @@ from linerichmenus.views import (
     OperationDetailAPIView,
     TemplateListAPIView,
 )
-
 
 NOW = datetime(2026, 8, 2, 4, 0, tzinfo=timezone.utc)
 
@@ -130,9 +129,7 @@ class OwnerRichMenuAPITests(SimpleTestCase):
                 channel_label="通知チャネル",
                 template=template,
                 image_digest="a" * 64,
-                observation=DefaultObservation(
-                    ObservationKind.DEFAULT_NONE, NOW, "b" * 64, None
-                ),
+                observation=DefaultObservation(ObservationKind.DEFAULT_NONE, NOW, "b" * 64, None),
                 expires_at=NOW + timedelta(minutes=5),
                 warnings=(),
             ),
@@ -283,8 +280,9 @@ class OwnerRichMenuAPITests(SimpleTestCase):
                 "channelRevision": NOW.isoformat(),
                 **fields,
             }
-            with self.subTest(kind=kind), patch(
-                "linerichmenus.views.build_rich_menu_service", return_value=service
+            with (
+                self.subTest(kind=kind),
+                patch("linerichmenus.views.build_rich_menu_service", return_value=service),
             ):
                 response = ChannelOperationAPIView.as_view()(
                     self.request("post", "/operations/", body),

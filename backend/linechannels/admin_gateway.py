@@ -12,9 +12,7 @@ class _BotInfoClient(Protocol):
 
 
 class _BotInfoClientFactory(Protocol):
-    def __call__(
-        self, access_token: str, *, retries: int
-    ) -> _BotInfoClient: ...
+    def __call__(self, access_token: str, *, retries: int) -> _BotInfoClient: ...
 
 
 class _SdkBotInfoClient:
@@ -61,13 +59,9 @@ class DefaultLineBotInfoGateway:
                 access_token.reveal_for_use(),
                 retries=0,
             )
-            response = client.get_bot_info(
-                _request_timeout=self._timeout_seconds
-            )
+            response = client.get_bot_info(_request_timeout=self._timeout_seconds)
             bot_user_id = getattr(response, "user_id", None)
-            if not isinstance(bot_user_id, str) or not self._BOT_USER_ID.fullmatch(
-                bot_user_id
-            ):
+            if not isinstance(bot_user_id, str) or not self._BOT_USER_ID.fullmatch(bot_user_id):
                 result = BotInfoFailed("line_unavailable")
             else:
                 result = BotIdentityReceived(bot_user_id)

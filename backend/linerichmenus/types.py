@@ -387,9 +387,7 @@ class PreviewCommand:
 
     def __post_init__(self) -> None:
         _require_uuid(self.channel_public_id, "channel id")
-        _require_aware_datetime(
-            self.expected_channel_revision, "expected channel revision"
-        )
+        _require_aware_datetime(self.expected_channel_revision, "expected channel revision")
         if not isinstance(self.template, NormalizedTemplate):
             raise ValueError("invalid preview template")
 
@@ -408,9 +406,7 @@ class OperationCommand:
     def __post_init__(self) -> None:
         _require_uuid(self.operation_id, "operation id")
         _require_uuid(self.channel_public_id, "channel id")
-        _require_aware_datetime(
-            self.expected_channel_revision, "expected channel revision"
-        )
+        _require_aware_datetime(self.expected_channel_revision, "expected channel revision")
         if not isinstance(self.kind, OperationKind):
             raise ValueError("invalid operation kind")
         _require_optional_uuid(self.subject_operation_id, "subject operation id")
@@ -466,9 +462,7 @@ class OperationView:
         _require_aware_datetime(self.accepted_at, "accepted at")
         if self.completed_at is not None:
             _require_aware_datetime(self.completed_at, "completed at")
-        _require_tuple_of(
-            self.next_allowed_actions, NextAllowedAction, "next allowed actions"
-        )
+        _require_tuple_of(self.next_allowed_actions, NextAllowedAction, "next allowed actions")
         _validate_operation_relations(
             kind=self.kind,
             subject_operation_id=self.subject_operation_id,
@@ -552,13 +546,9 @@ class HistorySummary:
         if type(self.total_count) is not int or self.total_count < 0:
             raise ValueError("invalid history count")
         _require_optional_uuid(self.latest_operation_id, "latest operation id")
-        if self.latest_status is not None and not isinstance(
-            self.latest_status, OperationStatus
-        ):
+        if self.latest_status is not None and not isinstance(self.latest_status, OperationStatus):
             raise ValueError("invalid latest operation status")
-        latest_present = (
-            self.latest_operation_id is not None and self.latest_status is not None
-        )
+        latest_present = self.latest_operation_id is not None and self.latest_status is not None
         if latest_present != (self.total_count > 0):
             raise ValueError("inconsistent history summary")
 
@@ -587,18 +577,14 @@ class ChannelStateView:
         ):
             if operation is not None and not isinstance(operation, OperationView):
                 raise ValueError(f"invalid {name}")
-        _require_tuple_of(
-            self.cleanup_resources, ManagedResourceView, "cleanup resources"
-        )
+        _require_tuple_of(self.cleanup_resources, ManagedResourceView, "cleanup resources")
         if self.latest_observation is not None and not isinstance(
             self.latest_observation, DefaultObservation
         ):
             raise ValueError("invalid latest observation")
         if not isinstance(self.history_summary, HistorySummary):
             raise ValueError("invalid history summary")
-        _require_tuple_of(
-            self.next_allowed_actions, NextAllowedAction, "next allowed actions"
-        )
+        _require_tuple_of(self.next_allowed_actions, NextAllowedAction, "next allowed actions")
         if self.capabilities is not None and not isinstance(
             self.capabilities, EffectiveCapabilities
         ):
@@ -665,9 +651,7 @@ class SafeError:
     def __post_init__(self) -> None:
         if not isinstance(self.code, SafeResultCode):
             raise ValueError("invalid safe error code")
-        _require_tuple_of(
-            self.next_allowed_actions, NextAllowedAction, "next allowed actions"
-        )
+        _require_tuple_of(self.next_allowed_actions, NextAllowedAction, "next allowed actions")
 
     @classmethod
     def from_untrusted(
@@ -696,9 +680,7 @@ class IntegrationNotReady:
 
 
 def _require_tuple_of(value: object, expected: type, name: str) -> None:
-    if not isinstance(value, tuple) or not all(
-        isinstance(item, expected) for item in value
-    ):
+    if not isinstance(value, tuple) or not all(isinstance(item, expected) for item in value):
         raise ValueError(f"invalid {name}")
 
 
@@ -713,11 +695,7 @@ def _require_optional_uuid(value: object, name: str) -> None:
 
 
 def _require_aware_datetime(value: object, name: str) -> None:
-    if (
-        not isinstance(value, datetime)
-        or value.tzinfo is None
-        or value.utcoffset() is None
-    ):
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"invalid {name}")
 
 

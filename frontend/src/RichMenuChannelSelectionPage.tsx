@@ -26,14 +26,16 @@ export function projectRichMenuChannelChoice(item: ChannelAdminItem): RichMenuCh
       unavailableReason: 'provider IDが設定されていません。チャネル管理で設定してください。',
     }
   }
-  const lifecyclePending = item.deactivationSummary !== null && item.deactivationSummary.status !== 'completed'
+  const lifecyclePending =
+    item.deactivationSummary !== null && item.deactivationSummary.status !== 'completed'
   if (lifecyclePending) {
     return {
       channelId: item.channelId,
       label: item.label,
       stateLabel: '回復操作のみ',
       mode: 'recoveryOnly',
-      unavailableReason: 'チャネルのライフサイクル処理中です。保存状態が許す回復操作だけを利用できます。',
+      unavailableReason:
+        'チャネルのライフサイクル処理中です。保存状態が許す回復操作だけを利用できます。',
     }
   }
   if (!item.active) {
@@ -64,14 +66,18 @@ type SelectionState =
   | Readonly<{ kind: 'failed' }>
   | Readonly<{ kind: 'ready'; choices: RichMenuChannelChoice[] }>
 
-export default function RichMenuChannelSelectionPage({ api: suppliedApi, onSessionInvalid }: Props) {
+export default function RichMenuChannelSelectionPage({
+  api: suppliedApi,
+  onSessionInvalid,
+}: Props) {
   const location = useLocation()
   const pageMeta = meta(location.pathname)
   const generation = useRef(0)
   const readController = useRef<AbortController | null>(null)
   const [state, setState] = useState<SelectionState>({ kind: 'loading' })
   const api = useMemo(
-    () => suppliedApi ?? createChannelAdminApiClient(createProtectedHttpClient({ onSessionInvalid })),
+    () =>
+      suppliedApi ?? createChannelAdminApiClient(createProtectedHttpClient({ onSessionInvalid })),
     [onSessionInvalid, suppliedApi],
   )
 
@@ -97,7 +103,10 @@ export default function RichMenuChannelSelectionPage({ api: suppliedApi, onSessi
 
   useEffect(() => {
     void load()
-    return () => { generation.current += 1; readController.current?.abort() }
+    return () => {
+      generation.current += 1
+      readController.current?.abort()
+    }
   }, [load])
 
   return (
@@ -116,11 +125,22 @@ export default function RichMenuChannelSelectionPage({ api: suppliedApi, onSessi
           </div>
         </div>
         {state.kind === 'loading' && <p role="status">チャネル一覧を読み込んでいます…</p>}
-        {state.kind === 'ready' && <p className="sr-only" role="status">{state.choices.length}件のチャネルを表示しました。</p>}
+        {state.kind === 'ready' && (
+          <p className="sr-only" role="status">
+            {state.choices.length}件のチャネルを表示しました。
+          </p>
+        )}
         {state.kind === 'failed' && (
           <div role="alert">
             <p>チャネル一覧を取得できませんでした。</p>
-            <button type="button" onClick={() => { void load() }}>再取得</button>
+            <button
+              type="button"
+              onClick={() => {
+                void load()
+              }}
+            >
+              再取得
+            </button>
           </div>
         )}
         {state.kind === 'ready' && state.choices.length === 0 && (
@@ -134,14 +154,35 @@ export default function RichMenuChannelSelectionPage({ api: suppliedApi, onSessi
             {state.choices.map((choice) => (
               <article className="channel-card rich-menu-channel-card" key={choice.channelId}>
                 <div className="channel-card-heading">
-                  <div><p className="card-kicker">Rich menu workspace</p><h3>{choice.label}</h3></div>
-                  <span className={`status ${choice.mode.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`}>{choice.stateLabel}</span>
+                  <div>
+                    <p className="card-kicker">Rich menu workspace</p>
+                    <h3>{choice.label}</h3>
+                  </div>
+                  <span
+                    className={`status ${choice.mode.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`}
+                  >
+                    {choice.stateLabel}
+                  </span>
                 </div>
                 {choice.unavailableReason !== null && <p>{choice.unavailableReason}</p>}
-                {choice.mode === 'editable' && <Link className="button-link" to={richMenuPath(choice.channelId)}>リッチメニューを管理</Link>}
-                {choice.mode === 'readOnly' && <Link className="button-link secondary" to={richMenuPath(choice.channelId)}>保存状態と履歴を確認</Link>}
-                {choice.mode === 'recoveryOnly' && <Link className="button-link secondary" to={richMenuPath(choice.channelId)}>保存状態と回復操作を確認</Link>}
-                {choice.mode === 'unavailable' && <Link to="/liff/channels">チャネル設定を確認</Link>}
+                {choice.mode === 'editable' && (
+                  <Link className="button-link" to={richMenuPath(choice.channelId)}>
+                    リッチメニューを管理
+                  </Link>
+                )}
+                {choice.mode === 'readOnly' && (
+                  <Link className="button-link secondary" to={richMenuPath(choice.channelId)}>
+                    保存状態と履歴を確認
+                  </Link>
+                )}
+                {choice.mode === 'recoveryOnly' && (
+                  <Link className="button-link secondary" to={richMenuPath(choice.channelId)}>
+                    保存状態と回復操作を確認
+                  </Link>
+                )}
+                {choice.mode === 'unavailable' && (
+                  <Link to="/liff/channels">チャネル設定を確認</Link>
+                )}
               </article>
             ))}
           </div>

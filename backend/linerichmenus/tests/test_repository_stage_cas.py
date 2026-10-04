@@ -1,4 +1,3 @@
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -15,7 +14,6 @@ from linerichmenus.repository import (
     StageOutcome,
 )
 from linerichmenus.types import OperationKind, OperationStage, OperationStatus, SafeResultCode
-
 
 NOW = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 
@@ -44,12 +42,22 @@ class RichMenuRepositoryStageCASTests(TransactionTestCase):
             reference_fence=LockedFence(), operation_fence=self.fence, clock=lambda: NOW
         )
         self.command = AcceptedOperation(
-            operation_id=uuid4(), channel_public_id=uuid4(),
-            owner_identity_public_id=uuid4(), provider_id="0012345678",
-            expected_channel_revision=NOW, kind=OperationKind.APPLY,
-            subject_operation_id=None, target_resource_id=None,
-            request_fingerprint="a" * 64, confirmation_usage_digest="b" * 64,
-            configuration_snapshot={"version": 1, "templateId": "jp-link-one", "templateVersion": 1, "fields": []},
+            operation_id=uuid4(),
+            channel_public_id=uuid4(),
+            owner_identity_public_id=uuid4(),
+            provider_id="0012345678",
+            expected_channel_revision=NOW,
+            kind=OperationKind.APPLY,
+            subject_operation_id=None,
+            target_resource_id=None,
+            request_fingerprint="a" * 64,
+            confirmation_usage_digest="b" * 64,
+            configuration_snapshot={
+                "version": 1,
+                "templateId": "jp-link-one",
+                "templateVersion": 1,
+                "fields": [],
+            },
             candidate_image_digest="c" * 64,
         )
         self.repository.accept(self.command)

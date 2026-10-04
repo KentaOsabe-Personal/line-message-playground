@@ -8,8 +8,8 @@ from uuid import UUID
 from .gateway import (
     GatewayUnknown,
     ImageAbsent,
-    ImageObserved,
     ImageObservationUnknown,
+    ImageObserved,
     ResourceAbsent,
     ResourceListAccepted,
     ResourceObservationUnknown,
@@ -25,8 +25,8 @@ from .types import (
     DefaultObservation,
     NextAllowedAction,
     ObservationKind,
-    OperationStage,
     OperationKind,
+    OperationStage,
     ResourceLifecycle,
 )
 
@@ -89,8 +89,7 @@ class ReconcileContext:
         ):
             raise ValueError("invalid current managed resource")
         if not isinstance(self.managed_resources, tuple) or not all(
-            isinstance(resource, ManagedResourceTarget)
-            for resource in self.managed_resources
+            isinstance(resource, ManagedResourceTarget) for resource in self.managed_resources
         ):
             raise ValueError("invalid managed resource collection")
 
@@ -104,8 +103,7 @@ class Reconciliation:
         if not isinstance(self.observation, DefaultObservation):
             raise ValueError("invalid reconciliation observation")
         if not isinstance(self.next_allowed_actions, tuple) or not all(
-            isinstance(action, NextAllowedAction)
-            for action in self.next_allowed_actions
+            isinstance(action, NextAllowedAction) for action in self.next_allowed_actions
         ):
             raise ValueError("invalid reconciliation actions")
 
@@ -135,20 +133,14 @@ class RecheckContext:
             raise ValueError("invalid recheck stage")
         if not isinstance(self.subject_operation_id, UUID):
             raise ValueError("invalid subject operation id")
-        if self.ownership_marker is not None and not isinstance(
-            self.ownership_marker, str
-        ):
+        if self.ownership_marker is not None and not isinstance(self.ownership_marker, str):
             raise ValueError("invalid ownership marker")
         for name, resource in (("candidate", self.candidate), ("target", self.target)):
             if resource is not None and not isinstance(resource, ManagedResourceTarget):
                 raise ValueError(f"invalid {name} resource")
-        if self.expected_image_digest is not None and not _is_sha256(
-            self.expected_image_digest
-        ):
+        if self.expected_image_digest is not None and not _is_sha256(self.expected_image_digest):
             raise ValueError("invalid expected image digest")
-        if self.subject_kind is not None and not isinstance(
-            self.subject_kind, OperationKind
-        ):
+        if self.subject_kind is not None and not isinstance(self.subject_kind, OperationKind):
             raise ValueError("invalid subject kind")
 
 
@@ -163,9 +155,7 @@ class RecheckConfirmed:
     def __post_init__(self) -> None:
         if not isinstance(self.stage, OperationStage):
             raise ValueError("invalid confirmed stage")
-        if self.line_rich_menu_id is not None and not isinstance(
-            self.line_rich_menu_id, str
-        ):
+        if self.line_rich_menu_id is not None and not isinstance(self.line_rich_menu_id, str):
             raise ValueError("invalid confirmed line id")
         if self.resource_id is not None and not isinstance(self.resource_id, UUID):
             raise ValueError("invalid confirmed resource id")
@@ -206,8 +196,7 @@ class RecheckUnknown:
         if self.status != "unknown":
             raise ValueError("invalid unresolved status")
         if not isinstance(self.next_allowed_actions, tuple) or not all(
-            isinstance(action, NextAllowedAction)
-            for action in self.next_allowed_actions
+            isinstance(action, NextAllowedAction) for action in self.next_allowed_actions
         ):
             raise ValueError("invalid unresolved next actions")
 
@@ -302,8 +291,7 @@ class DefaultRichMenuReconciler:
                 kind,
                 now,
                 managed_resource_id=resource_id,
-                actions=actions
-                + (NextAllowedAction.GET_STATE, NextAllowedAction.VIEW_HISTORY),
+                actions=actions + (NextAllowedAction.GET_STATE, NextAllowedAction.VIEW_HISTORY),
             )
         return self._result(
             ObservationKind.UNKNOWN,
@@ -360,9 +348,7 @@ class DefaultRichMenuReconciler:
             or context.expected_image_digest is None
         ):
             return RecheckUnknown(context.stage, "ownership_unverified")
-        image = self._gateway.download(
-            context.gateway_context, candidate.line_rich_menu_id
-        )
+        image = self._gateway.download(context.gateway_context, candidate.line_rich_menu_id)
         if isinstance(image, ImageAbsent):
             return RecheckConfirmed(
                 context.stage,
@@ -432,9 +418,7 @@ class DefaultRichMenuReconciler:
         ):
             return RecheckUnknown(context.stage, "ownership_unverified")
 
-        resource = self._gateway.get_resource(
-            context.gateway_context, target.line_rich_menu_id
-        )
+        resource = self._gateway.get_resource(context.gateway_context, target.line_rich_menu_id)
         if isinstance(resource, ResourceObservationUnknown):
             return RecheckUnknown(context.stage, "observation_unknown")
         if isinstance(resource, ResourceObserved):
@@ -453,9 +437,7 @@ class DefaultRichMenuReconciler:
             return RecheckUnknown(context.stage, "observation_unknown")
 
         resources = self._gateway.list_resources(context.gateway_context)
-        if isinstance(resources, GatewayUnknown) or not isinstance(
-            resources, ResourceListAccepted
-        ):
+        if isinstance(resources, GatewayUnknown) or not isinstance(resources, ResourceListAccepted):
             return RecheckUnknown(context.stage, "observation_unknown")
         if any(
             item.line_rich_menu_id == target.line_rich_menu_id
@@ -501,9 +483,7 @@ def _observation_fingerprint(kind: ObservationKind, resource_id: UUID | None) ->
     return sha256(value).hexdigest()
 
 
-def _resource_matches_subject(
-    resource: ManagedResourceTarget, subject_operation_id: UUID
-) -> bool:
+def _resource_matches_subject(resource: ManagedResourceTarget, subject_operation_id: UUID) -> bool:
     return resource.origin_operation_id == subject_operation_id or (
         resource.replacement_operation_id == subject_operation_id
     )

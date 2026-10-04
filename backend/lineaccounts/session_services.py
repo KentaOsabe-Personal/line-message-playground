@@ -90,11 +90,7 @@ class UnlinkingSessionStatus:
     state: Literal["unlinking"] = "unlinking"
 
 
-SessionStatus = (
-    AnonymousSessionStatus
-    | AuthenticatedSessionStatus
-    | UnlinkingSessionStatus
-)
+SessionStatus = AnonymousSessionStatus | AuthenticatedSessionStatus | UnlinkingSessionStatus
 
 
 class DefaultOwnerIdentityBinder:
@@ -121,9 +117,7 @@ class DefaultOwnerIdentityBinder:
                 return OwnerBindingRejected()
             raise
 
-    def bind_in_transaction(
-        self, identity: VerifiedLineIdentity
-    ) -> OwnerBindingResult:
+    def bind_in_transaction(self, identity: VerifiedLineIdentity) -> OwnerBindingResult:
         if not self._is_eligible(identity):
             return OwnerBindingRejected()
         owner = self._repository.lock_owner_account()
@@ -156,15 +150,11 @@ class DefaultAccountSessionService:
     ) -> None:
         self._gateway = gateway
         self._repository = repository
-        self._binder = DefaultOwnerIdentityBinder(
-            repository, eligibility, using=using
-        )
+        self._binder = DefaultOwnerIdentityBinder(repository, eligibility, using=using)
         self._using = using
         self._session_duration = session_duration
 
-    def establish(
-        self, proof: IdToken, now: datetime
-    ) -> EstablishSessionResult:
+    def establish(self, proof: IdToken, now: datetime) -> EstablishSessionResult:
         if timezone.is_naive(now):
             raise ValueError("now must be timezone-aware")
         verification = self._gateway.verify_id_token(proof)
@@ -187,11 +177,7 @@ class DefaultAccountSessionService:
             if error.code == "identity_mismatch":
                 return EstablishSessionRejected("owner_not_allowed")
             raise
-        state = (
-            "authenticated"
-            if binding.owner.state == "active"
-            else "unlinking"
-        )
+        state = "authenticated" if binding.owner.state == "active" else "unlinking"
         return EstablishSessionSucceeded(
             session=session,
             display_name=binding.identity.display_name,
@@ -203,9 +189,7 @@ class DefaultAccountSessionService:
             deleted = self._repository.delete_owner_session(owner_session_id)
         return LogoutSucceeded(deleted=deleted)
 
-    def get_status(
-        self, owner_session_id: UUID | None, now: datetime
-    ) -> SessionStatus:
+    def get_status(self, owner_session_id: UUID | None, now: datetime) -> SessionStatus:
         if timezone.is_naive(now):
             raise ValueError("now must be timezone-aware")
         if owner_session_id is None:

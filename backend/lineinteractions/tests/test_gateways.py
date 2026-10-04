@@ -7,7 +7,6 @@ import httpx
 from django.test import SimpleTestCase
 
 from linechannels.types import AccessToken
-
 from lineinteractions.gateways import HttpxLineReplyGateway
 from lineinteractions.types import (
     ReplyAccepted,
@@ -121,9 +120,7 @@ class HttpxLineReplyGatewayTests(SimpleTestCase):
     def test_sends_one_fixed_text_reply_to_fixed_endpoint(self):
         transport = _ResponseTrackingTransport(200)
 
-        result = _reply(
-            HttpxLineReplyGateway(client_factory=_client_factory(transport))
-        )
+        result = _reply(HttpxLineReplyGateway(client_factory=_client_factory(transport)))
 
         self.assertIsInstance(result, ReplyAccepted)
         self.assertEqual(transport.calls, 1)
@@ -154,9 +151,7 @@ class HttpxLineReplyGatewayTests(SimpleTestCase):
     def test_classifies_non_200_without_redirect_or_retry(self):
         transport = _ResponseTrackingTransport(307)
 
-        result = _reply(
-            HttpxLineReplyGateway(client_factory=_client_factory(transport))
-        )
+        result = _reply(HttpxLineReplyGateway(client_factory=_client_factory(transport)))
 
         self.assertIsInstance(result, ReplyRejected)
         self.assertEqual(transport.calls, 1)
@@ -175,11 +170,7 @@ class HttpxLineReplyGatewayTests(SimpleTestCase):
             with self.subTest(error=type(error).__name__):
                 transport = _FailingTransport(error)
 
-                result = _reply(
-                    HttpxLineReplyGateway(
-                        client_factory=_client_factory(transport)
-                    )
-                )
+                result = _reply(HttpxLineReplyGateway(client_factory=_client_factory(transport)))
 
                 self.assertIsInstance(result, ReplyUnknown)
                 self.assertEqual(transport.calls, 1)
@@ -193,9 +184,7 @@ class HttpxLineReplyGatewayTests(SimpleTestCase):
         started = time.monotonic()
 
         result = _reply(
-            HttpxLineReplyGateway(
-                client_factory=_client_factory(transport)
-            ),
+            HttpxLineReplyGateway(client_factory=_client_factory(transport)),
             timeout=0.05,
         )
         elapsed = time.monotonic() - started
@@ -238,9 +227,7 @@ class HttpxLineReplyGatewayTests(SimpleTestCase):
 
         with self.assertRaises(ValueError):
             _reply(
-                HttpxLineReplyGateway(
-                    client_factory=_client_factory(transport)
-                ),
+                HttpxLineReplyGateway(client_factory=_client_factory(transport)),
                 text="not-pong",
             )
 
@@ -253,11 +240,7 @@ class HttpxLineReplyGatewayTests(SimpleTestCase):
 
         async def invoke():
             before = len(asyncio.all_tasks())
-            result = _reply(
-                HttpxLineReplyGateway(
-                    client_factory=_client_factory(transport)
-                )
-            )
+            result = _reply(HttpxLineReplyGateway(client_factory=_client_factory(transport)))
             after = len(asyncio.all_tasks())
             return result, before, after
 

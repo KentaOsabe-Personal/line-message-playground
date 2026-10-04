@@ -5,7 +5,6 @@ from uuid import uuid4
 from django.test import SimpleTestCase
 
 from linechannels.types import AccessToken
-
 from linerichmenus.gateway import (
     CreateAccepted,
     DefaultRichMenuGateway,
@@ -13,18 +12,18 @@ from linerichmenus.gateway import (
     GatewayRejected,
     GatewayUnknown,
     ImageAbsent,
-    ImageObserved,
     ImageObservationUnknown,
+    ImageObserved,
+    ResourceListAccepted,
+    ResourceObserved,
     RichMenuArea,
     RichMenuBounds,
-    RichMenuGatewayContext,
-    RichMenuObject,
-    RichMenuUriAction,
     RichMenuDefaultExternal,
     RichMenuDefaultNone,
     RichMenuDefaultPresent,
-    ResourceListAccepted,
-    ResourceObserved,
+    RichMenuGatewayContext,
+    RichMenuObject,
+    RichMenuUriAction,
     _build_sdk_clients,
 )
 
@@ -204,10 +203,7 @@ class GatewayContractTests(SimpleTestCase):
             chat_bar_text = request["chatBarText"]
         self.assertEqual(chat_bar_text, "メニュー")
         self.assertTrue(
-            all(
-                call[2].get("_request_timeout") == 3.5
-                for call in self.factory.json.calls
-            )
+            all(call[2].get("_request_timeout") == 3.5 for call in self.factory.json.calls)
         )
 
     # テストケース: 4xx、429、5xxのLINE応答をmutation gatewayへ渡す。
@@ -244,9 +240,7 @@ class GatewayContractTests(SimpleTestCase):
             with self.subTest(response=type(response).__name__):
                 factory = FakeFactory()
                 factory.json.responses["create_rich_menu"] = response
-                result = DefaultRichMenuGateway(factory).create(
-                    self.context, self.request
-                )
+                result = DefaultRichMenuGateway(factory).create(self.context, self.request)
                 self.assertIsInstance(result, GatewayUnknown)
                 rendered = repr(result)
                 self.assertNotIn("timeout-canary", rendered)
@@ -257,13 +251,48 @@ class GatewayContractTests(SimpleTestCase):
     # 期待値: endpoint固有契約でrejected/unknown/special observationを分類し、生失敗を公開しない。
     def test_every_json_endpoint_failure_matrix(self):
         cases = (
-            ("validate_rich_menu_object", lambda gateway: gateway.validate(self.context, self.request), None, False),
-            ("create_rich_menu", lambda gateway: gateway.create(self.context, self.request), {"richMenuId": "id"}, True),
-            ("get_rich_menu_list", lambda gateway: gateway.list_resources(self.context), {"richmenus": []}, True),
-            ("get_rich_menu", lambda gateway: gateway.get_resource(self.context, "id"), {"richMenuId": "id", "name": "marker"}, True),
-            ("set_default_rich_menu", lambda gateway: gateway.set_default(self.context, "id"), None, False),
-            ("get_default_rich_menu_id", lambda gateway: gateway.get_default(self.context), {"richMenuId": "id"}, True),
-            ("cancel_default_rich_menu", lambda gateway: gateway.clear_default(self.context), None, False),
+            (
+                "validate_rich_menu_object",
+                lambda gateway: gateway.validate(self.context, self.request),
+                None,
+                False,
+            ),
+            (
+                "create_rich_menu",
+                lambda gateway: gateway.create(self.context, self.request),
+                {"richMenuId": "id"},
+                True,
+            ),
+            (
+                "get_rich_menu_list",
+                lambda gateway: gateway.list_resources(self.context),
+                {"richmenus": []},
+                True,
+            ),
+            (
+                "get_rich_menu",
+                lambda gateway: gateway.get_resource(self.context, "id"),
+                {"richMenuId": "id", "name": "marker"},
+                True,
+            ),
+            (
+                "set_default_rich_menu",
+                lambda gateway: gateway.set_default(self.context, "id"),
+                None,
+                False,
+            ),
+            (
+                "get_default_rich_menu_id",
+                lambda gateway: gateway.get_default(self.context),
+                {"richMenuId": "id"},
+                True,
+            ),
+            (
+                "cancel_default_rich_menu",
+                lambda gateway: gateway.clear_default(self.context),
+                None,
+                False,
+            ),
             ("delete_rich_menu", lambda gateway: gateway.delete(self.context, "id"), None, False),
         )
         failures = (
@@ -387,8 +416,6 @@ class GatewayImageContractTests(SimpleTestCase):
 
     def test_real_sdk_upload_receives_binary_content_type(self):
         from linebot.v3.messaging import MessagingApiBlob
-
-        from linerichmenus.types import RenderedImage
 
         class RecordingApiClient:
             def __init__(self):

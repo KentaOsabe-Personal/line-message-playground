@@ -4,11 +4,11 @@ from uuid import uuid4
 from django.db import DatabaseError
 from django.test import TestCase
 
+from linechannels.reference_fence import ReferenceFenceResult
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 from lineinteractions.models import InteractionAudit
 from lineinteractions.repositories import DjangoInteractionAuditRepository
 from lineinteractions.types import InteractionAuditRecord
-from linechannels.reference_fence import ReferenceFenceResult
-from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
 
 class InteractionAuditRepositoryTests(TestCase):
@@ -34,9 +34,7 @@ class InteractionAuditRepositoryTests(TestCase):
         ):
             fence = Mock()
             fence.lock_existing.return_value = ReferenceFenceResult(status)
-            repository = DjangoInteractionAuditRepository(
-                reference_fence=fence
-            )
+            repository = DjangoInteractionAuditRepository(reference_fence=fence)
 
             with self.subTest(status=status):
                 result = repository.record(self.record)

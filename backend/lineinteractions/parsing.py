@@ -7,12 +7,11 @@ from .types import (
     InvalidInteraction,
     OpaqueActionPayload,
     OutOfScopeInteraction,
-    ParseResult,
     ParsedPostbackInteraction,
     ParsedTextInteraction,
+    ParseResult,
     ReplyToken,
 )
-
 
 _LINE_USER_ID = re.compile(r"U[0-9a-f]{32}\Z")
 _ACTION_NAME = re.compile(r"[a-z][a-z0-9_.-]{0,63}\Z")
@@ -42,10 +41,7 @@ class DefaultInteractionParser:
         if source_type != "user":
             return InvalidInteraction()
         subject = source.get("userId")
-        if (
-            not isinstance(subject, str)
-            or _LINE_USER_ID.fullmatch(subject) is None
-        ):
+        if not isinstance(subject, str) or _LINE_USER_ID.fullmatch(subject) is None:
             return InvalidInteraction()
 
         reply_token = event.data.get("replyToken")
@@ -63,10 +59,7 @@ class DefaultInteractionParser:
         reply_token: str,
     ) -> ParseResult:
         message = event.data.get("message")
-        if (
-            not isinstance(message, FrozenJsonObject)
-            or message.get("type") != "text"
-        ):
+        if not isinstance(message, FrozenJsonObject) or message.get("type") != "text":
             return InvalidInteraction()
         candidate = message.get("text")
         if not _valid_utf16_length(candidate, 1, 5000):
@@ -90,11 +83,7 @@ class DefaultInteractionParser:
         if not _valid_utf16_length(data, 1, 300):
             return InvalidInteraction()
         parts = data.split(":", 2)
-        if (
-            len(parts) != 3
-            or parts[0] != "v1"
-            or _ACTION_NAME.fullmatch(parts[1]) is None
-        ):
+        if len(parts) != 3 or parts[0] != "v1" or _ACTION_NAME.fullmatch(parts[1]) is None:
             return InvalidInteraction()
         return ParsedPostbackInteraction(
             subject=LineSubject(subject),

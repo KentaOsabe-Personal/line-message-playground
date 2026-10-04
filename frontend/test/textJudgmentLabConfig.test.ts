@@ -1,14 +1,20 @@
 import { describe, expect, test } from 'vitest'
 
-import { createTextJudgmentLabConfig, TextJudgmentLabConfigError } from '../src/textJudgmentLabConfig'
+import {
+  createTextJudgmentLabConfig,
+  TextJudgmentLabConfigError,
+} from '../src/textJudgmentLabConfig'
 
 describe('text judgment lab public configuration', () => {
   // テストケース: 公開LIFF IDとcanonical HTTPS originを渡す。
   // 期待値: ラボ入口だけを指すimmutableな公開設定を返す。
   test('builds the public lab LIFF configuration', () => {
-    expect(createTextJudgmentLabConfig({
-      liffId: '1234567890-AbCdEf', currentOrigin: 'https://lab.example.test',
-    })).toEqual({
+    expect(
+      createTextJudgmentLabConfig({
+        liffId: '1234567890-AbCdEf',
+        currentOrigin: 'https://lab.example.test',
+      }),
+    ).toEqual({
       liffId: '1234567890-AbCdEf',
       liffUrl: 'https://liff.line.me/1234567890-AbCdEf/labs/text-judgment',
       entryUrl: 'https://lab.example.test/liff/labs/text-judgment',

@@ -7,7 +7,6 @@ from delivery.serializers import (
     LinkedSendDeliveryRequestSerializer,
 )
 
-
 CHANNEL_ID = "019f69af-d93e-7dd2-b9d2-33f123c978ce"
 RECIPIENT_ID = "019f69b0-0144-7a29-b907-9b7977d707d5"
 OPERATION_ID = "019f69b0-64dd-748e-99dc-b105de9f26b1"
@@ -65,9 +64,7 @@ class LinkedDeliveryRequestSerializerTests(SimpleTestCase):
         )
         self.assertIsInstance(send.validated_data["operationId"], UUID)
         self.assertTrue(
-            LinkedSendDeliveryRequestSerializer()
-            .fields["confirmationToken"]
-            .write_only
+            LinkedSendDeliveryRequestSerializer().fields["confirmationToken"].write_only
         )
 
     # テストケース: UUIDを非canonical形式または非string値で送る

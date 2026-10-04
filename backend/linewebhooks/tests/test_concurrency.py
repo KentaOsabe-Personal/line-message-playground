@@ -3,8 +3,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 from django.db import close_old_connections
 from django.test import TransactionTestCase
-from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 
+from linechannels.tests.reference_fence_support import LOCKED_REFERENCE_FENCE
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.repositories import DjangoEventReceiptRepository
 from linewebhooks.tests.support import (
@@ -82,10 +82,7 @@ class WebhookIngressConcurrencyIntegrationTests(TransactionTestCase):
         handled = handler.events[0]
         self.assertEqual(handled.occurred_at_ms, receipt.occurred_at_ms)
         self.assertEqual(handled.is_redelivery, receipt.is_redelivery)
-        outcomes = [
-            entry.outcome
-            for entry in (*first_audit.entries, *second_audit.entries)
-        ]
+        outcomes = [entry.outcome for entry in (*first_audit.entries, *second_audit.entries)]
         self.assertEqual(outcomes.count("event_accepted"), 1)
         self.assertEqual(outcomes.count("event_duplicate"), 1)
         self.assertEqual(outcomes.count("handler_processed"), 1)
@@ -109,18 +106,12 @@ class WebhookIngressConcurrencyIntegrationTests(TransactionTestCase):
             return repository.accept_batch(candidates)
 
         with ThreadPoolExecutor(max_workers=2) as executor:
-            first = executor.submit(
-                _with_independent_connection, lambda: accept(first_batch)
-            )
-            second = executor.submit(
-                _with_independent_connection, lambda: accept(second_batch)
-            )
+            first = executor.submit(_with_independent_connection, lambda: accept(first_batch))
+            second = executor.submit(_with_independent_connection, lambda: accept(second_batch))
             results = (first.result(timeout=10), second.result(timeout=10))
 
         self.assertTrue(all(isinstance(result, tuple) for result in results))
-        self.assertTrue(
-            all(not isinstance(result, ReceiptStorageFailed) for result in results)
-        )
+        self.assertTrue(all(not isinstance(result, ReceiptStorageFailed) for result in results))
         first_result, second_result = results
         assert isinstance(first_result, tuple)
         assert isinstance(second_result, tuple)
@@ -145,9 +136,7 @@ class WebhookIngressConcurrencyIntegrationTests(TransactionTestCase):
     # 期待値: 最終状態はfailedからprocessingへ戻らず、競合側に新規dispatch権を返さない
     def test_finalize_and_duplicate_race_preserves_terminal_state(self) -> None:
         repository = DjangoEventReceiptRepository(LOCKED_REFERENCE_FENCE)
-        created = repository.accept_batch(
-            (_candidate(EVENT_IDS[0], occurred_at_ms=100),)
-        )
+        created = repository.accept_batch((_candidate(EVENT_IDS[0], occurred_at_ms=100),))
         assert isinstance(created, tuple)
         receipt_id = created[0].receipt_id
         start = threading.Barrier(2)
@@ -161,11 +150,7 @@ class WebhookIngressConcurrencyIntegrationTests(TransactionTestCase):
         def duplicate():
             start.wait(timeout=5)
             return DjangoEventReceiptRepository(LOCKED_REFERENCE_FENCE).accept_batch(
-                (
-                    _candidate(
-                        EVENT_IDS[0], occurred_at_ms=999, is_redelivery=True
-                    ),
-                )
+                (_candidate(EVENT_IDS[0], occurred_at_ms=999, is_redelivery=True),)
             )
 
         with ThreadPoolExecutor(max_workers=2) as executor:
@@ -188,9 +173,7 @@ class WebhookIngressConcurrencyIntegrationTests(TransactionTestCase):
     # 期待値: handlerを再実行せず、保存済みfailed分類を維持してacceptedへ収束する
     def test_failed_duplicate_never_regains_dispatch_right(self) -> None:
         repository = DjangoEventReceiptRepository(LOCKED_REFERENCE_FENCE)
-        created = repository.accept_batch(
-            (_candidate(EVENT_IDS[0], occurred_at_ms=100),)
-        )
+        created = repository.accept_batch((_candidate(EVENT_IDS[0], occurred_at_ms=100),))
         assert isinstance(created, tuple)
         self.assertEqual(
             repository.mark_failed(created[0].receipt_id, "handler_failed"),

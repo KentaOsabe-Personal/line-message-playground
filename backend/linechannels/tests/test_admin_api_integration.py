@@ -101,7 +101,9 @@ class AdminAPIIntegrationTests(TestCase):
         self.assertEqual(bad_origin.status_code, 403)
         self.assertEqual(malformed.status_code, 400)
         self.assertEqual(LineChannel.objects.count(), 0)
-        rendered = " ".join(str(response.json()) for response in (missing_csrf, bad_origin, malformed))
+        rendered = " ".join(
+            str(response.json()) for response in (missing_csrf, bad_origin, malformed)
+        )
         for canary in (
             body["accessToken"],
             body["channelSecret"],
@@ -181,9 +183,7 @@ class AdminAPIIntegrationTests(TestCase):
             status="completed",
             completed_at=timezone.now(),
         )
-        rich_state = RichMenuChannelState.objects.create(
-            channel_public_id=channel.public_id
-        )
+        rich_state = RichMenuChannelState.objects.create(channel_public_id=channel.public_id)
         terminal_operation = RichMenuOperation.objects.create(
             operation_id=uuid4(),
             channel_state=rich_state,
@@ -215,21 +215,24 @@ class AdminAPIIntegrationTests(TestCase):
             csrf,
         )
         self.assertEqual(deleted.status_code, 200)
-        self.assertEqual(deleted.json(), {"channelId": channel_id, "label": "更新後チャネル", "deleted": True})
+        self.assertEqual(
+            deleted.json(), {"channelId": channel_id, "label": "更新後チャネル", "deleted": True}
+        )
         self.assertFalse(LineChannel.objects.filter(public_id=channel_id).exists())
-        self.assertFalse(LineChannelCredential.objects.filter(line_channel__public_id=channel_id).exists())
+        self.assertFalse(
+            LineChannelCredential.objects.filter(line_channel__public_id=channel_id).exists()
+        )
         self.assertFalse(
             ChannelDeactivationState.objects.filter(pk=completed_deactivation.pk).exists()
         )
         self.assertFalse(RichMenuChannelState.objects.filter(pk=rich_state.pk).exists())
-        self.assertFalse(
-            RichMenuOperation.objects.filter(pk=terminal_operation.pk).exists()
-        )
-        self.assertFalse(
-            ManagedRichMenu.objects.filter(pk=terminal_resource.pk).exists()
-        )
+        self.assertFalse(RichMenuOperation.objects.filter(pk=terminal_operation.pk).exists())
+        self.assertFalse(ManagedRichMenu.objects.filter(pk=terminal_resource.pk).exists())
 
-        rendered = " ".join(str(response.json()) for response in (created, metadata, replaced, direct_disable, deleted))
+        rendered = " ".join(
+            str(response.json())
+            for response in (created, metadata, replaced, direct_disable, deleted)
+        )
         for canary in (
             "create-access-token-canary",
             "create-channel-secret-canary",
@@ -242,13 +245,9 @@ class AdminAPIIntegrationTests(TestCase):
     # 期待値: 安全な阻止理由を返し、チャネル・資格情報・履歴を一件も削除しない。
     def test_rich_menu_blocker_prevents_api_delete_without_partial_state_loss(self):
         client, csrf = self.owner_client()
-        created = self.unsafe(
-            client, "post", "/api/line/channels/", self.create_body(), csrf
-        )
+        created = self.unsafe(client, "post", "/api/line/channels/", self.create_body(), csrf)
         channel = LineChannel.objects.get(public_id=created.json()["channelId"])
-        state = RichMenuChannelState.objects.create(
-            channel_public_id=channel.public_id
-        )
+        state = RichMenuChannelState.objects.create(channel_public_id=channel.public_id)
         operation = RichMenuOperation.objects.create(
             operation_id=uuid4(),
             channel_state=state,
@@ -284,9 +283,7 @@ class AdminAPIIntegrationTests(TestCase):
     # 期待値: 削除直前のlock区間で拒否し、全local stateを保持する。
     def test_pending_deactivation_prevents_api_delete(self):
         client, csrf = self.owner_client()
-        created = self.unsafe(
-            client, "post", "/api/line/channels/", self.create_body(), csrf
-        )
+        created = self.unsafe(client, "post", "/api/line/channels/", self.create_body(), csrf)
         channel = LineChannel.objects.get(public_id=created.json()["channelId"])
         pending = ChannelDeactivationState.objects.create(
             line_channel=channel,
@@ -317,9 +314,7 @@ class AdminAPIIntegrationTests(TestCase):
     # 期待値: transaction全体をrollbackし、チャネル・資格情報・履歴・無効化状態を復元する。
     def test_delete_failure_after_history_purge_restores_every_local_row(self):
         client, csrf = self.owner_client()
-        created = self.unsafe(
-            client, "post", "/api/line/channels/", self.create_body(), csrf
-        )
+        created = self.unsafe(client, "post", "/api/line/channels/", self.create_body(), csrf)
         channel = LineChannel.objects.get(public_id=created.json()["channelId"])
         completed_deactivation = ChannelDeactivationState.objects.create(
             line_channel=channel,
@@ -330,9 +325,7 @@ class AdminAPIIntegrationTests(TestCase):
             status="completed",
             completed_at=timezone.now(),
         )
-        rich_state = RichMenuChannelState.objects.create(
-            channel_public_id=channel.public_id
-        )
+        rich_state = RichMenuChannelState.objects.create(channel_public_id=channel.public_id)
         terminal_operation = RichMenuOperation.objects.create(
             operation_id=uuid4(),
             channel_state=rich_state,
@@ -382,12 +375,8 @@ class AdminAPIIntegrationTests(TestCase):
             ChannelDeactivationState.objects.filter(pk=completed_deactivation.pk).exists()
         )
         self.assertTrue(RichMenuChannelState.objects.filter(pk=rich_state.pk).exists())
-        self.assertTrue(
-            RichMenuOperation.objects.filter(pk=terminal_operation.pk).exists()
-        )
-        self.assertTrue(
-            ManagedRichMenu.objects.filter(pk=terminal_resource.pk).exists()
-        )
+        self.assertTrue(RichMenuOperation.objects.filter(pk=terminal_operation.pk).exists())
+        self.assertTrue(ManagedRichMenu.objects.filter(pk=terminal_resource.pk).exists())
 
     # テストケース: owner providerと同一、legacy、別providerのチャネルを一覧・詳細取得する
     # 期待値: 同一とlegacyだけを返し、別provider詳細は不在と同じ404へ収束する
@@ -471,9 +460,13 @@ class AdminAPIIntegrationTests(TestCase):
             csrf,
         )
 
-        self.assertEqual((duplicate.status_code, duplicate.json()["error"]["code"]), (409, "duplicate_channel"))
+        self.assertEqual(
+            (duplicate.status_code, duplicate.json()["error"]["code"]), (409, "duplicate_channel")
+        )
         self.assertEqual(partial.status_code, 400)
-        self.assertEqual((mismatched.status_code, mismatched.json()["error"]["code"]), (422, "provider_mismatch"))
+        self.assertEqual(
+            (mismatched.status_code, mismatched.json()["error"]["code"]), (422, "provider_mismatch")
+        )
         self.assertEqual((stale.status_code, stale.json()["error"]["code"]), (409, "stale_channel"))
         self.assertEqual(LineChannel.objects.count(), 1)
         before.refresh_from_db()
@@ -501,7 +494,9 @@ class AdminAPIIntegrationTests(TestCase):
         )
         client, csrf = self.owner_client()
         listed = client.get("/api/line/channels/")
-        legacy_dto = next(item for item in listed.json()["items"] if item["channelId"] == str(legacy.public_id))
+        legacy_dto = next(
+            item for item in listed.json()["items"] if item["channelId"] == str(legacy.public_id)
+        )
         backfilled = self.unsafe(
             client,
             "patch",
@@ -528,14 +523,19 @@ class AdminAPIIntegrationTests(TestCase):
             {"expectedUpdatedAt": backfilled.json()["updatedAt"]},
             csrf,
         )
-        self.assertEqual((referenced.status_code, referenced.json()["error"]["code"]), (409, "channel_referenced"))
+        self.assertEqual(
+            (referenced.status_code, referenced.json()["error"]["code"]),
+            (409, "channel_referenced"),
+        )
         self.assertTrue(LineChannel.objects.filter(public_id=legacy.public_id).exists())
 
         failing_service = build_channel_admin_service()
         failing_foundation = Mock()
         failing_foundation.register.return_value = ChannelMutationFailed("storage_unavailable")
         failing_service._foundation_service = failing_foundation
-        with patch("linechannels.admin_views.build_channel_admin_service", return_value=failing_service):
+        with patch(
+            "linechannels.admin_views.build_channel_admin_service", return_value=failing_service
+        ):
             failed = self.unsafe(
                 client,
                 "post",
@@ -547,7 +547,9 @@ class AdminAPIIntegrationTests(TestCase):
                 },
                 csrf,
             )
-        self.assertEqual((failed.status_code, failed.json()["error"]["code"]), (503, "storage_unavailable"))
+        self.assertEqual(
+            (failed.status_code, failed.json()["error"]["code"]), (503, "storage_unavailable")
+        )
         refreshed = client.get(f"/api/line/channels/{legacy.public_id}/")
         self.assertEqual(refreshed.status_code, 200)
         self.assertEqual(refreshed.json()["label"], "backfilled")

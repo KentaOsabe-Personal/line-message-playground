@@ -12,7 +12,6 @@ from .types import (
     SecretT,
 )
 
-
 RotationItemFailureCode = Literal["credential_unreadable", "verification_failed"]
 
 
@@ -82,9 +81,7 @@ class DefaultCredentialRotationItemProcessor:
     def __init__(self, cipher: _CredentialCipher) -> None:
         self._cipher = cipher
 
-    def process(
-        self, public_id: UUID, credentials: EncryptedCredentialPair
-    ) -> RotationItemResult:
+    def process(self, public_id: UUID, credentials: EncryptedCredentialPair) -> RotationItemResult:
         contexts = self._contexts(public_id)
         try:
             self._decrypt_pair(credentials, contexts, primary_only=True)
@@ -127,11 +124,7 @@ class DefaultCredentialRotationItemProcessor:
         return PrimaryVerificationVerified()
 
     def _decrypt_pair(self, credentials, contexts, *, primary_only):
-        decrypt = (
-            self._cipher.decrypt_with_primary
-            if primary_only
-            else self._cipher.decrypt
-        )
+        decrypt = self._cipher.decrypt_with_primary if primary_only else self._cipher.decrypt
         access_token = decrypt(credentials.access_token, contexts[0])
         channel_secret = decrypt(credentials.channel_secret, contexts[1])
         if not isinstance(access_token, AccessToken) or not isinstance(

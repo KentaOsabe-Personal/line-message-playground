@@ -35,9 +35,7 @@ class InteractionParserTests(SimpleTestCase):
     def test_classifies_group_and_room_as_out_of_scope(self):
         for source_type in ("group", "room"):
             with self.subTest(source_type=source_type):
-                result = self.parser.parse(
-                    interaction_event(source={"type": source_type})
-                )
+                result = self.parser.parse(interaction_event(source={"type": source_type}))
                 self.assertIsInstance(result, OutOfScopeInteraction)
 
     # テストケース: event/source/user/reply token/message shapeの不正値を解析する
@@ -70,17 +68,13 @@ class InteractionParserTests(SimpleTestCase):
         for text in accepted:
             with self.subTest(text_length=len(text)):
                 self.assertIsInstance(
-                    self.parser.parse(
-                        interaction_event(message={"type": "text", "text": text})
-                    ),
+                    self.parser.parse(interaction_event(message={"type": "text", "text": text})),
                     ParsedTextInteraction,
                 )
         for text in rejected:
             with self.subTest(text_length=len(text)):
                 self.assertIsInstance(
-                    self.parser.parse(
-                        interaction_event(message={"type": "text", "text": text})
-                    ),
+                    self.parser.parse(interaction_event(message={"type": "text", "text": text})),
                     InvalidInteraction,
                 )
 
@@ -145,17 +139,13 @@ class InteractionParserTests(SimpleTestCase):
 
         self.assertIsInstance(
             self.parser.parse(
-                interaction_event(
-                    event_type="postback", postback={"data": accepted}
-                )
+                interaction_event(event_type="postback", postback={"data": accepted})
             ),
             ParsedPostbackInteraction,
         )
         self.assertIsInstance(
             self.parser.parse(
-                interaction_event(
-                    event_type="postback", postback={"data": rejected}
-                )
+                interaction_event(event_type="postback", postback={"data": rejected})
             ),
             InvalidInteraction,
         )

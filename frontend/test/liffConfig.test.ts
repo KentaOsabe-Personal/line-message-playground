@@ -6,11 +6,13 @@ describe('LiffRuntimeConfig', () => {
   // テストケース: HTTPS origin、固定path、LIFF IDからruntime設定を生成する。
   // 期待値: LIFF URLとendpoint・redirect URIが単一の入力から一意に導出される。
   test('derives the LIFF and endpoint URLs from canonical inputs', () => {
-    expect(createLiffRuntimeConfig({
-      liffId: '1234567890-AbCdEf',
-      currentOrigin: 'https://example.ngrok-free.app',
-      currentPathname: '/liff',
-    })).toEqual({
+    expect(
+      createLiffRuntimeConfig({
+        liffId: '1234567890-AbCdEf',
+        currentOrigin: 'https://example.ngrok-free.app',
+        currentPathname: '/liff',
+      }),
+    ).toEqual({
       liffId: '1234567890-AbCdEf',
       liffUrl: 'https://liff.line.me/1234567890-AbCdEf',
       endpointUrl: 'https://example.ngrok-free.app/liff',
@@ -21,13 +23,20 @@ describe('LiffRuntimeConfig', () => {
   // テストケース: 定義済みsubrouteからLIFF runtime設定を生成する。
   // 期待値: subrouteを許可しつつendpointとlogin redirectを固定`/liff`へ収束させる。
   test('accepts defined application subroutes while keeping the LIFF redirect fixed', () => {
-    expect(createLiffRuntimeConfig({
-      liffId: '1234567890-AbCdEf', currentOrigin: 'https://example.ngrok-free.app', currentPathname: '/liff/channels',
-    }).redirectUri).toBe('https://example.ngrok-free.app/liff')
-    expect(createLiffRuntimeConfig({
-      liffId: '1234567890-AbCdEf', currentOrigin: 'https://example.ngrok-free.app',
-      currentPathname: '/liff/rich-menus/123e4567-e89b-42d3-a456-426614174000',
-    }).endpointUrl).toBe('https://example.ngrok-free.app/liff')
+    expect(
+      createLiffRuntimeConfig({
+        liffId: '1234567890-AbCdEf',
+        currentOrigin: 'https://example.ngrok-free.app',
+        currentPathname: '/liff/channels',
+      }).redirectUri,
+    ).toBe('https://example.ngrok-free.app/liff')
+    expect(
+      createLiffRuntimeConfig({
+        liffId: '1234567890-AbCdEf',
+        currentOrigin: 'https://example.ngrok-free.app',
+        currentPathname: '/liff/rich-menus/123e4567-e89b-42d3-a456-426614174000',
+      }).endpointUrl,
+    ).toBe('https://example.ngrok-free.app/liff')
   })
 
   // テストケース: LIFF entry URLにLINE復帰用queryとfragmentが付いた状態から設定を導出する。
@@ -53,7 +62,11 @@ describe('LiffRuntimeConfig', () => {
     { liffId: '123-a', currentOrigin: 'https://example.com', currentPathname: '/liff/' },
     { liffId: '123-a', currentOrigin: 'https://example.com', currentPathname: '/liff/unknown' },
     { liffId: '', currentOrigin: 'https://example.com', currentPathname: '/liff' },
-    { liffId: '123-a?token=secret', currentOrigin: 'https://example.com', currentPathname: '/liff' },
+    {
+      liffId: '123-a?token=secret',
+      currentOrigin: 'https://example.com',
+      currentPathname: '/liff',
+    },
   ])('rejects unsafe configuration %#', (input) => {
     expect(() => createLiffRuntimeConfig(input)).toThrow(LiffConfigError)
   })

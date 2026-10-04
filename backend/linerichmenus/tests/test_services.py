@@ -56,21 +56,20 @@ from linerichmenus.types import (
     HistoryPage,
     HistorySummary,
     InputFieldError,
+    IssuedConfirmation,
     NextAllowedAction,
     ObservationKind,
-    OperationKind,
     OperationCommand,
+    OperationKind,
     OperationStage,
     OperationStatus,
     OperationView,
     RenderRejected,
     ResourceLifecycle,
     SafeResultCode,
-    IssuedConfirmation,
     TemplateInput,
     TemplateReference,
 )
-
 
 NOW = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 
@@ -149,9 +148,7 @@ class RecordingGateway:
 class RecordingReconciler:
     def __init__(self, reconciliation):
         self.reconciliation = reconciliation
-        self.recheck_result = RecheckUnknown(
-            OperationStage.VERIFYING, "observation_unknown"
-        )
+        self.recheck_result = RecheckUnknown(OperationStage.VERIFYING, "observation_unknown")
         self.calls = []
         self.recheck_calls = []
 
@@ -282,9 +279,7 @@ class ApplyingRepository(RecordingRepository):
     def mark_resource_cleanup_required(self, resource_id):
         if resource_id != self.candidate.public_id:
             return False
-        self.candidate = replace(
-            self.candidate, lifecycle=ResourceLifecycle.CLEANUP_REQUIRED
-        )
+        self.candidate = replace(self.candidate, lifecycle=ResourceLifecycle.CLEANUP_REQUIRED)
         return True
 
     def mark_resource_applied(self, resource_id):
@@ -330,14 +325,11 @@ class ApplyingRepository(RecordingRepository):
             stage=outcome.next_stage,
             result=outcome.result,
             completed_at=NOW
-            if outcome.next_status
-            in {OperationStatus.SUCCEEDED, OperationStatus.FAILED}
+            if outcome.next_status in {OperationStatus.SUCCEEDED, OperationStatus.FAILED}
             else None,
         )
         if outcome.next_status is OperationStatus.CLEANUP_REQUIRED:
-            self.candidate = replace(
-                self.candidate, lifecycle=ResourceLifecycle.CLEANUP_REQUIRED
-            )
+            self.candidate = replace(self.candidate, lifecycle=ResourceLifecycle.CLEANUP_REQUIRED)
         return self.operation
 
 
@@ -372,7 +364,11 @@ class LifecycleRepository(RecordingRepository):
         return self.target if resource_id == self.target.public_id else None
 
     def get_operation_by_id(self, operation_id):
-        return self.operation if self.operation and self.operation.operation_id == operation_id else None
+        return (
+            self.operation
+            if self.operation and self.operation.operation_id == operation_id
+            else None
+        )
 
     def get_request_fingerprint(self, operation_id):
         if self.operation and self.operation.operation_id == operation_id:
@@ -418,7 +414,8 @@ class LifecycleRepository(RecordingRepository):
             stage=outcome.next_stage,
             result=outcome.result,
             completed_at=NOW
-            if outcome.next_status in {
+            if outcome.next_status
+            in {
                 OperationStatus.SUCCEEDED,
                 OperationStatus.FAILED,
             }
@@ -448,21 +445,15 @@ class RecoveryRepository(RecordingRepository):
         self.subject = OperationView(
             operation_id=uuid4(),
             kind=OperationKind.APPLY,
-            status=OperationStatus.CLEANUP_REQUIRED
-            if cleanup
-            else OperationStatus.UNKNOWN,
+            status=OperationStatus.CLEANUP_REQUIRED if cleanup else OperationStatus.UNKNOWN,
             stage=OperationStage.CLEANING if cleanup else OperationStage.CREATING,
-            result=SafeResultCode.CLEANUP_REQUIRED
-            if cleanup
-            else SafeResultCode.RESPONSE_UNKNOWN,
+            result=SafeResultCode.CLEANUP_REQUIRED if cleanup else SafeResultCode.RESPONSE_UNKNOWN,
             subject_operation_id=None,
             target_resource_id=None,
             accepted_at=NOW,
             completed_at=None,
             next_allowed_actions=(
-                NextAllowedAction.CLEANUP
-                if cleanup
-                else NextAllowedAction.RECHECK,
+                NextAllowedAction.CLEANUP if cleanup else NextAllowedAction.RECHECK,
             ),
         )
         self.candidate = ManagedResourceTarget(
@@ -492,17 +483,13 @@ class RecoveryRepository(RecordingRepository):
     def bind_resource_line_id(self, resource_id, line_rich_menu_id):
         if resource_id != self.candidate.public_id:
             return False
-        self.candidate = replace(
-            self.candidate, line_rich_menu_id=line_rich_menu_id
-        )
+        self.candidate = replace(self.candidate, line_rich_menu_id=line_rich_menu_id)
         return True
 
     def mark_resource_cleanup_required(self, resource_id):
         if resource_id != self.candidate.public_id:
             return False
-        self.candidate = replace(
-            self.candidate, lifecycle=ResourceLifecycle.CLEANUP_REQUIRED
-        )
+        self.candidate = replace(self.candidate, lifecycle=ResourceLifecycle.CLEANUP_REQUIRED)
         return True
 
     def get_operation(self, scope, operation_id):
@@ -656,9 +643,7 @@ class RichMenuPreviewServiceTests(TransactionTestCase):
         self.channel_id = uuid4()
         self.owner = OwnerOperationContext(uuid4(), self.identity_id)
         self.owner_fence = RecordingOwnerFence(identity_id=self.identity_id)
-        self.channel_port = RecordingChannelPort(
-            _snapshot(self.channel_id, self.identity_id)
-        )
+        self.channel_port = RecordingChannelPort(_snapshot(self.channel_id, self.identity_id))
         self.gateway = RecordingGateway(RichMenuDefaultExternal())
         self.reconciler = DefaultRichMenuReconciler(self.gateway)
         self.repository = RecordingRepository()
@@ -678,9 +663,7 @@ class RichMenuPreviewServiceTests(TransactionTestCase):
             reconciler=self.reconciler,
             renderer=self.renderer,
             confirmation=self.confirmation,
-            readiness=DefaultMutationReadiness(
-                mode="enabled", integration_complete=True
-            ),
+            readiness=DefaultMutationReadiness(mode="enabled", integration_complete=True),
             clock=lambda: NOW,
         )
 
@@ -700,7 +683,9 @@ class RichMenuPreviewServiceTests(TransactionTestCase):
         self.assertEqual(result.preview.channel_label, "学習用チャネル")
         self.assertEqual(result.preview.template.fields[0].display_name, "公式サイト")
         self.assertEqual(result.preview.observation.kind, ObservationKind.EXTERNAL_DEFAULT)
-        self.assertIn("external_default_replaced", {warning.value for warning in result.preview.warnings})
+        self.assertIn(
+            "external_default_replaced", {warning.value for warning in result.preview.warnings}
+        )
         self.assertTrue(result.token)
         self.assertTrue(result.image_base64)
         self.assertEqual([call[0] for call in self.gateway.calls], ["validate", "get_default"])
@@ -729,9 +714,7 @@ class RichMenuPreviewServiceTests(TransactionTestCase):
     # テストケース: inactive channelでpreviewを要求する。
     # 期待値: exact snapshotのinactive結果を返し、LINE gatewayへ到達しない。
     def test_preview_does_not_call_line_for_inactive_channel(self):
-        self.channel_port.snapshot = _snapshot(
-            self.channel_id, self.identity_id, active=False
-        )
+        self.channel_port.snapshot = _snapshot(self.channel_id, self.identity_id, active=False)
 
         result = self.service.preview(
             self.owner,
@@ -772,9 +755,7 @@ class RichMenuPreviewServiceTests(TransactionTestCase):
     # テストケース: rendererが画像制約違反を返すpreviewを要求する。
     # 期待値: image_invalidを返し、LINE object validateを開始しない。
     def test_preview_rejects_render_failure_before_line_validation(self):
-        self.service._renderer = FixedRenderer(
-            RenderRejected(code=SafeResultCode.IMAGE_INVALID)
-        )
+        self.service._renderer = FixedRenderer(RenderRejected(code=SafeResultCode.IMAGE_INVALID))
 
         result = self.service.preview(
             self.owner,
@@ -815,9 +796,7 @@ class RichMenuPreviewServiceTests(TransactionTestCase):
     # テストケース: inactive channelの状態照会を行う。
     # 期待値: 保存projectionだけを返し、LINE観測を開始しない。
     def test_get_state_does_not_call_line_for_inactive_channel(self):
-        self.channel_port.snapshot = _snapshot(
-            self.channel_id, self.identity_id, active=False
-        )
+        self.channel_port.snapshot = _snapshot(self.channel_id, self.identity_id, active=False)
         self.repository.state = _empty_state(self.channel_id)
 
         result = self.service.get_state(self.owner, self.channel_id)
@@ -825,9 +804,7 @@ class RichMenuPreviewServiceTests(TransactionTestCase):
         self.assertIsInstance(result, StateSucceeded)
         self.assertEqual(result.state.capabilities.mode, "read_only")
         self.assertEqual(result.state.capabilities.actions, ())
-        self.assertEqual(
-            result.state.capabilities.unavailable_reason, "channel_inactive"
-        )
+        self.assertEqual(result.state.capabilities.unavailable_reason, "channel_inactive")
         self.assertEqual(self.gateway.calls, [])
         self.assertEqual(self.repository.observations, [])
 
@@ -862,9 +839,7 @@ class RichMenuApplyServiceTests(TransactionTestCase):
         self.channel_id = uuid4()
         self.owner = OwnerOperationContext(uuid4(), self.identity_id)
         self.owner_fence = RecordingOwnerFence(identity_id=self.identity_id)
-        self.channel_port = RecordingChannelPort(
-            _snapshot(self.channel_id, self.identity_id)
-        )
+        self.channel_port = RecordingChannelPort(_snapshot(self.channel_id, self.identity_id))
         self.gateway = RecordingGateway(RichMenuDefaultExternal())
         self.repository = ApplyingRepository()
         self.confirmation = FixedConfirmation(
@@ -882,9 +857,7 @@ class RichMenuApplyServiceTests(TransactionTestCase):
             reconciler=DefaultRichMenuReconciler(self.gateway),
             renderer=DefaultDeterministicRenderer(),
             confirmation=self.confirmation,
-            readiness=DefaultMutationReadiness(
-                mode="enabled", integration_complete=True
-            ),
+            readiness=DefaultMutationReadiness(mode="enabled", integration_complete=True),
             clock=lambda: NOW,
         )
 
@@ -950,9 +923,7 @@ class RichMenuApplyServiceTests(TransactionTestCase):
         self.assertIsInstance(result, OperationSucceeded)
         self.assertEqual(result.operation.status, OperationStatus.FAILED)
         self.assertEqual(result.operation.result, SafeResultCode.LINE_REJECTED)
-        self.assertEqual(
-            [call[0] for call in self.gateway.calls], ["get_default", "create"]
-        )
+        self.assertEqual([call[0] for call in self.gateway.calls], ["get_default", "create"])
         self.assertEqual(self.repository.candidate.lifecycle, ResourceLifecycle.DELETED)
 
     # テストケース: create後のuploadが明示拒否されるapplyを要求する。
@@ -964,9 +935,7 @@ class RichMenuApplyServiceTests(TransactionTestCase):
 
         self.assertIsInstance(result, OperationSucceeded)
         self.assertEqual(result.operation.status, OperationStatus.CLEANUP_REQUIRED)
-        self.assertEqual(
-            self.repository.candidate.lifecycle, ResourceLifecycle.CLEANUP_REQUIRED
-        )
+        self.assertEqual(self.repository.candidate.lifecycle, ResourceLifecycle.CLEANUP_REQUIRED)
         self.assertNotIn("set_default", [call[0] for call in self.gateway.calls])
 
     # テストケース: operation予約時にMySQL 1205/1213 lock errorを失敗注入する。
@@ -995,9 +964,7 @@ class RichMenuLifecycleServiceTests(TransactionTestCase):
         self.channel_id = uuid4()
         self.owner = OwnerOperationContext(uuid4(), self.identity_id)
         self.owner_fence = RecordingOwnerFence(identity_id=self.identity_id)
-        self.channel_port = RecordingChannelPort(
-            _snapshot(self.channel_id, self.identity_id)
-        )
+        self.channel_port = RecordingChannelPort(_snapshot(self.channel_id, self.identity_id))
         self.gateway = RecordingGateway(RichMenuDefaultExternal())
         self.repository = LifecycleRepository(self.identity_id, self.channel_id)
         self.service = DefaultRichMenuService(
@@ -1006,9 +973,7 @@ class RichMenuLifecycleServiceTests(TransactionTestCase):
             repository=self.repository,
             gateway=self.gateway,
             reconciler=DefaultRichMenuReconciler(self.gateway),
-            readiness=DefaultMutationReadiness(
-                mode="enabled", integration_complete=True
-            ),
+            readiness=DefaultMutationReadiness(mode="enabled", integration_complete=True),
             clock=lambda: NOW,
         )
 
@@ -1025,9 +990,7 @@ class RichMenuLifecycleServiceTests(TransactionTestCase):
     # テストケース: 外部default中の管理対象をunlinkする。
     # 期待値: 外部defaultへclearせず、対象だけを非defaultのcleanup対象へ収束する。
     def test_unlink_preserves_external_default(self):
-        result = self.service.start_operation(
-            self.owner, self._command(OperationKind.UNLINK)
-        )
+        result = self.service.start_operation(self.owner, self._command(OperationKind.UNLINK))
 
         self.assertIsInstance(result, OperationSucceeded)
         self.assertEqual(result.operation.status, OperationStatus.SUCCEEDED)
@@ -1039,9 +1002,7 @@ class RichMenuLifecycleServiceTests(TransactionTestCase):
     def test_unlink_clears_only_matching_managed_default(self):
         self.gateway.default = RichMenuDefaultPresent("managed-line-id")
 
-        result = self.service.start_operation(
-            self.owner, self._command(OperationKind.UNLINK)
-        )
+        result = self.service.start_operation(self.owner, self._command(OperationKind.UNLINK))
 
         self.assertIsInstance(result, OperationSucceeded)
         self.assertEqual(result.operation.status, OperationStatus.SUCCEEDED)
@@ -1078,9 +1039,7 @@ class RichMenuLifecycleServiceTests(TransactionTestCase):
     # テストケース: 管理終了を要求する。
     # 期待値: LINE callを一件も行わず、対象resourceだけをreleasedへ移す。
     def test_release_does_not_call_line_and_marks_resource_released(self):
-        result = self.service.start_operation(
-            self.owner, self._command(OperationKind.RELEASE)
-        )
+        result = self.service.start_operation(self.owner, self._command(OperationKind.RELEASE))
 
         self.assertIsInstance(result, OperationSucceeded)
         self.assertEqual(result.operation.status, OperationStatus.SUCCEEDED)
@@ -1099,9 +1058,7 @@ class RichMenuApplyContinuationTests(TransactionTestCase):
         self.channel_id = uuid4()
         self.owner = OwnerOperationContext(uuid4(), self.identity_id)
         self.owner_fence = RecordingOwnerFence(identity_id=self.identity_id)
-        self.channel_port = RecordingChannelPort(
-            _snapshot(self.channel_id, self.identity_id)
-        )
+        self.channel_port = RecordingChannelPort(_snapshot(self.channel_id, self.identity_id))
         self.gateway = RecordingGateway(RichMenuDefaultExternal())
         self.repository = ApplyingRepository()
         self.confirmation = FixedConfirmation(
@@ -1119,9 +1076,7 @@ class RichMenuApplyContinuationTests(TransactionTestCase):
             reconciler=DefaultRichMenuReconciler(self.gateway),
             renderer=DefaultDeterministicRenderer(),
             confirmation=self.confirmation,
-            readiness=DefaultMutationReadiness(
-                mode="enabled", integration_complete=True
-            ),
+            readiness=DefaultMutationReadiness(mode="enabled", integration_complete=True),
             clock=lambda: NOW,
         )
 
@@ -1147,9 +1102,7 @@ class RichMenuApplyContinuationTests(TransactionTestCase):
         self.assertIsInstance(result, OperationSucceeded)
         self.assertEqual(result.operation.status, OperationStatus.UNKNOWN)
         self.assertEqual(result.operation.stage, OperationStage.CREATING)
-        self.assertEqual(
-            [call[0] for call in self.gateway.calls], ["get_default", "create"]
-        )
+        self.assertEqual([call[0] for call in self.gateway.calls], ["get_default", "create"])
 
     # テストケース: 同じoperationを期限切れtokenで再送する。
     # 期待値: 保存済み結果を返し、confirmation検証とLINE外部作用を再実行しない。
@@ -1180,9 +1133,7 @@ class RichMenuApplyContinuationTests(TransactionTestCase):
 
         self.assertIsInstance(result, OperationSucceeded)
         self.assertEqual(result.operation.status, OperationStatus.CLEANUP_REQUIRED)
-        self.assertEqual(
-            self.repository.candidate.lifecycle, ResourceLifecycle.CLEANUP_REQUIRED
-        )
+        self.assertEqual(self.repository.candidate.lifecycle, ResourceLifecycle.CLEANUP_REQUIRED)
         self.assertNotIn("set_default", [call[0] for call in self.gateway.calls])
 
     # テストケース: uploadの結果がunknownになるapplyを要求する。
@@ -1214,9 +1165,7 @@ class RichMenuApplyContinuationTests(TransactionTestCase):
                 self.assertIsInstance(outcome, OperationSucceeded)
                 self.assertEqual(outcome.operation.status, expected_status)
                 self.assertNotEqual(self.repository.candidate.lifecycle, ResourceLifecycle.APPLIED)
-                self.assertEqual(
-                    [call[0] for call in self.gateway.calls].count("set_default"), 1
-                )
+                self.assertEqual([call[0] for call in self.gateway.calls].count("set_default"), 1)
 
     # テストケース: set成功後の最終default観測がunknownになるapplyを要求する。
     # 期待値: appliedへ確定せずverifying unknownを保存し、setや観測を自動retryしない。
@@ -1252,9 +1201,7 @@ class RichMenuRecoveryServiceTests(TransactionTestCase):
             repository=repository,
             gateway=gateway,
             reconciler=reconciler,
-            readiness=DefaultMutationReadiness(
-                mode="enabled", integration_complete=True
-            ),
+            readiness=DefaultMutationReadiness(mode="enabled", integration_complete=True),
             clock=lambda: NOW,
         )
         return owner, service, repository, gateway, reconciler, channel_id
@@ -1326,9 +1273,7 @@ class RichMenuRecoveryServiceTests(TransactionTestCase):
     # 期待値: recoveryをunknownへ保存し、元の外部作用を再実行しない。
     def test_recheck_unknown_does_not_retry_external_mutation(self):
         owner, service, repository, gateway, reconciler, channel_id = self._build_service()
-        reconciler.recheck_result = RecheckUnknown(
-            OperationStage.CREATING, "observation_unknown"
-        )
+        reconciler.recheck_result = RecheckUnknown(OperationStage.CREATING, "observation_unknown")
         command = OperationCommand(
             operation_id=uuid4(),
             channel_public_id=channel_id,

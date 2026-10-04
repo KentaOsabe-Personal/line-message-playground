@@ -9,7 +9,6 @@ from textjudgmentlab.authentication import IsLabOwner, LabBearerAuthentication
 from textjudgmentlab.runtime import LabRuntimeConfigured, OwnerDigest, SecretValue
 from textjudgmentlab.views import LabAPIView
 
-
 RUNTIME = LabRuntimeConfigured(
     channel_id="1234567890",
     owner_digest=OwnerDigest("a" * 64),
@@ -41,9 +40,14 @@ class LabHttpBoundaryTests(SimpleTestCase):
         self.assertEqual(LabAPIView.authentication_classes, [LabBearerAuthentication])
         self.assertEqual(LabAPIView.permission_classes, [IsLabOwner])
         self.assertEqual(LabAPIView.parser_classes, [JSONParser])
-        response = self.view(self.factory.post(
-            "/lab", {}, format="json", HTTP_ORIGIN=RUNTIME.origin,
-        ))
+        response = self.view(
+            self.factory.post(
+                "/lab",
+                {},
+                format="json",
+                HTTP_ORIGIN=RUNTIME.origin,
+            )
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Cache-Control"], "no-store")
 
@@ -53,14 +57,30 @@ class LabHttpBoundaryTests(SimpleTestCase):
         cases = (
             ({}, b"{}", "origin_rejected", 403),
             ({"HTTP_ORIGIN": "https://other.example"}, b"{}", "origin_rejected", 403),
-            ({"HTTP_ORIGIN": RUNTIME.origin}, b'"' + b"x" * (32 * 1024) + b'"', "input_too_large", 413),
-            ({"HTTP_ORIGIN": RUNTIME.origin, "HTTP_AUTHORIZATION": "Bearer " + "x" * (8 * 1024)}, b"{}", "reauthentication_required", 401),
+            (
+                {"HTTP_ORIGIN": RUNTIME.origin},
+                b'"' + b"x" * (32 * 1024) + b'"',
+                "input_too_large",
+                413,
+            ),
+            (
+                {"HTTP_ORIGIN": RUNTIME.origin, "HTTP_AUTHORIZATION": "Bearer " + "x" * (8 * 1024)},
+                b"{}",
+                "reauthentication_required",
+                401,
+            ),
         )
         for headers, body, code, status_code in cases:
             with self.subTest(code=code):
-                response = self.view(self.factory.generic(
-                    "POST", "/lab", body, content_type="application/json", **headers,
-                ))
+                response = self.view(
+                    self.factory.generic(
+                        "POST",
+                        "/lab",
+                        body,
+                        content_type="application/json",
+                        **headers,
+                    )
+                )
                 self.assertEqual(response.status_code, status_code)
                 self.assertEqual(set(response.data), {"error"})
                 self.assertEqual(set(response.data["error"]), {"code", "message"})
@@ -71,10 +91,32 @@ class LabHttpBoundaryTests(SimpleTestCase):
     # 期待値: owner schemaやdebug内容を漏らさず専用固定errorへ縮約する
     def test_normalizes_parser_media_method_and_unexpected_errors(self) -> None:
         requests = (
-            (self.factory.generic("POST", "/lab", b"{", content_type="application/json", HTTP_ORIGIN=RUNTIME.origin), 400, "invalid_input"),
-            (self.factory.generic("POST", "/lab", b"x", content_type="text/plain", HTTP_ORIGIN=RUNTIME.origin), 415, "unsupported_media_type"),
+            (
+                self.factory.generic(
+                    "POST",
+                    "/lab",
+                    b"{",
+                    content_type="application/json",
+                    HTTP_ORIGIN=RUNTIME.origin,
+                ),
+                400,
+                "invalid_input",
+            ),
+            (
+                self.factory.generic(
+                    "POST", "/lab", b"x", content_type="text/plain", HTTP_ORIGIN=RUNTIME.origin
+                ),
+                415,
+                "unsupported_media_type",
+            ),
             (self.factory.get("/lab", HTTP_ORIGIN=RUNTIME.origin), 405, "method_not_allowed"),
-            (self.factory.post("/lab", {"explode": True}, format="json", HTTP_ORIGIN=RUNTIME.origin), 500, "unexpected"),
+            (
+                self.factory.post(
+                    "/lab", {"explode": True}, format="json", HTTP_ORIGIN=RUNTIME.origin
+                ),
+                500,
+                "unexpected",
+            ),
         )
         for request, status_code, code in requests:
             with self.subTest(code=code):

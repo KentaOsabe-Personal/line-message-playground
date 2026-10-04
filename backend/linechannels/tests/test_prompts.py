@@ -1,5 +1,5 @@
-import uuid
 import getpass
+import uuid
 import warnings
 
 from django.test import SimpleTestCase
@@ -126,13 +126,12 @@ class GetPassManageLineChannelPromptsTests(SimpleTestCase):
             def failing_input(_prompt):
                 raise error
 
-            return GetPassManageLineChannelPrompts(
-                input_stream=TTYStream(), input_fn=failing_input
-            )
+            return GetPassManageLineChannelPrompts(input_stream=TTYStream(), input_fn=failing_input)
 
         warning_harness = PromptHarness(
             ["register", "1234567890", "000123", "U" + "1" * 32, "メイン", "yes"]
         )
+
         def warn_about_echo(_prompt):
             warnings.warn("echo fallback", getpass.GetPassWarning)
             return "must-not-be-collected"

@@ -78,9 +78,7 @@ class ReadOnlyTransportPolicyTests(TestCase):
                 return httpx.Response(503)
             return httpx.Response(200, json=valid_id_payload())
 
-        result = gateway_for(handler, sleeps=sleeps).verify_id_token(
-            IdToken("id-token-canary")
-        )
+        result = gateway_for(handler, sleeps=sleeps).verify_id_token(IdToken("id-token-canary"))
 
         self.assertIsInstance(result, VerifyIdentitySucceeded)
         self.assertEqual(len(requests), 3)
@@ -118,9 +116,7 @@ class ReadOnlyTransportPolicyTests(TestCase):
                 )
             raise AssertionError("redirect was followed")
 
-        redirect_result = gateway_for(redirect_handler).verify_id_token(
-            IdToken("id-token-canary")
-        )
+        redirect_result = gateway_for(redirect_handler).verify_id_token(IdToken("id-token-canary"))
         self.assertIsInstance(redirect_result, LinePlatformUnavailable)
         self.assertEqual(len(requests), 1)
 
@@ -134,9 +130,7 @@ class ReadOnlyTransportPolicyTests(TestCase):
             attempts += 1
             raise httpx.ReadTimeout("token-canary", request=request)
 
-        result = gateway_for(handler).get_friendship(
-            UserAccessToken("user-token-canary")
-        )
+        result = gateway_for(handler).get_friendship(UserAccessToken("user-token-canary"))
 
         self.assertIsInstance(result, LinePlatformUnavailable)
         self.assertEqual(attempts, 3)
@@ -299,9 +293,7 @@ class FriendshipTests(TestCase):
             self.assertEqual(request.headers["Authorization"], "Bearer user-token-canary")
             return httpx.Response(200, json={"friendFlag": False})
 
-        result = gateway_for(handler).get_friendship(
-            UserAccessToken("user-token-canary")
-        )
+        result = gateway_for(handler).get_friendship(UserAccessToken("user-token-canary"))
 
         self.assertEqual(result, FriendshipSucceeded(is_friend=False))
 
@@ -311,9 +303,7 @@ class FriendshipTests(TestCase):
         for value in (0, 1, "true", None):
             with self.subTest(value=value):
                 result = gateway_for(
-                    lambda _request, flag=value: httpx.Response(
-                        200, json={"friendFlag": flag}
-                    )
+                    lambda _request, flag=value: httpx.Response(200, json={"friendFlag": flag})
                 ).get_friendship(UserAccessToken("user-token-canary"))
                 self.assertIsInstance(result, LinePlatformUnavailable)
 
@@ -348,9 +338,7 @@ class DeauthorizeTests(TestCase):
             )
             return httpx.Response(204)
 
-        result = gateway_for(handler).deauthorize(
-            UserAccessToken("user-token-canary")
-        )
+        result = gateway_for(handler).deauthorize(UserAccessToken("user-token-canary"))
 
         self.assertIsInstance(result, DeauthorizeSucceeded)
         self.assertEqual(len(requests), 2)
@@ -375,9 +363,7 @@ class DeauthorizeTests(TestCase):
             deauthorize_attempts += 1
             return httpx.Response(503, json={"message": "user-token-canary"})
 
-        result = gateway_for(handler).deauthorize(
-            UserAccessToken("user-token-canary")
-        )
+        result = gateway_for(handler).deauthorize(UserAccessToken("user-token-canary"))
 
         self.assertIsInstance(result, DeauthorizeUncertain)
         self.assertEqual(deauthorize_attempts, 1)
@@ -402,9 +388,7 @@ class DeauthorizeTests(TestCase):
             deauthorize_attempts += 1
             return httpx.Response(429, json={"message": "user-token-canary"})
 
-        result = gateway_for(handler).deauthorize(
-            UserAccessToken("user-token-canary")
-        )
+        result = gateway_for(handler).deauthorize(UserAccessToken("user-token-canary"))
 
         self.assertIsInstance(result, DeauthorizeUncertain)
         self.assertEqual(deauthorize_attempts, 1)
@@ -425,9 +409,7 @@ class DeauthorizeTests(TestCase):
                 )
             return httpx.Response(400)
 
-        result = gateway_for(handler).deauthorize(
-            UserAccessToken("user-token-canary")
-        )
+        result = gateway_for(handler).deauthorize(UserAccessToken("user-token-canary"))
 
         self.assertIsInstance(result, DeauthorizeRejected)
 
@@ -453,16 +435,10 @@ class DeauthorizeTests(TestCase):
                     if terminal == "body":
                         return httpx.Response(204, content=b"unexpected")
                     if terminal == "timeout":
-                        raise httpx.ReadTimeout(
-                            "user-token-canary", request=request
-                        )
-                    raise httpx.RemoteProtocolError(
-                        "channel-token-canary", request=request
-                    )
+                        raise httpx.ReadTimeout("user-token-canary", request=request)
+                    raise httpx.RemoteProtocolError("channel-token-canary", request=request)
 
-                result = gateway_for(handler).deauthorize(
-                    UserAccessToken("user-token-canary")
-                )
+                result = gateway_for(handler).deauthorize(UserAccessToken("user-token-canary"))
                 self.assertIsInstance(result, DeauthorizeUncertain)
                 self.assertEqual(deauthorize_attempts, 1)
                 self.assertNotIn("channel-token-canary", repr(result))
@@ -486,9 +462,7 @@ class DeauthorizeTests(TestCase):
                 },
             )
 
-        result = gateway_for(handler).deauthorize(
-            UserAccessToken("user-token-canary")
-        )
+        result = gateway_for(handler).deauthorize(UserAccessToken("user-token-canary"))
 
         self.assertIsInstance(result, LinePlatformUnavailable)
         self.assertEqual(attempts, 3)

@@ -49,8 +49,10 @@ class ChannelReferenceFenceTests(TransactionTestCase):
             (OperationalError(1213, "secret-canary"), "storage_retryable"),
             (DatabaseError("secret-canary"), "storage_unavailable"),
         ):
-            with self.subTest(expected=expected), transaction.atomic(), patch.object(
-                QuerySet, "first", side_effect=error
+            with (
+                self.subTest(expected=expected),
+                transaction.atomic(),
+                patch.object(QuerySet, "first", side_effect=error),
             ):
                 result = fence.lock_existing(uuid4())
             self.assertEqual(result.status, expected)

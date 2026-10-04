@@ -59,8 +59,7 @@ class RichMenuInitialMigrationTests(TransactionTestCase):
         )
         self.assertEqual(
             sum(
-                operation.__class__.__name__ == "CreateModel"
-                for operation in migration.operations
+                operation.__class__.__name__ == "CreateModel" for operation in migration.operations
             ),
             4,
         )

@@ -19,7 +19,6 @@ from .line_gateway import (
 from .runtime import LabRuntime, LabRuntimeConfigured
 from .types import LabPrincipal
 
-
 _MAX_AUTHORIZATION_BYTES = 8 * 1024
 
 
@@ -79,7 +78,9 @@ class LabBearerAuthentication(BaseAuthentication):
             encoded = authorization.encode("ascii")
         except UnicodeEncodeError:
             return None
-        if len(encoded) > _MAX_AUTHORIZATION_BYTES or any(char in authorization for char in "\r\n\0"):
+        if len(encoded) > _MAX_AUTHORIZATION_BYTES or any(
+            char in authorization for char in "\r\n\0"
+        ):
             return None
         parts = authorization.split(" ")
         if len(parts) != 2 or parts[0] != "Bearer" or not parts[1]:

@@ -105,9 +105,7 @@ class LineAccountRuntimeTests(SimpleTestCase):
         invalid_secrets = ("", "short-secret", "local-development-secret-key")
 
         for secret in invalid_secrets:
-            with self.subTest(secret=secret), self.assertRaises(
-                ImproperlyConfigured
-            ) as caught:
+            with self.subTest(secret=secret), self.assertRaises(ImproperlyConfigured) as caught:
                 validate_django_secret(secret)
             message = str(caught.exception)
             self.assertEqual(message, "DJANGO_SECRET_KEY_INVALID")
@@ -119,9 +117,7 @@ class LineAccountRuntimeTests(SimpleTestCase):
     def test_derives_canonical_owner_digest(self):
         expected = hashlib.sha256(b"0012345678\0owner-subject").hexdigest()
 
-        self.assertEqual(
-            derive_owner_digest("0012345678", "owner-subject"), expected
-        )
+        self.assertEqual(derive_owner_digest("0012345678", "owner-subject"), expected)
 
     # テストケース: owner digest 未設定 runtime で非echo入力から commandを実行する。
     # 期待値: stdoutにはdigestだけが出力され、subjectはstdout/stderrへ現れない。

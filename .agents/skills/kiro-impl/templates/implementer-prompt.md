@@ -7,7 +7,7 @@
 - 対象specと既存patternからTask Brief（受入条件、完成成果物、設計制約、検証方法）を作る。必要な判断が欠けていれば `NEEDS_CONTEXT` を返し、specを勝手に補わない。
 - behavioral taskは [kiro-impl](../SKILL.md) のFeature Flag ProtocolとRED → GREEN → REFACTOR → VERIFYを適用する。REDは受入条件に対応する失敗command出力を保存する。
 - non-behavioral taskではflagを作らず、対象に適した検証を行う。behavioralなRED証拠が適用されない理由は `N/A` として明示する。
-- controller指定の該当commandを実行する。必要な追加検証は理由を付ける。既存の無関係な失敗を隠さない。
+- controller指定の該当commandと `STATIC_CHECK_COMMANDS` を実行する。静的チェックはREADMEの範囲表に従い、変更ファイルだけでなく対象サービス全体を検査し、command・exit code・対象範囲を `TESTS_RUN` に残す。必要な静的チェックの失敗・未実施時は `READY_FOR_REVIEW` を返さない。必要な追加検証は理由を付ける。既存の無関係な失敗を隠さない。
 - 元のspec番号・設計契約・所有範囲を維持する。runtime import、依存、boot設定、必要な失敗経路に実際の懸念があれば検証またはCONCERNSへ記録する。
 - tasks.mdを更新せず、stage・commitせず、scopeを拡大しない。stub／placeholderはtaskが要求する場合だけ許容する。
 

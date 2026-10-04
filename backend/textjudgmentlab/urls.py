@@ -2,7 +2,6 @@ from django.urls import path
 
 from .views import LabAccessAPIView, LabJudgmentAPIView
 
-
 app_name = "textjudgmentlab"
 
 urlpatterns = [

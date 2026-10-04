@@ -7,8 +7,8 @@ from django.test import SimpleTestCase
 from linerichmenus.types import (
     ChannelStateView,
     CleanupRelation,
-    DefaultRelation,
     DefaultObservation,
+    DefaultRelation,
     HistoryEntry,
     HistoryPage,
     HistorySummary,
@@ -16,8 +16,8 @@ from linerichmenus.types import (
     NextAllowedAction,
     NormalizedTemplate,
     ObservationKind,
-    OperationKind,
     OperationCommand,
+    OperationKind,
     OperationStage,
     OperationStatus,
     OperationView,
@@ -197,11 +197,7 @@ class RichMenuCommonTypeTests(SimpleTestCase):
         target_id = uuid4()
         template = NormalizedTemplate(
             reference=TemplateReference(template_id="jp-link-one", version=1),
-            fields=(
-                TemplateFieldValue(
-                    display_name="案内", uri="https://example.com/guide"
-                ),
-            ),
+            fields=(TemplateFieldValue(display_name="案内", uri="https://example.com/guide"),),
         )
         preview_command = PreviewCommand(
             channel_public_id=channel_id,

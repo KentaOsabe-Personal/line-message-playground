@@ -85,9 +85,7 @@ class AccountModelTests(TestCase):
         subject = f"U{uuid4().hex}"
         self.create_identity(provider_id="001", subject=subject)
 
-        duplicate = LineIdentity(
-            provider_id="001", subject=subject, display_name="Duplicate"
-        )
+        duplicate = LineIdentity(provider_id="001", subject=subject, display_name="Duplicate")
         with self.assertRaises(ValidationError):
             duplicate.full_clean()
 

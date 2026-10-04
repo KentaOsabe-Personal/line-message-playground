@@ -2,8 +2,8 @@ from datetime import datetime
 from typing import Callable, Protocol
 from uuid import UUID
 
-from django.utils import timezone
 from django.db import DatabaseError
+from django.utils import timezone
 
 from linechannels.types import (
     AccessToken,
@@ -21,13 +21,13 @@ from .types import (
     AttemptTargetUnavailable,
     DeliveryPrePushFailure,
     ExistingAttempt,
-    LinkedPushExecuted,
-    LinkedPushPrevented,
-    LinkedPushStored,
-    LinkedPushPreparation,
     LinePushAccepted,
     LinePushRejected,
     LinePushUnknown,
+    LinkedPushExecuted,
+    LinkedPushPreparation,
+    LinkedPushPrevented,
+    LinkedPushStored,
     LiveDeliveryTarget,
     PushLinkedRecipientCommand,
     ReceiptCapabilityCandidate,
@@ -107,9 +107,7 @@ class DeliveryService:
 
         candidate = None
         if confirmed.receipt_requested:
-            candidate = self._receipt_factory().create(
-                confirmed.receipt_expires_at
-            )
+            candidate = self._receipt_factory().create(confirmed.receipt_expires_at)
 
         accepted_command = AcceptedDeliveryCommand(
             operation_id=command.operation_id,
@@ -125,17 +123,11 @@ class DeliveryService:
                 message_fingerprint=command.message.fingerprint,
                 receipt_requested=confirmed.receipt_requested,
             ),
-            receipt_commitment=(
-                candidate.commitment if candidate is not None else None
-            ),
+            receipt_commitment=(candidate.commitment if candidate is not None else None),
         )
-        accept_result = self._linked_attempt_repository().accept(
-            accepted_command
-        )
+        accept_result = self._linked_attempt_repository().accept(accepted_command)
         if isinstance(accept_result, AttemptAccepted):
-            capability = (
-                candidate.capability if candidate is not None else None
-            )
+            capability = candidate.capability if candidate is not None else None
             return AcceptedLinkedAttempt(
                 attempt_id=accept_result.attempt_id,
                 snapshot=accept_result.snapshot,
@@ -164,12 +156,8 @@ class DeliveryService:
             raise ValueError("invalid accepted linked attempt")
 
         preparation = accepted.push_preparation
-        selected_channel_id = (
-            preparation.target.snapshot.channel_public_id
-        )
-        credential = self._linked_credential_repository().get_access_token(
-            selected_channel_id
-        )
+        selected_channel_id = preparation.target.snapshot.channel_public_id
+        credential = self._linked_credential_repository().get_access_token(selected_channel_id)
 
         if isinstance(credential, CredentialUnavailable):
             return self._prevent_linked_push(
@@ -238,37 +226,27 @@ class DeliveryService:
 
     def _linked_target_directory(self):
         if self._target_directory is None:
-            raise RuntimeError(
-                "target directory dependency is not configured"
-            )
+            raise RuntimeError("target directory dependency is not configured")
         return self._target_directory
 
     def _linked_attempt_repository(self):
         if self._attempt_repository is None:
-            raise RuntimeError(
-                "attempt repository dependency is not configured"
-            )
+            raise RuntimeError("attempt repository dependency is not configured")
         return self._attempt_repository
 
     def _receipt_factory(self):
         if self._receipt_capability_factory is None:
-            raise RuntimeError(
-                "receipt capability factory dependency is not configured"
-            )
+            raise RuntimeError("receipt capability factory dependency is not configured")
         return self._receipt_capability_factory
 
     def _linked_credential_repository(self):
         if self._credential_repository is None:
-            raise RuntimeError(
-                "credential repository dependency is not configured"
-            )
+            raise RuntimeError("credential repository dependency is not configured")
         return self._credential_repository
 
     def _linked_channel_push_gateway(self):
         if self._channel_push_gateway is None:
-            raise RuntimeError(
-                "channel push gateway dependency is not configured"
-            )
+            raise RuntimeError("channel push gateway dependency is not configured")
         return self._channel_push_gateway
 
     def _prevent_linked_push(self, attempt_id, failure_type):
@@ -278,10 +256,7 @@ class DeliveryService:
             failure,
             self.clock(),
         )
-        if (
-            snapshot.status == "failed"
-            and snapshot.failure == failure.failure_type
-        ):
+        if snapshot.status == "failed" and snapshot.failure == failure.failure_type:
             return LinkedPushPrevented(
                 snapshot=snapshot,
                 failure_type=failure.failure_type,
@@ -295,10 +270,8 @@ class DeliveryService:
             and current.delivery_available
             and current.owner_identity == expected.owner_identity
             and current.provider_id == expected.provider_id
-            and current.snapshot.channel_public_id
-            == expected.snapshot.channel_public_id
-            and current.snapshot.recipient_public_id
-            == expected.snapshot.recipient_public_id
+            and current.snapshot.channel_public_id == expected.snapshot.channel_public_id
+            and current.snapshot.recipient_public_id == expected.snapshot.recipient_public_id
             and current.revision == expected.revision
         )
 
@@ -310,10 +283,8 @@ class DeliveryService:
             return TargetUnavailable()
         if (
             target.owner_identity != confirmed.owner_identity
-            or target.snapshot.channel_public_id
-            != confirmed.channel_public_id
-            or target.snapshot.recipient_public_id
-            != confirmed.recipient_public_id
+            or target.snapshot.channel_public_id != confirmed.channel_public_id
+            or target.snapshot.recipient_public_id != confirmed.recipient_public_id
             or target.revision != confirmed.target_revision
         ):
             return TargetUnavailable()

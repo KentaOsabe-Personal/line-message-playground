@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 
 import { AuthApiError, createAuthApiClient } from './authApi'
 import type { AuthApiClient } from './authApi'
@@ -57,18 +65,30 @@ export default function AuthGate({
   const generation = useRef(0)
   const adapter = useMemo(() => liffAdapter ?? createLinePlatformLiffAdapter(), [liffAdapter])
   const storage = useMemo(() => ownerStorage ?? createOwnerSessionStorage(), [ownerStorage])
-  const api = useMemo(() => authApi ?? createAuthApiClient(createProtectedHttpClient({
-    onSessionInvalid: () => {
-      generation.current += 1
-      dispatch({ type: 'session_invalidated' })
-    },
-  })), [authApi])
+  const api = useMemo(
+    () =>
+      authApi ??
+      createAuthApiClient(
+        createProtectedHttpClient({
+          onSessionInvalid: () => {
+            generation.current += 1
+            dispatch({ type: 'session_invalidated' })
+          },
+        }),
+      ),
+    [authApi],
+  )
 
-  const runtimeConfig = useCallback(() => config ?? createLiffRuntimeConfig({
-    liffId: import.meta.env.VITE_LIFF_ID,
-    currentOrigin: window.location.origin,
-    currentPathname: window.location.pathname,
-  }), [config])
+  const runtimeConfig = useCallback(
+    () =>
+      config ??
+      createLiffRuntimeConfig({
+        liffId: import.meta.env.VITE_LIFF_ID,
+        currentOrigin: window.location.origin,
+        currentPathname: window.location.pathname,
+      }),
+    [config],
+  )
 
   const authenticate = useCallback(async () => {
     const currentGeneration = ++generation.current
@@ -89,7 +109,7 @@ export default function AuthGate({
       const session = await api.bootstrap()
       if (!isCurrent()) return
       if (session.state !== 'anonymous') {
-        if (adapter.isLoggedIn() && !await adapter.ensureProfilePermission()) {
+        if (adapter.isLoggedIn() && !(await adapter.ensureProfilePermission())) {
           if (isCurrent()) dispatch({ type: 'failed', code: 'token_unavailable', retryable: true })
           return
         }
@@ -112,7 +132,7 @@ export default function AuthGate({
         dispatch({ type: 'login_required' })
         return
       }
-      if (!await adapter.ensureProfilePermission()) {
+      if (!(await adapter.ensureProfilePermission())) {
         if (isCurrent()) dispatch({ type: 'failed', code: 'token_unavailable', retryable: true })
         return
       }
@@ -150,7 +170,9 @@ export default function AuthGate({
 
   useEffect(() => {
     void authenticate()
-    return () => { generation.current += 1 }
+    return () => {
+      generation.current += 1
+    }
   }, [authenticate])
 
   const startLogin = () => {
@@ -165,13 +187,16 @@ export default function AuthGate({
     }
   }
 
-  const finishOwnerSession = useCallback((error: SafeAuthErrorCode | null = null) => {
-    storage.clearAll()
-    setUnlinkReauthenticationReady(false)
-    replacePath('/liff')
-    if (error === null) dispatch({ type: 'session_received', session: { state: 'anonymous' } })
-    else dispatch({ type: 'failed', code: error, retryable: false })
-  }, [replacePath, storage])
+  const finishOwnerSession = useCallback(
+    (error: SafeAuthErrorCode | null = null) => {
+      storage.clearAll()
+      setUnlinkReauthenticationReady(false)
+      replacePath('/liff')
+      if (error === null) dispatch({ type: 'session_received', session: { state: 'anonymous' } })
+      else dispatch({ type: 'failed', code: error, retryable: false })
+    },
+    [replacePath, storage],
+  )
 
   const logout = async () => {
     const currentGeneration = ++generation.current
@@ -188,7 +213,11 @@ export default function AuthGate({
     } catch (error) {
       if (generation.current !== currentGeneration) return
       if (error instanceof AuthApiError && error.httpStatus === 401) {
-        try { adapter.logout() } catch { /* Local owner state is still cleared below. */ }
+        try {
+          adapter.logout()
+        } catch {
+          /* Local owner state is still cleared below. */
+        }
         finishOwnerSession()
       } else {
         dispatch({ type: 'failed', code: 'logout_failed', retryable: true })
@@ -196,17 +225,20 @@ export default function AuthGate({
     }
   }
 
-  const onSessionReceived = useCallback((session: SessionStatus) => {
-    generation.current += 1
-    setUnlinkReauthenticationReady(false)
-    if (session.state === 'anonymous') {
-      storage.clearAll()
-      replacePath('/liff')
-    } else if (session.state === 'unlinking' && currentPathname !== '/liff/account') {
-      replacePath('/liff/account')
-    }
-    dispatch({ type: 'session_received', session })
-  }, [currentPathname, replacePath, storage])
+  const onSessionReceived = useCallback(
+    (session: SessionStatus) => {
+      generation.current += 1
+      setUnlinkReauthenticationReady(false)
+      if (session.state === 'anonymous') {
+        storage.clearAll()
+        replacePath('/liff')
+      } else if (session.state === 'unlinking' && currentPathname !== '/liff/account') {
+        replacePath('/liff/account')
+      }
+      dispatch({ type: 'session_received', session })
+    },
+    [currentPathname, replacePath, storage],
+  )
 
   const refreshSession = useCallback(async () => {
     const currentGeneration = ++generation.current
@@ -260,18 +292,21 @@ export default function AuthGate({
 
   const renderProtectedContent = (
     session: Extract<SessionStatus, { state: 'authenticated' | 'unlinking' }>,
-  ) => typeof children === 'function'
-    ? children({
-        session,
-        logout,
-        getAccessToken,
-        reauthenticate,
-        reauthenticateForUnlink,
-        unlinkReauthenticationReady,
-        onSessionReceived,
-        refreshSession,
-      })
-    : session.state === 'authenticated' ? children : null
+  ) =>
+    typeof children === 'function'
+      ? children({
+          session,
+          logout,
+          getAccessToken,
+          reauthenticate,
+          reauthenticateForUnlink,
+          unlinkReauthenticationReady,
+          onSessionReceived,
+          refreshSession,
+        })
+      : session.state === 'authenticated'
+        ? children
+        : null
 
   if (state.kind === 'authenticated') {
     const session: Extract<SessionStatus, { state: 'authenticated' }> = {
@@ -294,7 +329,11 @@ export default function AuthGate({
           </div>
           <div className="auth-copy">
             <p className="auth-eyebrow">OWNER CONSOLE</p>
-            <h1>LINEの検証環境へ<br />ようこそ。</h1>
+            <h1>
+              LINEの検証環境へ
+              <br />
+              ようこそ。
+            </h1>
             <p>チャネル管理からテスト配信まで、あなた専用のワークスペースで安全に試せます。</p>
           </div>
           <div className="auth-action-panel">
@@ -313,7 +352,9 @@ export default function AuthGate({
                 </svg>
               </span>
               <span>LINEでログイン</span>
-              <span className="line-login-arrow" aria-hidden="true">→</span>
+              <span className="line-login-arrow" aria-hidden="true">
+                →
+              </span>
             </button>
             <p className="auth-assurance">本人確認にはLINE Loginを使用します</p>
           </div>
@@ -322,25 +363,41 @@ export default function AuthGate({
     )
   }
   if (state.kind === 'unlinking') {
-    return <>{renderProtectedContent({
-      state: 'unlinking',
-      stage: state.stage,
-      retryAction: state.retryAction,
-    }) ?? (
-      <section className="auth-gate" aria-live="polite">
-        <h2>全連携解除を処理中です</h2>
-        <p>{state.stage === 'deauthorization_pending' ? 'LINEでの再認証が必要です。' : 'ローカルデータの削除を再開できます。'}</p>
-      </section>
-    )}</>
+    return (
+      <>
+        {renderProtectedContent({
+          state: 'unlinking',
+          stage: state.stage,
+          retryAction: state.retryAction,
+        }) ?? (
+          <section className="auth-gate" aria-live="polite">
+            <h2>全連携解除を処理中です</h2>
+            <p>
+              {state.stage === 'deauthorization_pending'
+                ? 'LINEでの再認証が必要です。'
+                : 'ローカルデータの削除を再開できます。'}
+            </p>
+          </section>
+        )}
+      </>
+    )
   }
   if (state.kind === 'error') {
     return (
       <section className="auth-gate" role="alert">
         <h2>本人確認を完了できません</h2>
         <p>{errorMessage[state.code]}</p>
-        {state.retryable && <button type="button" onClick={() => void authenticate()}>再試行</button>}
+        {state.retryable && (
+          <button type="button" onClick={() => void authenticate()}>
+            再試行
+          </button>
+        )}
       </section>
     )
   }
-  return <section className="auth-gate" aria-live="polite"><p>{state.kind === 'verifying' ? '本人確認中です…' : 'LINEログインを初期化しています…'}</p></section>
+  return (
+    <section className="auth-gate" aria-live="polite">
+      <p>{state.kind === 'verifying' ? '本人確認中です…' : 'LINEログインを初期化しています…'}</p>
+    </section>
+  )
 }

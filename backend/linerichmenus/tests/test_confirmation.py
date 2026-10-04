@@ -86,7 +86,10 @@ class RichMenuConfirmationTests(SimpleTestCase):
             replace(self.snapshot, owner_identity=UUID("00000000-0000-4000-8000-000000000011")),
             replace(self.snapshot, provider_id="0099999999"),
             replace(self.snapshot, channel_public_id=UUID("00000000-0000-4000-8000-000000000012")),
-            replace(self.snapshot, channel_revision=self.snapshot.channel_revision + timedelta(seconds=1)),
+            replace(
+                self.snapshot,
+                channel_revision=self.snapshot.channel_revision + timedelta(seconds=1),
+            ),
             replace(self.snapshot, default_observation_fingerprint="c" * 64),
             replace(self.snapshot, template=changed_template),
             replace(
@@ -165,5 +168,10 @@ class RichMenuConfirmationTests(SimpleTestCase):
         accepted = self.confirmation.verify(issued.token, self.snapshot, self.now)
 
         rendered = repr((self.snapshot, issued, accepted))
-        for canary in ("秘密表示名", "https://", issued.token, str(self.snapshot.channel_public_id)):
+        for canary in (
+            "秘密表示名",
+            "https://",
+            issued.token,
+            str(self.snapshot.channel_public_id),
+        ):
             self.assertNotIn(canary, rendered)

@@ -8,8 +8,6 @@ from django.apps import apps
 from django.test import SimpleTestCase
 
 from lineaccounts.types import LineSubject
-from linewebhooks.types import HandlerExecutionContext
-
 from lineinteractions.types import (
     ActionFailed,
     ActionNoChange,
@@ -20,12 +18,12 @@ from lineinteractions.types import (
     InteractionAuditRepository,
     InteractionOutcome,
     InteractionParser,
+    LineReplyGateway,
     LinkedInteractionUserMissing,
     OpaqueActionPayload,
     PostbackActionCommand,
     PostbackActionHandler,
     ReplyAccepted,
-    LineReplyGateway,
     ReplyOutcome,
     ReplyRejected,
     ReplyToken,
@@ -33,6 +31,7 @@ from lineinteractions.types import (
     VerifiedInteractionChannel,
     VerifiedInteractionUser,
 )
+from linewebhooks.types import HandlerExecutionContext
 
 
 class _Parser:
@@ -130,7 +129,10 @@ class InteractionTypeTests(SimpleTestCase):
             {"accepted", "rejected", "unknown", "not_started"},
         )
         self.assertEqual(
-            {type(value) for value in (ActionSucceeded(), ActionNoChange(), ActionRejected(), ActionFailed())},
+            {
+                type(value)
+                for value in (ActionSucceeded(), ActionNoChange(), ActionRejected(), ActionFailed())
+            },
             {ActionSucceeded, ActionNoChange, ActionRejected, ActionFailed},
         )
         self.assertEqual(

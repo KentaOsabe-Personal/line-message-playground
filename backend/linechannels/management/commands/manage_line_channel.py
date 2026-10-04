@@ -2,8 +2,6 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 
-from ...validators import BoundaryValidationError, validate_provider_id, validate_public_id
-
 from ...types import (
     ChannelMutationFailed,
     ChannelMutationSucceeded,
@@ -14,6 +12,7 @@ from ...types import (
     SetLineChannelActive,
     UpdateLineChannel,
 )
+from ...validators import BoundaryValidationError, validate_provider_id, validate_public_id
 
 
 def build_line_channel_service():
@@ -78,16 +77,12 @@ class Command(BaseCommand):
                         {
                             "status": result.status,
                             "public_id": str(channel.public_id),
-                            "messaging_api_channel_id": (
-                                channel.messaging_api_channel_id
-                            ),
+                            "messaging_api_channel_id": (channel.messaging_api_channel_id),
                             "bot_user_id": channel.bot_user_id,
                             "label": channel.label,
                             "provider_id": channel.provider_id,
                             "is_active": channel.is_active,
-                            "credentials_configured": (
-                                channel.credentials_configured
-                            ),
+                            "credentials_configured": (channel.credentials_configured),
                             "created_at": channel.created_at.isoformat(),
                             "updated_at": channel.updated_at.isoformat(),
                         }
@@ -95,12 +90,10 @@ class Command(BaseCommand):
                 )
                 return
             if isinstance(result, ChannelMutationFailed):
-                self.stderr.write(
-                    self._json({"status": result.status, "code": result.code})
-                )
+                self.stderr.write(self._json({"status": result.status, "code": result.code}))
                 return
             raise TypeError
-        except (EOFError, KeyboardInterrupt, BoundaryValidationError):
+        except EOFError, KeyboardInterrupt, BoundaryValidationError:
             raise CommandError("line channel management cancelled") from None
         except Exception:
             raise CommandError("line channel management failed") from None

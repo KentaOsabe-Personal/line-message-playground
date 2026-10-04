@@ -3,8 +3,8 @@ from datetime import datetime
 from typing import Literal, Protocol
 from uuid import UUID
 
-from .types import AccessToken, CredentialPair
 from .admin_lifecycle_types import DeactivationSummary
+from .types import AccessToken, CredentialPair
 
 
 class _SerializationDisabled:
@@ -54,9 +54,7 @@ class UpdateAdminChannel(_SerializationDisabled):
             "label",
             "provider_id",
         )
-        specified = ", ".join(
-            name for name in fields if getattr(self, name) is not None
-        )
+        specified = ", ".join(name for name in fields if getattr(self, name) is not None)
         return (
             f"<UpdateAdminChannel public_id={self.channel_public_id} "
             f"fields=[{specified}] credentials={self.credentials is not None}>"
@@ -390,13 +388,9 @@ ChannelRevisionResult = ChannelRevisionUnchanged | ExactChannelSnapshotRejected
 
 
 class OwnerChannelOperationPort(Protocol):
-    def snapshot_exact(
-        self, command: ChannelSnapshotCommand
-    ) -> ChannelSnapshotResult: ...
+    def snapshot_exact(self, command: ChannelSnapshotCommand) -> ChannelSnapshotResult: ...
 
-    def lock_unchanged(
-        self, proof: ChannelRevisionProof
-    ) -> ChannelRevisionResult: ...
+    def lock_unchanged(self, proof: ChannelRevisionProof) -> ChannelRevisionResult: ...
 
 
 @dataclass(frozen=True, repr=False)

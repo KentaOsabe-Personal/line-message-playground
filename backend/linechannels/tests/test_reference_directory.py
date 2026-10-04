@@ -8,15 +8,15 @@ from delivery.models import DeliveryAttempt
 from delivery.repositories import DjangoDeliveryReferenceProbe
 from lineaccounts.models import DeliveryRecipient
 from lineaccounts.repositories import DjangoRecipientReferenceProbe
-from linechannels.reference_fence import ChannelReferenceDirectory
 from linechannels.container import build_channel_reference_directory
+from linechannels.reference_fence import ChannelReferenceDirectory
 from linefriendships.models import FriendshipSyncAudit
 from linefriendships.repositories import DjangoFriendshipReferenceProbe
 from lineinteractions.models import InteractionAudit
 from lineinteractions.repositories import DjangoInteractionReferenceProbe
+from linerichmenus.headless import DjangoHeadlessReferenceContracts
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.repositories import DjangoWebhookReferenceProbe
-from linerichmenus.headless import DjangoHeadlessReferenceContracts
 
 
 class RecordingProbe:
@@ -60,9 +60,7 @@ class ChannelReferenceDirectoryTests(SimpleTestCase):
         referenced = RecordingProbe(result=True)
         skipped = RecordingProbe(result=True)
 
-        result = ChannelReferenceDirectory(
-            (first, referenced, skipped)
-        ).is_referenced(channel_id)
+        result = ChannelReferenceDirectory((first, referenced, skipped)).is_referenced(channel_id)
 
         self.assertEqual(result.status, "referenced")
         self.assertEqual(first.calls, [channel_id])
@@ -77,9 +75,9 @@ class ChannelReferenceDirectoryTests(SimpleTestCase):
             (DatabaseError("secret-canary"), "storage_unavailable"),
         ):
             with self.subTest(expected=expected):
-                result = ChannelReferenceDirectory(
-                    (RecordingProbe(error=error),)
-                ).is_referenced(uuid4())
+                result = ChannelReferenceDirectory((RecordingProbe(error=error),)).is_referenced(
+                    uuid4()
+                )
             self.assertEqual(result.status, expected)
             self.assertNotIn("secret-canary", repr(result))
 
@@ -99,9 +97,10 @@ class ChannelReferenceDirectoryTests(SimpleTestCase):
             scoped_manager = Mock()
             queryset = scoped_manager.filter.return_value
             queryset.exists.return_value = True
-            with self.subTest(probe=type(probe).__name__), patch.object(
-                model.objects, "using", return_value=scoped_manager
-            ) as using:
+            with (
+                self.subTest(probe=type(probe).__name__),
+                patch.object(model.objects, "using", return_value=scoped_manager) as using,
+            ):
                 self.assertTrue(probe.is_referenced(channel_id))
             using.assert_called_once_with("default")
             scoped_manager.filter.assert_called_once()

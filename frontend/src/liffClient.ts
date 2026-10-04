@@ -31,7 +31,7 @@ const rawToken = (value: string | null): string | null =>
   typeof value === 'string' && value.length > 0 ? value : null
 
 export function createLinePlatformLiffAdapter(
-  sdk: LiffSdkBoundary = liff as unknown as LiffSdkBoundary,
+  sdk: LiffSdkBoundary = liff,
   reload: () => void = () => window.location.reload(),
 ): LinePlatformLiffAdapter {
   return Object.freeze({

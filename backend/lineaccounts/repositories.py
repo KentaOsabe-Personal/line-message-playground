@@ -11,17 +11,15 @@ from uuid import UUID
 from django.db import DatabaseError, IntegrityError, OperationalError, transaction
 from django.utils import timezone
 
+from linechannels.models import LineChannel
 from linechannels.reference_fence import (
     ChannelReferenceFence,
     DjangoChannelReferenceFence,
 )
 
-from linechannels.models import LineChannel
-
 from .gateway import VerifiedLineIdentity
 from .models import DeliveryRecipient, LineIdentity, OwnerAccount, OwnerSession
 from .types import LineSubject
-
 
 PersistenceFailureCode = Literal[
     "unique_conflict",
@@ -143,9 +141,7 @@ class AccountRepository(Protocol):
         self, owner: LockedOwnerAccount, expires_at: datetime
     ) -> OwnerSessionView: ...
 
-    def get_session(
-        self, public_id: UUID, now: datetime
-    ) -> OwnerSessionView | None: ...
+    def get_session(self, public_id: UUID, now: datetime) -> OwnerSessionView | None: ...
 
     def lock_owner_session(
         self,
@@ -191,9 +187,7 @@ class AccountRepository(Protocol):
 
     def get_unlink_snapshot(self, owner: LockedOwnerAccount) -> UnlinkSnapshot: ...
 
-    def begin_unlink(
-        self, owner: LockedOwnerAccount, generation: UUID
-    ) -> LockedOwnerAccount: ...
+    def begin_unlink(self, owner: LockedOwnerAccount, generation: UUID) -> LockedOwnerAccount: ...
 
     def mark_line_deauthorized(
         self,
@@ -202,9 +196,7 @@ class AccountRepository(Protocol):
         confirmed_at: datetime,
     ) -> LockedOwnerAccount: ...
 
-    def finalize_unlink(
-        self, owner: LockedOwnerAccount, expected_generation: UUID
-    ) -> None: ...
+    def finalize_unlink(self, owner: LockedOwnerAccount, expected_generation: UUID) -> None: ...
 
 
 class DjangoRecipientReferenceProbe:
@@ -212,9 +204,11 @@ class DjangoRecipientReferenceProbe:
         self.using = using
 
     def is_referenced(self, channel_public_id: UUID) -> bool:
-        return DeliveryRecipient.objects.using(self.using).filter(
-            line_channel__public_id=channel_public_id
-        ).exists()
+        return (
+            DeliveryRecipient.objects.using(self.using)
+            .filter(line_channel__public_id=channel_public_id)
+            .exists()
+        )
 
 
 class DjangoAccountRepository:
@@ -228,17 +222,11 @@ class DjangoAccountRepository:
         reference_fence: ChannelReferenceFence | None = None,
     ) -> None:
         self.using = using
-        self._reference_fence = reference_fence or DjangoChannelReferenceFence(
-            using=using
-        )
+        self._reference_fence = reference_fence or DjangoChannelReferenceFence(using=using)
 
     def get_identity(self, public_id: UUID) -> LineIdentityView | None:
         with self._translate_database_errors():
-            identity = (
-                LineIdentity.objects.using(self.using)
-                .filter(public_id=public_id)
-                .first()
-            )
+            identity = LineIdentity.objects.using(self.using).filter(public_id=public_id).first()
             return None if identity is None else self._identity_view(identity)
 
     def lock_owner_account(self) -> LockedOwnerAccount:
@@ -291,11 +279,7 @@ class DjangoAccountRepository:
         self._require_transaction()
         with self._translate_database_errors():
             stored_owner = self._locked_owner(owner)
-            identity = (
-                LineIdentity.objects.using(self.using)
-                .filter(public_id=identity_id)
-                .first()
-            )
+            identity = LineIdentity.objects.using(self.using).filter(public_id=identity_id).first()
             if identity is None:
                 raise AccountStateError("identity_not_found")
 
@@ -327,9 +311,7 @@ class DjangoAccountRepository:
             )
             return self._session_view(session, stored_owner)
 
-    def get_session(
-        self, public_id: UUID, now: datetime
-    ) -> OwnerSessionView | None:
+    def get_session(self, public_id: UUID, now: datetime) -> OwnerSessionView | None:
         if timezone.is_naive(now):
             raise AccountRepositoryProgrammingError("invalid_command")
         with self._translate_database_errors():
@@ -384,11 +366,7 @@ class DjangoAccountRepository:
     def delete_owner_session(self, public_id: UUID) -> bool:
         self._require_transaction()
         with self._translate_database_errors():
-            deleted, _ = (
-                OwnerSession.objects.using(self.using)
-                .filter(public_id=public_id)
-                .delete()
-            )
+            deleted, _ = OwnerSession.objects.using(self.using).filter(public_id=public_id).delete()
             return deleted == 1
 
     def list_channel_links(self, identity_id: UUID) -> tuple[RecipientView, ...]:
@@ -401,9 +379,7 @@ class DjangoAccountRepository:
             )
             return tuple(self._recipient_view(recipient) for recipient in recipients)
 
-    def create_recipient(
-        self, owner: LockedOwnerAccount, command: NewRecipient
-    ) -> RecipientView:
+    def create_recipient(self, owner: LockedOwnerAccount, command: NewRecipient) -> RecipientView:
         self._require_transaction()
         self._validate_friendship_state(command.friendship_state)
         with self._translate_database_errors():
@@ -418,9 +394,7 @@ class DjangoAccountRepository:
                 raise AccountRepositoryProgrammingError("invalid_fence_result")
             stored_owner = self._active_owner_for_identity(owner, command.identity_id)
             channel = (
-                LineChannel.objects.using(self.using)
-                .filter(public_id=command.channel_id)
-                .first()
+                LineChannel.objects.using(self.using).filter(public_id=command.channel_id).first()
             )
             if channel is None:
                 raise AccountStateError("channel_not_found")
@@ -541,10 +515,7 @@ class DjangoAccountRepository:
         self._require_transaction()
         with self._translate_database_errors():
             stored_owner = self._locked_owner(owner)
-            if (
-                stored_owner.state != OwnerAccount.State.ACTIVE
-                or stored_owner.identity is None
-            ):
+            if stored_owner.state != OwnerAccount.State.ACTIVE or stored_owner.identity is None:
                 raise AccountStateError("owner_not_active")
             recipients = tuple(
                 DeliveryRecipient.objects.using(self.using)
@@ -559,18 +530,13 @@ class DjangoAccountRepository:
                 channel_ids=tuple(sorted((row[1] for row in recipients), key=str)),
             )
 
-    def begin_unlink(
-        self, owner: LockedOwnerAccount, generation: UUID
-    ) -> LockedOwnerAccount:
+    def begin_unlink(self, owner: LockedOwnerAccount, generation: UUID) -> LockedOwnerAccount:
         self._require_transaction()
         if not isinstance(generation, UUID):
             raise AccountRepositoryProgrammingError("invalid_command")
         with self._translate_database_errors():
             stored_owner = self._locked_owner(owner)
-            if (
-                stored_owner.state != OwnerAccount.State.ACTIVE
-                or stored_owner.identity is None
-            ):
+            if stored_owner.state != OwnerAccount.State.ACTIVE or stored_owner.identity is None:
                 raise AccountStateError("invalid_unlink_stage")
             stored_owner.state = OwnerAccount.State.DEAUTHORIZATION_PENDING
             stored_owner.unlink_generation = generation
@@ -612,9 +578,7 @@ class DjangoAccountRepository:
             )
             return self._owner_view(stored_owner)
 
-    def finalize_unlink(
-        self, owner: LockedOwnerAccount, expected_generation: UUID
-    ) -> None:
+    def finalize_unlink(self, owner: LockedOwnerAccount, expected_generation: UUID) -> None:
         self._require_transaction()
         with self._translate_database_errors():
             stored_owner = self._locked_owner(owner)
@@ -655,10 +619,7 @@ class DjangoAccountRepository:
         stored_owner = self._locked_owner(owner)
         if stored_owner.state != OwnerAccount.State.ACTIVE:
             raise AccountStateError("owner_not_active")
-        if (
-            stored_owner.identity is None
-            or stored_owner.identity.public_id != identity_id
-        ):
+        if stored_owner.identity is None or stored_owner.identity.public_id != identity_id:
             raise AccountStateError("identity_mismatch")
         return stored_owner
 
@@ -718,9 +679,7 @@ class DjangoAccountRepository:
         )
 
     @staticmethod
-    def _session_view(
-        session: OwnerSession, owner: OwnerAccount
-    ) -> OwnerSessionView:
+    def _session_view(session: OwnerSession, owner: OwnerAccount) -> OwnerSessionView:
         assert owner.identity is not None
         return OwnerSessionView(
             public_id=session.public_id,

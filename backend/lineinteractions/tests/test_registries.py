@@ -2,8 +2,6 @@ from uuid import uuid4
 
 from django.test import SimpleTestCase
 
-from linewebhooks.types import HandlerExecutionContext
-
 from lineinteractions.registries import (
     StaticCommandRegistry,
     StaticPostbackActionRegistry,
@@ -15,6 +13,7 @@ from lineinteractions.types import (
     VerifiedInteractionChannel,
     VerifiedInteractionUser,
 )
+from linewebhooks.types import HandlerExecutionContext
 
 
 class _Handler:

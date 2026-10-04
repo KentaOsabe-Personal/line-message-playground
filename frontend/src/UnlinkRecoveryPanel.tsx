@@ -16,7 +16,9 @@ type Props = {
   refreshSession: () => Promise<void>
 }
 
-const toSession = (result: Awaited<ReturnType<AccountApiClient['executeUnlink']>>): SessionStatus =>
+const toSession = (
+  result: Awaited<ReturnType<AccountApiClient['executeUnlink']>>,
+): SessionStatus =>
   result.state === 'completed'
     ? { state: 'anonymous' }
     : { state: 'unlinking', stage: result.stage, retryAction: result.retryAction }
@@ -40,13 +42,14 @@ export default function UnlinkRecoveryPanel({
       reauthenticateForUnlink()
       return
     }
-    const input = session.stage === 'deauthorization_pending'
-      ? (() => {
-          const token = getAccessToken()
-          if (token === null) return null
-          return { userAccessToken: token }
-        })()
-      : {}
+    const input =
+      session.stage === 'deauthorization_pending'
+        ? (() => {
+            const token = getAccessToken()
+            if (token === null) return null
+            return { userAccessToken: token }
+          })()
+        : {}
     if (input === null) {
       reauthenticateForUnlink()
       return
@@ -60,7 +63,11 @@ export default function UnlinkRecoveryPanel({
       } else if (caught instanceof AccountApiError && caught.httpStatus === 409) {
         await refreshSession()
       } else {
-        setError(caught instanceof AccountApiError ? caught.error.summary : '解除処理を再開できませんでした。')
+        setError(
+          caught instanceof AccountApiError
+            ? caught.error.summary
+            : '解除処理を再開できませんでした。',
+        )
       }
     } finally {
       setBusy(false)
@@ -71,10 +78,16 @@ export default function UnlinkRecoveryPanel({
   return (
     <section className="account-console unlink-recovery" aria-labelledby="unlink-recovery-title">
       <h2 id="unlink-recovery-title">全連携解除を処理中です</h2>
-      <p>{needsLine
-        ? '完了を確認できていません。LINEで再認証して処理を再開してください。'
-        : 'LINE側の認可取消は確認済みです。LINEへ再送せず、ローカルデータの削除だけを再開します。'}</p>
-      {error && <p className="notice error" role="alert">{error}</p>}
+      <p>
+        {needsLine
+          ? '完了を確認できていません。LINEで再認証して処理を再開してください。'
+          : 'LINE側の認可取消は確認済みです。LINEへ再送せず、ローカルデータの削除だけを再開します。'}
+      </p>
+      {error && (
+        <p className="notice error" role="alert">
+          {error}
+        </p>
+      )}
       <button type="button" disabled={busy} onClick={() => void resume()}>
         {busy ? '再開中…' : needsLine ? 'LINEで再認証して解除を再開' : 'ローカル削除を再開'}
       </button>

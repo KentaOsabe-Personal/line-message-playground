@@ -11,7 +11,6 @@ import httpx
 
 from .runtime import SecretValue
 
-
 _JEV_URL = "https://api.typesafe.ai/v1/systemone"
 _DEADLINE_SECONDS = 8.0
 _MAX_RESPONSE_BYTES = 128 * 1024
@@ -66,9 +65,7 @@ class JevGateway:
                     "POST",
                     _JEV_URL,
                     headers={
-                        "Authorization": (
-                            f"Bearer {self._api_key.reveal_for_remote_call()}"
-                        ),
+                        "Authorization": (f"Bearer {self._api_key.reveal_for_remote_call()}"),
                         "Content-Type": "application/json",
                     },
                     json=dict(payload),
@@ -82,14 +79,14 @@ class JevGateway:
                         body.extend(chunk)
                         if len(body) > _MAX_RESPONSE_BYTES:
                             return JevTransportFailure()
-        except (TimeoutError, httpx.TimeoutException):
+        except TimeoutError, httpx.TimeoutException:
             return JevTransportFailure("judge_timeout")
-        except (httpx.RequestError, RuntimeError):
+        except httpx.RequestError, RuntimeError:
             return JevTransportFailure()
 
         try:
             decoded = json.loads(body)
-        except (UnicodeDecodeError, ValueError):
+        except UnicodeDecodeError, ValueError:
             return JevTransportFailure()
         if (
             not isinstance(decoded, Mapping)

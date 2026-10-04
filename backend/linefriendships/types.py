@@ -11,7 +11,6 @@ from linewebhooks.types import (
     VerifiedWebhookEvent,
 )
 
-
 FriendshipState: TypeAlias = Literal["friend", "not_friend"]
 StoredFriendshipState: TypeAlias = Literal["friend", "not_friend", "unknown"]
 FriendshipEventType: TypeAlias = Literal["follow", "unfollow"]
@@ -86,9 +85,7 @@ class OutOfScopeSource:
     classification: Literal["out_of_scope"] = "out_of_scope"
 
 
-ParseResult: TypeAlias = (
-    ValidatedFriendshipEvent | InvalidFriendshipEvent | OutOfScopeSource
-)
+ParseResult: TypeAlias = ValidatedFriendshipEvent | InvalidFriendshipEvent | OutOfScopeSource
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,16 +99,10 @@ class LockedRecipientProjection:
     def __post_init__(self) -> None:
         if self.friendship_state not in _STORED_FRIENDSHIP_STATES:
             raise ValueError("invalid stored friendship state")
-        if (self.last_occurred_at_ms is None) != (
-            self.last_webhook_event_id is None
-        ):
+        if (self.last_occurred_at_ms is None) != (self.last_webhook_event_id is None):
             raise ValueError("friendship order fields must form a pair")
-        if (
-            self.last_occurred_at_ms is not None
-            and (
-                type(self.last_occurred_at_ms) is not int
-                or self.last_occurred_at_ms < 0
-            )
+        if self.last_occurred_at_ms is not None and (
+            type(self.last_occurred_at_ms) is not int or self.last_occurred_at_ms < 0
         ):
             raise ValueError("invalid friendship order timestamp")
 

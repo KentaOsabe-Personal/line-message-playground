@@ -14,13 +14,13 @@ from linerichmenus.models import (
     RichMenuOperation,
     RichMenuOperationTransition,
 )
+from linerichmenus.reconciliation import DefaultRichMenuReconciler, RecheckContext
+from linerichmenus.renderer import DefaultDeterministicRenderer
 from linerichmenus.repository import (
     DjangoRichMenuRepository,
     HistoryQuery,
     OwnerChannelScope,
 )
-from linerichmenus.reconciliation import DefaultRichMenuReconciler, RecheckContext
-from linerichmenus.renderer import DefaultDeterministicRenderer
 from linerichmenus.types import (
     OperationStage,
     ResourceLifecycle,
@@ -34,7 +34,6 @@ from .test_reconciliation import (
     gateway_context,
     target,
 )
-
 
 NOW = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 
@@ -173,9 +172,7 @@ class RichMenuQueryBudgetTests(TransactionTestCase):
             provider_id="0012345678",
             kind="apply",
             request_fingerprint=sha256(f"request-{index}".encode()).hexdigest(),
-            confirmation_usage_digest=sha256(
-                f"confirmation-{index}".encode()
-            ).hexdigest(),
+            confirmation_usage_digest=sha256(f"confirmation-{index}".encode()).hexdigest(),
             expected_channel_revision=NOW,
             status="succeeded",
             stage="verifying",

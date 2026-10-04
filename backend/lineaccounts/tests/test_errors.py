@@ -26,9 +26,7 @@ class SafeErrorBoundaryTests(SimpleTestCase):
     def test_validation_error_preserves_only_safe_field_names(self):
         canary = "id-token-canary"
 
-        response = safe_exception_handler(
-            ValidationError({"idToken": [canary]}), self.context()
-        )
+        response = safe_exception_handler(ValidationError({"idToken": [canary]}), self.context())
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["error"]["code"], "validation_error")
@@ -41,12 +39,8 @@ class SafeErrorBoundaryTests(SimpleTestCase):
     # テストケース: authenticationと定義済みdomain errorを変換する
     # 期待値: 定義済みcode・summary・HTTP statusだけを返す
     def test_known_errors_map_to_safe_envelope(self):
-        auth = safe_exception_handler(
-            AuthenticationFailed("subject-canary"), self.context()
-        )
-        domain = safe_exception_handler(
-            SafeAPIError("provider_mismatch"), self.context()
-        )
+        auth = safe_exception_handler(AuthenticationFailed("subject-canary"), self.context())
+        domain = safe_exception_handler(SafeAPIError("provider_mismatch"), self.context())
 
         self.assertEqual(auth.status_code, 401)
         self.assertEqual(auth.data["error"]["code"], "authentication_required")
@@ -66,14 +60,10 @@ class SafeErrorBoundaryTests(SimpleTestCase):
         canary = "django-error-secret-canary"
 
         not_found = safe_exception_handler(Http404(canary), self.context())
-        denied = safe_exception_handler(
-            DjangoPermissionDenied(canary), self.context()
-        )
+        denied = safe_exception_handler(DjangoPermissionDenied(canary), self.context())
 
         self.assertEqual(not_found.status_code, 404)
-        self.assertEqual(
-            not_found.data["error"]["code"], "recipient_not_found"
-        )
+        self.assertEqual(not_found.data["error"]["code"], "recipient_not_found")
         self.assertEqual(denied.status_code, 403)
         self.assertEqual(denied.data["error"]["code"], "owner_not_allowed")
         self.assertNotIn(canary, repr(not_found.data))

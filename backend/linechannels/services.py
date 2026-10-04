@@ -62,9 +62,7 @@ class LineChannelService(Protocol):
 
     def update(self, command: UpdateLineChannel) -> ChannelMutationResult: ...
 
-    def set_active(
-        self, channel_public_id: uuid.UUID, active: bool
-    ) -> ChannelMutationResult: ...
+    def set_active(self, channel_public_id: uuid.UUID, active: bool) -> ChannelMutationResult: ...
 
 
 class DefaultLineChannelService:
@@ -114,9 +112,7 @@ class DefaultLineChannelService:
 
         try:
             with transaction.atomic(using=self._using):
-                locked = self._repository.get_for_update(
-                    validated.channel_public_id
-                )
+                locked = self._repository.get_for_update(validated.channel_public_id)
                 if locked is None:
                     return ChannelMutationFailed("channel_not_found")
                 if (
@@ -180,9 +176,7 @@ class DefaultLineChannelService:
                 summary = self._repository.update_locked(
                     locked,
                     PersistedChannelMutation(
-                        messaging_api_channel_id=(
-                            validated.messaging_api_channel_id
-                        ),
+                        messaging_api_channel_id=(validated.messaging_api_channel_id),
                         bot_user_id=validated.bot_user_id,
                         label=validated.label,
                         is_active=validated.is_active,
@@ -201,9 +195,7 @@ class DefaultLineChannelService:
             return ChannelMutationFailed(self._persistence_failure(error))
         return ChannelMutationSucceeded(summary)
 
-    def set_active(
-        self, channel_public_id: uuid.UUID, active: bool
-    ) -> ChannelMutationResult:
+    def set_active(self, channel_public_id: uuid.UUID, active: bool) -> ChannelMutationResult:
         return self.update(UpdateLineChannel(channel_public_id, is_active=active))
 
     @staticmethod
@@ -240,9 +232,8 @@ class DefaultLineChannelService:
         if command.is_active is not None and type(command.is_active) is not bool:
             raise BoundaryValidationError()
         if command.expected_updated_at is not None:
-            if (
-                not isinstance(command.expected_updated_at, datetime)
-                or timezone.is_naive(command.expected_updated_at)
+            if not isinstance(command.expected_updated_at, datetime) or timezone.is_naive(
+                command.expected_updated_at
             ):
                 raise BoundaryValidationError()
         return UpdateLineChannel(
@@ -311,19 +302,13 @@ class DefaultLineChannelService:
     ) -> None:
         access_context = CredentialContext[AccessToken](public_id, "access_token")
         secret_context = CredentialContext[ChannelSecret](public_id, "channel_secret")
-        access_token = self._cipher.decrypt_with_primary(
-            encrypted.access_token, access_context
-        )
-        channel_secret = self._cipher.decrypt_with_primary(
-            encrypted.channel_secret, secret_context
-        )
+        access_token = self._cipher.decrypt_with_primary(encrypted.access_token, access_context)
+        channel_secret = self._cipher.decrypt_with_primary(encrypted.channel_secret, secret_context)
         if (
             not isinstance(access_token, AccessToken)
             or not isinstance(channel_secret, ChannelSecret)
-            or access_token.reveal_for_use()
-            != plaintext.access_token.reveal_for_use()
-            or channel_secret.reveal_for_use()
-            != plaintext.channel_secret.reveal_for_use()
+            or access_token.reveal_for_use() != plaintext.access_token.reveal_for_use()
+            or channel_secret.reveal_for_use() != plaintext.channel_secret.reveal_for_use()
         ):
             raise CredentialCryptoError("credential_unreadable")
 

@@ -16,6 +16,7 @@ task単位の受入は独立reviewerが完了している前提です。このSk
 
 ## 必須確認
 
+0. **静的チェック**：[READMEのローカル品質チェック](../../../README.md#ローカル品質チェック)に従い、featureが変更したサービス全体を検査する。同じコード状態・設定・依存・対象範囲のfresh evidenceは再利用可能。失敗はNO-GO、環境不足で未実施ならMANUAL_VERIFY_REQUIRED。対象外なら理由を記録する。
 1. **Full suite**：canonical full-test commandの実結果とexit code。失敗はNO-GO、command不明はMANUAL_VERIFY_REQUIRED。
 2. **Runtime smoke**：build成果物の起動・最初の使用可能状態。runtime crash、module／ABI／必須設定の失敗はNO-GO。環境・信頼できるcommandがなければMANUAL_VERIFY_REQUIRED。
 3. **残存markerと秘密**：featureが追加したplaceholderをwarningとして評価し、実際のhardcoded secretはCritical。keyword一致だけで実秘密と断定せず、値を出力しない。
@@ -35,6 +36,7 @@ findingのownershipを `LOCAL`／`UPSTREAM`／`UNCLEAR` に分類します。上
 - DECISION: GO | NO-GO | MANUAL_VERIFY_REQUIRED
 - MECHANICAL_RESULTS:
   - Tests: PASS | FAIL (commandとexit code)
+  - Static checks: PASS | FAIL | NOT_RUN | N/A (command、exit code、対象範囲または対象外の理由)
   - TBD/TODO grep: CLEAN | <該当と判断>
   - Secrets grep: CLEAN | <秘密を表示しない指摘>
   - Smoke boot: PASS | FAIL | MANUAL_REQUIRED

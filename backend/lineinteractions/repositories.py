@@ -26,9 +26,7 @@ class DjangoInteractionAuditRepository:
     ) -> Literal["recorded", "failed"]:
         try:
             with transaction.atomic(using=self.using):
-                fence_result = self._reference_fence.lock_existing(
-                    audit.channel_public_id
-                )
+                fence_result = self._reference_fence.lock_existing(audit.channel_public_id)
                 if fence_result.status != "locked":
                     return fence_result.status
                 InteractionAudit.objects.using(self.using).create(
@@ -50,15 +48,19 @@ class DjangoInteractionAuditRepository:
     def replace_reserved(self, audit: InteractionAuditRecord) -> str:
         try:
             with transaction.atomic(using=self.using):
-                updated = InteractionAudit.objects.using(self.using).filter(
-                    webhook_event_id=audit.webhook_event_id,
-                    channel_public_id=audit.channel_public_id,
-                ).update(
-                    event_type=audit.event_type,
-                    operation_kind=audit.operation_kind,
-                    operation_identifier=audit.operation_identifier,
-                    interaction_outcome=audit.interaction_outcome,
-                    reply_outcome=audit.reply_outcome,
+                updated = (
+                    InteractionAudit.objects.using(self.using)
+                    .filter(
+                        webhook_event_id=audit.webhook_event_id,
+                        channel_public_id=audit.channel_public_id,
+                    )
+                    .update(
+                        event_type=audit.event_type,
+                        operation_kind=audit.operation_kind,
+                        operation_identifier=audit.operation_identifier,
+                        interaction_outcome=audit.interaction_outcome,
+                        reply_outcome=audit.reply_outcome,
+                    )
                 )
         except DatabaseError:
             return "failed"
@@ -70,6 +72,8 @@ class DjangoInteractionReferenceProbe:
         self.using = using
 
     def is_referenced(self, channel_public_id) -> bool:
-        return InteractionAudit.objects.using(self.using).filter(
-            channel_public_id=channel_public_id
-        ).exists()
+        return (
+            InteractionAudit.objects.using(self.using)
+            .filter(channel_public_id=channel_public_id)
+            .exists()
+        )

@@ -11,8 +11,7 @@ from time import monotonic, perf_counter
 from unittest.mock import patch
 
 import httpx
-from django.db import connections
-from django.db import connection
+from django.db import connection, connections
 from django.test import TransactionTestCase
 from django.test.utils import CaptureQueriesContext
 
@@ -26,8 +25,8 @@ from linechannels.types import (
     CredentialContext,
     CredentialUnavailable,
 )
-from lineinteractions.models import InteractionAudit
 from lineinteractions.gateways import HttpxLineReplyGateway
+from lineinteractions.models import InteractionAudit
 from lineinteractions.types import (
     ActionFailed,
     ActionNoChange,
@@ -37,11 +36,10 @@ from lineinteractions.types import (
     ReplyRejected,
     ReplyUnknown,
 )
-from linewebhooks.container import build_webhook_ingress_service
 from linewebhooks.audit import SafeWebhookAuditLogger
+from linewebhooks.container import build_webhook_ingress_service
 from linewebhooks.models import WebhookEventReceipt
 from linewebhooks.views import WebhookAPIView
-
 
 _PROVIDER_ID = "0012345678"
 _BOT_USER_ID = "U" + "1" * 32
@@ -134,10 +132,7 @@ class _ExplodingGateway(_RecordingReplyGateway):
                     kwargs["timeout"],
                 )
             )
-        raise RuntimeError(
-            f"{_AUTHORIZATION_CANARY} {_RAW_RESPONSE_CANARY} "
-            f"{_EXCEPTION_CANARY}"
-        )
+        raise RuntimeError(f"{_AUTHORIZATION_CANARY} {_RAW_RESPONSE_CANARY} {_EXCEPTION_CANARY}")
 
 
 class _CapturingLogHandler(logging.Handler):
@@ -320,14 +315,17 @@ class WebhookInteractionRuntimeTests(TransactionTestCase):
         events: list[dict[str, object]],
     ):
         raw, signature = self._signed(events)
-        with patch.object(
-            WebhookAPIView,
-            "service_factory",
-            return_value=service,
-        ), patch.object(
-            WebhookAPIView,
-            "monotonic_clock",
-            staticmethod(service._monotonic_clock),
+        with (
+            patch.object(
+                WebhookAPIView,
+                "service_factory",
+                return_value=service,
+            ),
+            patch.object(
+                WebhookAPIView,
+                "monotonic_clock",
+                staticmethod(service._monotonic_clock),
+            ),
         ):
             return self.client.post(
                 f"/api/line/webhooks/{self.channel.public_id}/",
@@ -342,13 +340,16 @@ class WebhookInteractionRuntimeTests(TransactionTestCase):
         events: list[dict[str, object]],
     ):
         raw, signature = self._signed(events)
-        with patch(
-            "linewebhooks.container._cached_service",
-            service,
-        ), patch.object(
-            WebhookAPIView,
-            "monotonic_clock",
-            staticmethod(service._monotonic_clock),
+        with (
+            patch(
+                "linewebhooks.container._cached_service",
+                service,
+            ),
+            patch.object(
+                WebhookAPIView,
+                "monotonic_clock",
+                staticmethod(service._monotonic_clock),
+            ),
         ):
             return self.client.post(
                 f"/api/line/webhooks/{self.channel.public_id}/",
@@ -401,15 +402,11 @@ class WebhookInteractionRuntimeTests(TransactionTestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(gateway.calls, [])
                 self.assertEqual(
-                    InteractionAudit.objects.get(
-                        webhook_event_id=event_id
-                    ).interaction_outcome,
+                    InteractionAudit.objects.get(webhook_event_id=event_id).interaction_outcome,
                     outcome,
                 )
                 self.assertEqual(
-                    WebhookEventReceipt.objects.get(
-                        webhook_event_id=event_id
-                    ).status,
+                    WebhookEventReceipt.objects.get(webhook_event_id=event_id).status,
                     receipt_status,
                 )
 
@@ -429,9 +426,7 @@ class WebhookInteractionRuntimeTests(TransactionTestCase):
             "credential_unavailable",
         )
         self.assertEqual(
-            WebhookEventReceipt.objects.get(
-                webhook_event_id="01ARZ3NDEKTSV4RRFFQ69G5F04"
-            ).status,
+            WebhookEventReceipt.objects.get(webhook_event_id="01ARZ3NDEKTSV4RRFFQ69G5F04").status,
             "failed",
         )
 
@@ -451,14 +446,10 @@ class WebhookInteractionRuntimeTests(TransactionTestCase):
                 response = self._post(service, [self._message(event_id)])
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(len(gateway.calls), 1)
-                audit = InteractionAudit.objects.get(
-                    webhook_event_id=event_id
-                )
+                audit = InteractionAudit.objects.get(webhook_event_id=event_id)
                 self.assertEqual(audit.reply_outcome, reply_outcome)
                 self.assertEqual(
-                    WebhookEventReceipt.objects.get(
-                        webhook_event_id=event_id
-                    ).status,
+                    WebhookEventReceipt.objects.get(webhook_event_id=event_id).status,
                     receipt_status,
                 )
 
@@ -483,15 +474,11 @@ class WebhookInteractionRuntimeTests(TransactionTestCase):
                 self.assertEqual(len(handler.commands), 1)
                 self.assertEqual(gateway.calls, [])
                 self.assertEqual(
-                    InteractionAudit.objects.get(
-                        webhook_event_id=event_id
-                    ).interaction_outcome,
+                    InteractionAudit.objects.get(webhook_event_id=event_id).interaction_outcome,
                     outcome,
                 )
                 self.assertEqual(
-                    WebhookEventReceipt.objects.get(
-                        webhook_event_id=event_id
-                    ).status,
+                    WebhookEventReceipt.objects.get(webhook_event_id=event_id).status,
                     receipt_status,
                 )
 
@@ -851,10 +838,7 @@ class WebhookInteractionRuntimeTests(TransactionTestCase):
                 InteractionAudit.objects.all().delete()
                 service, gateway = self._build_service()
                 events = [
-                    self._message(
-                        f"01ARZ3NDEKTSV4RRFFQ69G5P{index:02d}"
-                    )
-                    for index in range(count)
+                    self._message(f"01ARZ3NDEKTSV4RRFFQ69G5P{index:02d}") for index in range(count)
                 ]
                 started = perf_counter()
                 with CaptureQueriesContext(connection) as queries:
@@ -884,10 +868,7 @@ class WebhookInteractionRuntimeTests(TransactionTestCase):
             gateway=gateway,
             monotonic_clock=clock,
         )
-        events = [
-            self._message(f"01ARZ3NDEKTSV4RRFFQ69G5Q{index:02d}")
-            for index in range(10)
-        ]
+        events = [self._message(f"01ARZ3NDEKTSV4RRFFQ69G5Q{index:02d}") for index in range(10)]
 
         response = self._post(service, events)
 
@@ -925,9 +906,7 @@ class WebhookInteractionRuntimeTests(TransactionTestCase):
             return_value=gateway,
         ):
             service = build_webhook_ingress_service()
-        endpoint = (
-            f"http://127.0.0.1:{server.server_address[1]}/v2/bot/message/reply"
-        )
+        endpoint = f"http://127.0.0.1:{server.server_address[1]}/v2/bot/message/reply"
         try:
             started = perf_counter()
             with patch("lineinteractions.gateways.LINE_REPLY_ENDPOINT", endpoint):

@@ -1,15 +1,12 @@
 import json
 import pickle
-from pathlib import Path
 from dataclasses import FrozenInstanceError, asdict, fields
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import get_args
 from uuid import uuid4
 
 from django.test import SimpleTestCase
-
-from lineaccounts.types import LineSubject
-from linechannels.types import AccessToken
 
 from delivery.types import (
     AttemptAccepted,
@@ -30,16 +27,17 @@ from delivery.types import (
     ReceiptCapability,
     ReceiptCapabilityCandidate,
     ReceiptCommitment,
-    RejectedPushFailureType,
     ReceiptRecorded,
     ReceiptRejected,
     ReceiptStatus,
     ReceiptUnchanged,
+    RejectedPushFailureType,
     RequestFingerprint,
     TargetRevision,
     UnknownPushFailureType,
 )
-
+from lineaccounts.types import LineSubject
+from linechannels.types import AccessToken
 
 NOW = datetime(2026, 7, 25, 12, 0, tzinfo=timezone.utc)
 
@@ -161,9 +159,7 @@ class DeliveryDomainTypeTests(SimpleTestCase):
                 json.dumps(value)
             with self.assertRaisesRegex(TypeError, "serialization is disabled"):
                 pickle.dumps(value)
-        self.assertEqual(
-            capability.reveal_for_push_action(), receipt_canary
-        )
+        self.assertEqual(capability.reveal_for_push_action(), receipt_canary)
 
     # テストケース: capability候補をdigestだけの永続化commitmentへ分離する
     # 期待値: repository向けcommitmentはraw値を持たず、candidateもraw値を表示しない
@@ -228,7 +224,9 @@ class DeliveryDomainTypeTests(SimpleTestCase):
             {"accepted", "rejected", "unknown"},
         )
         self.assertNotIn("response", {field.name for result in results for field in fields(result)})
-        self.assertNotIn("exception", {field.name for result in results for field in fields(result)})
+        self.assertNotIn(
+            "exception", {field.name for result in results for field in fields(result)}
+        )
 
     # テストケース: rejectedとunknownへ状態に合わないfailure分類を渡し曖昧外部結果も生成する
     # 期待値: rejectedは明示拒否だけ、unknownはservice/timeout/response不明だけを許可する
@@ -372,9 +370,7 @@ class DeliveryDomainTypeTests(SimpleTestCase):
     # テストケース: delivery domain型moduleのimport境界を静的に確認する
     # 期待値: Django ModelやLINE外部SDK型へ依存せず、公開された境界値だけを利用する
     def test_domain_types_do_not_import_models_or_external_sdk(self):
-        source = (
-            Path(__file__).resolve().parents[1] / "types.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).resolve().parents[1] / "types.py").read_text(encoding="utf-8")
 
         self.assertNotIn("delivery.models", source)
         self.assertNotIn("from .models", source)

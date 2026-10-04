@@ -103,9 +103,7 @@ class Migration(migrations.Migration):
                             models.Q(
                                 event_type="message",
                                 operation_kind="command",
-                                operation_identifier=(
-                                    "connectivity_ping_v1"
-                                ),
+                                operation_identifier=("connectivity_ping_v1"),
                                 operation_identifier__isnull=False,
                                 interaction_outcome="command_processed",
                                 reply_outcome__in=(
@@ -117,9 +115,7 @@ class Migration(migrations.Migration):
                             | models.Q(
                                 event_type="message",
                                 operation_kind="command",
-                                operation_identifier=(
-                                    "connectivity_ping_v1"
-                                ),
+                                operation_identifier=("connectivity_ping_v1"),
                                 operation_identifier__isnull=False,
                                 interaction_outcome__in=(
                                     "processing_failed",

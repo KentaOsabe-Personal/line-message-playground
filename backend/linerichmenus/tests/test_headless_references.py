@@ -5,11 +5,12 @@ from uuid import uuid4
 from django.db import DatabaseError, transaction
 from django.test import TransactionTestCase
 
+from lineaccounts.admin_authorization import OwnerOperationContext
 from linechannels.models import LineChannel
 from linechannels.reference_fence import ReferenceFenceResult
 from linerichmenus.headless import (
-    DjangoHeadlessReferenceContracts,
     DefaultRichMenuLifecyclePort,
+    DjangoHeadlessReferenceContracts,
     HeadlessCommand,
     HeadlessContractProgrammingError,
 )
@@ -26,8 +27,6 @@ from linerichmenus.types import (
     OperationView,
     SafeResultCode,
 )
-from lineaccounts.admin_authorization import OwnerOperationContext
-
 
 NOW = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 
@@ -69,9 +68,7 @@ class HeadlessLifecyclePortTests(TransactionTestCase):
         )
 
         self.assertEqual(result.status, "clear_to_disable")
-        service.get_state.assert_called_once_with(
-            owner, channel_id, expected_channel_revision=NOW
-        )
+        service.get_state.assert_called_once_with(owner, channel_id, expected_channel_revision=NOW)
 
     # テストケース: headless guardのchannel revisionがstaleと判定される。
     # 期待値: clear_to_disableへ進めずstale理由のunavailableへ縮約する。
@@ -87,9 +84,7 @@ class HeadlessLifecyclePortTests(TransactionTestCase):
 
         self.assertEqual(result.status, "unavailable")
         self.assertEqual(result.reason, "stale_channel")
-        service.get_state.assert_called_once_with(
-            owner, channel_id, expected_channel_revision=NOW
-        )
+        service.get_state.assert_called_once_with(owner, channel_id, expected_channel_revision=NOW)
 
     # テストケース: headless unlink/recheckを下流lifecycleから開始する。
     # 期待値: readinessを迂回せずowner APIと同じstart_operationへそのまま委譲する。
@@ -98,17 +93,32 @@ class HeadlessLifecyclePortTests(TransactionTestCase):
         owner = OwnerOperationContext(uuid4(), uuid4())
         service = self._service()
         unlink = OperationCommand(
-            uuid4(), channel_id, NOW, OperationKind.UNLINK,
-            None, uuid4(),
+            uuid4(),
+            channel_id,
+            NOW,
+            OperationKind.UNLINK,
+            None,
+            uuid4(),
         )
         recheck = OperationCommand(
-            uuid4(), channel_id, NOW, OperationKind.RECHECK,
-            uuid4(), None,
+            uuid4(),
+            channel_id,
+            NOW,
+            OperationKind.RECHECK,
+            uuid4(),
+            None,
         )
         operation = OperationView(
-            unlink.operation_id, OperationKind.UNLINK, OperationStatus.SUCCEEDED,
-            None, SafeResultCode.SUCCEEDED, None, unlink.target_resource_id,
-            NOW, NOW, (),
+            unlink.operation_id,
+            OperationKind.UNLINK,
+            OperationStatus.SUCCEEDED,
+            None,
+            SafeResultCode.SUCCEEDED,
+            None,
+            unlink.target_resource_id,
+            NOW,
+            NOW,
+            (),
         )
         service.start_operation.return_value = OperationSucceeded(operation)
         port = DefaultRichMenuLifecyclePort(service)
@@ -138,9 +148,12 @@ class HeadlessReferenceContractTests(TransactionTestCase):
 
     def setUp(self):
         self.channel = LineChannel.objects.create(
-            public_id=uuid4(), messaging_api_channel_id="1234567890",
-            bot_user_id="U" + uuid4().hex, label="削除対象",
-            provider_id="0012345678", is_active=True,
+            public_id=uuid4(),
+            messaging_api_channel_id="1234567890",
+            bot_user_id="U" + uuid4().hex,
+            label="削除対象",
+            provider_id="0012345678",
+            is_active=True,
         )
         self.state = RichMenuChannelState.objects.create(channel_public_id=self.channel.public_id)
         self.contracts = DjangoHeadlessReferenceContracts()
@@ -150,9 +163,12 @@ class HeadlessReferenceContractTests(TransactionTestCase):
     def test_probe_blocks_only_live_or_unresolved_state(self):
         terminal = self._operation(status="succeeded", stage="verifying")
         resource = ManagedRichMenu.objects.create(
-            channel_state=self.state, origin_operation=terminal,
-            ownership_marker="lrm:v1:" + uuid4().hex, lifecycle="deleted",
-            image_digest="a" * 64, deleted_at=NOW,
+            channel_state=self.state,
+            origin_operation=terminal,
+            ownership_marker="lrm:v1:" + uuid4().hex,
+            lifecycle="deleted",
+            image_digest="a" * 64,
+            deleted_at=NOW,
         )
         self.assertFalse(self.contracts.is_referenced(self.channel.public_id))
 
@@ -200,7 +216,9 @@ class HeadlessReferenceContractTests(TransactionTestCase):
             self.assertEqual(result.status, "purged")
             self.channel.delete()
         self.assertFalse(RichMenuChannelState.objects.filter(pk=self.state.pk).exists())
-        self.assertFalse(RichMenuOperation.objects.filter(pk__in=(subject.pk, recovery.pk)).exists())
+        self.assertFalse(
+            RichMenuOperation.objects.filter(pk__in=(subject.pk, recovery.pk)).exists()
+        )
 
     # テストケース: purge開始時のchannel reference fenceを記録する。
     # 期待値: channel state lockより前にaccept側と同じchannel行lockを取得する。
@@ -237,9 +255,12 @@ class HeadlessReferenceContractTests(TransactionTestCase):
     def _terminal_history(self, with_recovery=False):
         subject = self._operation(status="succeeded", stage="verifying")
         ManagedRichMenu.objects.create(
-            channel_state=self.state, origin_operation=subject,
-            ownership_marker="lrm:v1:" + uuid4().hex, lifecycle="deleted",
-            image_digest="b" * 64, deleted_at=NOW,
+            channel_state=self.state,
+            origin_operation=subject,
+            ownership_marker="lrm:v1:" + uuid4().hex,
+            lifecycle="deleted",
+            image_digest="b" * 64,
+            deleted_at=NOW,
         )
         if not with_recovery:
             return subject
@@ -250,10 +271,17 @@ class HeadlessReferenceContractTests(TransactionTestCase):
 
     def _operation(self, *, status, stage, kind="apply", subject=None):
         return RichMenuOperation.objects.create(
-            operation_id=uuid4(), channel_state=self.state,
-            owner_identity_public_id=uuid4(), provider_id="0012345678", kind=kind,
-            subject_operation=subject, request_fingerprint=uuid4().hex * 2,
-            expected_channel_revision=NOW, status=status, stage=stage,
+            operation_id=uuid4(),
+            channel_state=self.state,
+            owner_identity_public_id=uuid4(),
+            provider_id="0012345678",
+            kind=kind,
+            subject_operation=subject,
+            request_fingerprint=uuid4().hex * 2,
+            expected_channel_revision=NOW,
+            status=status,
+            stage=stage,
             result_code="succeeded" if status == "succeeded" else "response_unknown",
-            accepted_at=NOW, completed_at=NOW if status == "succeeded" else None,
+            accepted_at=NOW,
+            completed_at=NOW if status == "succeeded" else None,
         )

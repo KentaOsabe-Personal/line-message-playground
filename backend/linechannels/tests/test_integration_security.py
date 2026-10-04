@@ -55,9 +55,7 @@ class CredentialIntegrationSecurityTests(TransactionTestCase):
     def setUp(self):
         self.primary_key = Fernet.generate_key().decode("ascii")
         self.old_key = Fernet.generate_key().decode("ascii")
-        self.primary_cipher = FernetCredentialCipher(
-            parse_credential_keyring(self.primary_key)
-        )
+        self.primary_cipher = FernetCredentialCipher(parse_credential_keyring(self.primary_key))
         self.old_cipher = FernetCredentialCipher(parse_credential_keyring(self.old_key))
         self.rotation_cipher = FernetCredentialCipher(
             parse_credential_keyring(f"{self.primary_key},{self.old_key}")
@@ -89,9 +87,7 @@ class CredentialIntegrationSecurityTests(TransactionTestCase):
         return channel, pair
 
     def _rotation_service(self, processor=None):
-        item_processor = processor or DefaultCredentialRotationItemProcessor(
-            self.rotation_cipher
-        )
+        item_processor = processor or DefaultCredentialRotationItemProcessor(self.rotation_cipher)
         return DefaultCredentialRotationService(
             self.rotation_cipher,
             DjangoRotationCredentialRepository(),
@@ -118,9 +114,7 @@ class CredentialIntegrationSecurityTests(TransactionTestCase):
                 "123456789012",
                 "U" + "1" * 32,
                 "security integration",
-                build_credential_pair(
-                    "plaintext-token-canary", "plaintext-secret-canary"
-                ),
+                build_credential_pair("plaintext-token-canary", "plaintext-secret-canary"),
                 True,
                 "000123",
             )
@@ -158,9 +152,7 @@ class CredentialIntegrationSecurityTests(TransactionTestCase):
         second_id = uuid.UUID("00000000-0000-4000-8000-000000000002")
         self._create_old_credential(first_id, "first")
         _, second_original = self._create_old_credential(second_id, "second")
-        concrete_processor = DefaultCredentialRotationItemProcessor(
-            self.rotation_cipher
-        )
+        concrete_processor = DefaultCredentialRotationItemProcessor(self.rotation_cipher)
         interrupting = _InterruptOnSecondItem(concrete_processor)
 
         with self.assertRaises(KeyboardInterrupt):
@@ -205,18 +197,14 @@ class CredentialIntegrationSecurityTests(TransactionTestCase):
         self._create_old_credential(corrupt_id, "corrupt")
         corrupt_access = b"corrupt-access-ciphertext"
         corrupt_secret = b"corrupt-secret-ciphertext"
-        LineChannelCredential.objects.filter(
-            line_channel__public_id=corrupt_id
-        ).update(
+        LineChannelCredential.objects.filter(line_channel__public_id=corrupt_id).update(
             access_token_ciphertext=corrupt_access,
             channel_secret_ciphertext=corrupt_secret,
         )
 
         first_run = self._rotation_service().rotate_all()
 
-        corrupt = LineChannelCredential.objects.get(
-            line_channel__public_id=corrupt_id
-        )
+        corrupt = LineChannelCredential.objects.get(line_channel__public_id=corrupt_id)
         self.assertEqual(first_run.status, "incomplete")
         self.assertFalse(first_run.old_keys_removable)
         self.assertEqual(first_run.failed_count, 1)
@@ -231,9 +219,7 @@ class CredentialIntegrationSecurityTests(TransactionTestCase):
         repaired = repair_service.update(
             UpdateLineChannel(
                 corrupt_id,
-                credentials=build_credential_pair(
-                    "repaired-token", "repaired-secret"
-                ),
+                credentials=build_credential_pair("repaired-token", "repaired-secret"),
             )
         )
         second_run = self._rotation_service().rotate_all()

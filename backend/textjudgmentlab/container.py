@@ -7,7 +7,6 @@ from .limits import LabLimits
 from .runtime import LabRuntimeConfigured
 from .services import JudgmentService
 
-
 _limits = LabLimits()
 
 

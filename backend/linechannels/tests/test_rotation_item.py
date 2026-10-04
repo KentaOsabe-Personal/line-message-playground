@@ -85,12 +85,8 @@ class CredentialRotationItemProcessorTests(SimpleTestCase):
         valid = self.pair(self.old_cipher)
         other_channel = self.pair(self.old_cipher, uuid.uuid4())
         cases = (
-            EncryptedCredentialPair(
-                EncryptedCredential(b"corrupt"), valid.channel_secret
-            ),
-            EncryptedCredentialPair(
-                other_channel.access_token, valid.channel_secret
-            ),
+            EncryptedCredentialPair(EncryptedCredential(b"corrupt"), valid.channel_secret),
+            EncryptedCredentialPair(other_channel.access_token, valid.channel_secret),
             EncryptedCredentialPair(valid.channel_secret, valid.access_token),
         )
 
@@ -119,9 +115,7 @@ class CredentialRotationItemProcessorTests(SimpleTestCase):
         cipher = SpyCipher(self.rotating_cipher)
         processor = DefaultCredentialRotationItemProcessor(cipher)
 
-        result = processor.verify_with_primary(
-            self.public_id, self.pair(self.old_cipher)
-        )
+        result = processor.verify_with_primary(self.public_id, self.pair(self.old_cipher))
 
         self.assertEqual(result.status, "failed")
         self.assertEqual(result.code, "credential_unreadable")

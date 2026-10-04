@@ -15,7 +15,7 @@ review単位のheader、全taskのexact本文・元の要件／設計節番号�
 
 実diffとspecを直接読みます。`git diff` だけで見えないstaged／untracked変更もreview範囲に含め、既存の無関係な変更と区別します。
 
-- canonical test suiteを実行し、失敗なら拒否する。lint等が既存なら該当範囲を実行し、なければruntime import・module load・native dependency・boot設定をdiffで確認する。
+- canonical test suiteを実行し、失敗なら拒否する。[READMEのローカル品質チェック](../../../README.md#ローカル品質チェック)に従い、対象サービス全体のLint・整形チェック・Frontend型検査を行う。同じコード状態・設定・依存・対象範囲のfresh evidenceだけ再利用できる。必要なチェックの失敗・未実施は拒否し、command・exit code・対象範囲を記録する。文書のみで対象外なら理由を記録する。runtime import・module load・native dependency・boot設定のdiff確認も維持する。
 - 新規のTBD／TODO／FIXME／HACK／XXXは明示的なtask上の根拠がなければ拒否する。
 - concreteなhardcoded secret／credentialを拒否する。単なる変数名・placeholder・安全なfixtureへのkeyword一致だけで秘密と断定せず、実値を出力しない。
 - taskごとのfile ownershipと `_Boundary:_`、designのBoundary Commitments／Out of Boundary／Allowed Dependenciesに適合する。説明なしの範囲外変更、隠れた依存、上流への下流固有処理混入を拒否する。
@@ -35,7 +35,7 @@ review単位のheader、全taskのexact本文・元の要件／設計節番号�
   - Tests: PASS | FAIL (commandとexit code)
   - TBD/TODO grep: CLEAN | <該当と判断>
   - Secrets grep: CLEAN | <秘密を表示しない指摘>
-  - Static checks: PASS | FAIL | SPOT_CHECKED
+  - Static checks: PASS | FAIL | NOT_RUN | N/A (command、exit code、対象範囲または対象外の理由)
   - Boundary: WITHIN | <範囲外file>
   - Boundary audit: CLEAN | <漏れた責務・依存>
   - RED phase: VERIFIED | MISSING | N/A
