@@ -1,0 +1,37 @@
+{
+  "contractVersion": 3,
+  "model": "jev-1.13.0",
+  "elapsedMs": 125.4,
+  "answers": {
+    "intent": {
+      "type": "choice",
+      "choice": "request",
+      "probabilities": {
+        "question": 0.1,
+        "request": 0.7,
+        "report": 0.15,
+        "other": 0.05
+      },
+      "confidence": 0.65
+    },
+    "sentiment": {
+      "type": "score",
+      "score": 1.1,
+      "probabilities": {
+        "0": 0.1,
+        "1": 0.7,
+        "2": 0.2
+      },
+      "legend": {
+        "0": "否定的",
+        "1": "中立・感情の表現なし",
+        "2": "肯定的"
+      },
+      "confidence": 0.6
+    },
+    "urgency": {
+      "type": "noul",
+      "noul": 0.69
+    }
+  }
+}

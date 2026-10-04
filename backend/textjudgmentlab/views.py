@@ -23,15 +23,9 @@ from rest_framework.views import APIView
 
 from .authentication import IsLabOwner, LabAccessError, LabBearerAuthentication
 from .container import build_judgment_service
-from .judgment_questions import QUESTION_IDS, questions_payload, state_payload
 from .runtime import LabRuntimeConfigured
 from .serializers import JudgmentRequestSerializer
-from .types import (
-    JudgmentFailure,
-    JudgmentInspection,
-    JudgmentSuccess,
-    KnownEvidence,
-)
+from .types import JudgmentFailure, JudgmentSuccess
 
 _MAX_SUCCESS_BYTES = 256 * 1024
 _MAX_BODY_BYTES = 32 * 1024
@@ -127,105 +121,12 @@ def _timestamp(value) -> str:
     return value.isoformat().replace("+00:00", "Z")
 
 
-def _evidence(value):
-    if isinstance(value, KnownEvidence):
-        candidate = value.value
-        return {
-            "kind": "known",
-            "value": candidate.value if hasattr(candidate, "value") else candidate,
-        }
-    return {"kind": value.kind}
-
-
-def _choice(value):
-    return {
-        "type": value.type,
-        "choice": value.choice,
-        "probabilities": dict(value.probabilities),
-        "confidence": value.confidence,
-    }
-
-
 def _success_payload(result: JudgmentSuccess) -> dict[str, object]:
-    inspection = result.inspection
-    if (
-        result.contract_version != 2
-        or not isinstance(inspection, JudgmentInspection)
-        or set(inspection.questions) != set(QUESTION_IDS)
-        or set(inspection.normalization) != set(QUESTION_IDS)
-        or set(result.details.choices) != set(QUESTION_IDS[:-2])
-    ):
-        raise ValueError("incomplete judgment success")
-    evidence = result.evidence
-    details = result.details
-    policy = inspection.policy
     return {
-        "contractVersion": result.contract_version,
-        "consultationId": str(result.consultation_id),
-        "requestId": str(result.request_id),
-        "revision": result.revision,
+        "contractVersion": 3,
         "model": result.model,
-        "inspection": {
-            "questionVersion": inspection.question_version,
-            "state": state_payload(inspection.state),
-            "questions": questions_payload(inspection.questions),
-            "policy": {
-                "version": policy.version,
-                "choice": {
-                    "minConfidence": policy.choice.min_confidence,
-                    "minProbability": policy.choice.min_probability,
-                    "requireUniqueMaximum": policy.choice.require_unique_maximum,
-                },
-                "score": {
-                    "requiredImpactEvidence": policy.score.required_impact_evidence,
-                    "minConfidence": policy.score.min_confidence,
-                    "highFrom": policy.score.high_from,
-                },
-                "noul": {
-                    "urgentFrom": policy.noul.urgent_from,
-                    "notUrgentThrough": policy.noul.not_urgent_through,
-                },
-            },
-            "normalization": {
-                key: {
-                    "status": decision.status,
-                    "reasons": list(decision.reasons),
-                    "checks": [
-                        {
-                            "rule": check.rule,
-                            "actual": check.actual,
-                            "operator": check.operator,
-                            "expected": check.expected,
-                            "passed": check.passed,
-                        }
-                        for check in decision.checks
-                    ],
-                }
-                for key, decision in inspection.normalization.items()
-            },
-        },
-        "evidence": {
-            "topic": _evidence(evidence.topic),
-            "relevance": evidence.relevance.value,
-            "change": evidence.change.value,
-            "scope": _evidence(evidence.scope),
-            "workaround": _evidence(evidence.workaround),
-            "result": _evidence(evidence.result),
-            "impact": evidence.impact,
-            "urgency": _evidence(evidence.urgency),
-        },
-        "details": {
-            "choices": {key: _choice(value) for key, value in details.choices.items()},
-            "score": {
-                "type": details.score.type,
-                "score": details.score.score,
-                "legend": dict(details.score.legend),
-                "probabilities": dict(details.score.probabilities),
-                "confidence": details.score.confidence,
-            },
-            "noul": {"type": details.noul.type, "noul": details.noul.noul},
-            "jevElapsedMs": details.jev_elapsed_ms,
-        },
+        "answers": result.answers,
+        "elapsedMs": result.elapsed_ms,
     }
 
 
@@ -261,12 +162,10 @@ class LabJudgmentAPIView(LabAPIView):
         if not isinstance(result, JudgmentFailure):
             return self._error("unexpected")
         mapping = {
-            "invalid_request": "invalid_input",
             "rate_limited": "rate_limited",
             "access_expired": "reauthentication_required",
             "judge_unavailable": "judgment_failed",
             "judge_timeout": "judgment_timeout",
-            "configuration_unavailable": "access_unavailable",
             "unexpected": "unexpected",
         }
         return self._error(mapping[result.code])

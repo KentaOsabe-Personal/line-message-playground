@@ -1,27 +1,80 @@
-from __future__ import annotations
-
-from collections.abc import Callable
-from dataclasses import replace
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
-from time import monotonic
+from math import isfinite
 from typing import Protocol
 
-from .jev_gateway import JevTransportResult
-from .judgment_policy import normalize_judgment
-from .judgment_questions import build_judgment_input
+from .jev_gateway import JevTransportFailure, JevTransportResult
+from .judgment_questions import INTENT_CRITERIA, build_jev_request
 from .limits import LabLimitRejected, LabLimits
-from .types import (
-    JudgmentFailure,
-    JudgmentInspection,
-    JudgmentRequest,
-    JudgmentResult,
-    JudgmentSuccess,
-    LabPrincipal,
-)
+from .types import JudgmentFailure, JudgmentRequest, JudgmentSuccess, LabPrincipal
 
 
 class JudgmentGateway(Protocol):
     async def evaluate(self, payload: dict[str, object]) -> JevTransportResult: ...
+
+
+def _number(value, maximum=1.0) -> float:
+    if type(value) not in (int, float) or not isfinite(value) or not 0 <= value <= maximum:
+        raise ValueError("invalid judgment number")
+    return value
+
+
+def _probabilities(value, keys) -> dict[str, float]:
+    if not isinstance(value, Mapping) or set(value) != set(keys):
+        raise ValueError("invalid judgment probabilities")
+    result = {key: _number(value[key]) for key in keys}
+    if abs(sum(result.values()) - 1) > 0.01:
+        raise ValueError("invalid judgment distribution")
+    return result
+
+
+def validated_answers(payload, model) -> dict[str, object]:
+    """形と数値範囲だけを検証する。閾値による採用・補正は行わない。"""
+    if payload.get("model") != model:
+        raise ValueError("unexpected model")
+    answers = payload["answers"]
+    if not isinstance(answers, Mapping) or set(answers) != {"intent", "sentiment", "urgency"}:
+        raise ValueError("invalid answers")
+    intent, sentiment, urgency = (answers[key] for key in ("intent", "sentiment", "urgency"))
+    if not all(isinstance(item, Mapping) for item in (intent, sentiment, urgency)):
+        raise ValueError("invalid answer")
+    if (intent.get("type"), sentiment.get("type"), urgency.get("type")) != (
+        "choice",
+        "score",
+        "noul",
+    ):
+        raise ValueError("invalid types")
+    probabilities = _probabilities(intent.get("probabilities"), INTENT_CRITERIA)
+    choice = intent.get("choice")
+    if (
+        not isinstance(choice, str)
+        or choice not in probabilities
+        or probabilities[choice] != max(probabilities.values())
+    ):
+        raise ValueError("invalid choice")
+    legend = sentiment.get("legend")
+    if (
+        not isinstance(legend, Mapping)
+        or set(legend) != {"0", "1", "2"}
+        or not all(isinstance(v, str) and 0 < len(v) <= 200 for v in legend.values())
+    ):
+        raise ValueError("invalid legend")
+    return {
+        "intent": {
+            "type": "choice",
+            "choice": choice,
+            "probabilities": probabilities,
+            "confidence": _number(intent.get("confidence")),
+        },
+        "sentiment": {
+            "type": "score",
+            "score": _number(sentiment.get("score"), 2),
+            "legend": dict(legend),
+            "probabilities": _probabilities(sentiment.get("probabilities"), ("0", "1", "2")),
+            "confidence": _number(sentiment.get("confidence")),
+        },
+        "urgency": {"type": "noul", "noul": _number(urgency.get("noul"))},
+    }
 
 
 class JudgmentService:
@@ -33,49 +86,29 @@ class JudgmentService:
         limits: LabLimits,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
-        self._model = model
-        self._gateway = gateway
-        self._limits = limits
-        self._clock = clock
+        self._model, self._gateway, self._limits, self._clock = model, gateway, limits, clock
 
-    async def evaluate(self, principal: LabPrincipal, request: JudgmentRequest) -> JudgmentResult:
+    async def evaluate(
+        self, principal: LabPrincipal, request: JudgmentRequest
+    ) -> JudgmentSuccess | JudgmentFailure:
         if not principal.is_valid_at(self._clock()):
             return JudgmentFailure("access_expired")
-
         permit = self._limits.acquire(principal.owner_digest)
         if isinstance(permit, LabLimitRejected):
             return JudgmentFailure("rate_limited")
-
         with permit:
-            built = build_judgment_input(request, model=self._model)
-            payload = built.to_payload()
-            started_at = monotonic()
             try:
-                transport = await self._gateway.evaluate(payload)
-                normalized = normalize_judgment(
-                    request,
-                    expected_model=self._model,
-                    transport=transport,
+                transport = await self._gateway.evaluate(
+                    build_jev_request(request.text, model=self._model)
                 )
-                elapsed_ms = max(0.0, (monotonic() - started_at) * 1000.0)
+                if not principal.is_valid_at(self._clock()):
+                    return JudgmentFailure("access_expired")
+                if isinstance(transport, JevTransportFailure):
+                    return JudgmentFailure(transport.code)
+                answers = validated_answers(transport.payload, self._model)
+                elapsed = _number(transport.elapsed_ms, float("inf"))
+                return JudgmentSuccess(self._model, answers, elapsed)
+            except ValueError, KeyError, TypeError, AttributeError:
+                return JudgmentFailure("judge_unavailable")
             except Exception:
                 return JudgmentFailure("unexpected")
-            if not principal.is_valid_at(self._clock()):
-                return JudgmentFailure("access_expired")
-            if isinstance(normalized, JudgmentFailure):
-                return normalized
-            return JudgmentSuccess(
-                consultation_id=request.consultation_id,
-                request_id=request.request_id,
-                revision=request.revision,
-                model=built.model,
-                evidence=normalized.evidence,
-                details=replace(normalized.details, jev_elapsed_ms=elapsed_ms),
-                inspection=JudgmentInspection(
-                    state=built.state,
-                    questions=built.questions,
-                    question_version=built.question_version,
-                    policy=normalized.policy,
-                    normalization=normalized.normalization,
-                ),
-            )

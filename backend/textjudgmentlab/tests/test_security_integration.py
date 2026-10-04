@@ -223,19 +223,7 @@ class LabSecurityIntegrationTests(SimpleTestCase):
 
         gateway = _Gateway(VerifiedLabIdentity(FUTURE, "a" * 64))
         judgment_url = "/api/labs/text-judgment/judgments"
-        payload = {
-            "contractVersion": 2,
-            "consultationId": "123e4567-e89b-42d3-a456-426614174000",
-            "requestId": "123e4567-e89b-42d3-a456-426614174001",
-            "revision": 0,
-            "text": "通知が届きません",
-            "context": {
-                "question": "start",
-                "confirmed": {"topic": None, "scope": None, "workaround": None, "urgency": None},
-                "recentUserTexts": [],
-                "impact": "unassessed",
-            },
-        }
+        payload = {"contractVersion": 3, "text": "好きな文章を判定します"}
         with (
             patch("textjudgmentlab.authentication.LabLineGateway", return_value=gateway),
             patch(

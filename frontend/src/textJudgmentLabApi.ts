@@ -118,7 +118,7 @@ export function createLabHttpClient(fetcher: Fetcher = fetch): LabHttpClient {
         idToken,
         sentRequest,
         'judgment',
-        (value) => parseJudgmentResponse(value, sentRequest),
+        parseJudgmentResponse,
         signal,
       )
     },
