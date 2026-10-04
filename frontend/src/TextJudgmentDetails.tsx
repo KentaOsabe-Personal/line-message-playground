@@ -28,7 +28,7 @@ const normalizationLabels = {
 } as const
 const format = (value: unknown) => JSON.stringify(value, null, 2)
 
-// タスク12で会話画面に組み込む際は、applicationなどの追加項目を必ず渡す。既存の呼び出しでは数値の表示を維持する。
+// 数値だけを閲覧する使い方も維持する。会話画面では、発言時の適用結果と文脈を渡す。
 type Props = Readonly<{
   judgment: JudgmentResponse
   uiElapsedMs: number

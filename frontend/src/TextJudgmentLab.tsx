@@ -1,6 +1,9 @@
-import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 
 import TextJudgmentDetails from './TextJudgmentDetails'
+import TextJudgmentTurnSummary from './TextJudgmentTurnSummary'
+import TextJudgmentThemePanel from './TextJudgmentThemePanel'
+import { LAB_THEMES, type LabThemeId } from './textJudgmentLabThemes'
 import {
   LAB_CONTENT,
   getGuide,
@@ -29,6 +32,7 @@ export default function TextJudgmentLab({
   getValidIdToken: () => string | null
 }>) {
   const state = useTextJudgmentLabController(controller)
+  const [selectedThemeId, setSelectedThemeId] = useState<LabThemeId>('information')
   const composing = useRef(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
@@ -162,10 +166,14 @@ export default function TextJudgmentLab({
                       </p>
                     )}
                   </div>
+                  <TextJudgmentTurnSummary record={message} />
                   {message.kind === 'judged' && (
                     <TextJudgmentDetails
                       judgment={message.judgment}
-                      uiElapsedMs={message.uiElapsedMs ?? 0}
+                      uiElapsedMs={message.uiElapsedMs}
+                      application={message.application}
+                      before={message.before}
+                      previousQuestion={message.previousQuestion}
                     />
                   )}
                 </div>
@@ -327,6 +335,22 @@ export default function TextJudgmentLab({
             </div>
           </details>
         )}
+
+        <TextJudgmentThemePanel
+          themes={LAB_THEMES}
+          selectedThemeId={selectedThemeId}
+          onThemeChange={setSelectedThemeId}
+          inputState={{
+            authorized: authorized && state.interactive,
+            pending,
+            ended,
+            inputMode: choicesOnly ? 'choices_only' : 'free_and_choices',
+          }}
+          onSubmitExample={(text) => {
+            const token = getValidIdToken()
+            if (token !== null) void controller.submit(text, 'example', token)
+          }}
+        />
       </div>
 
       <div className="lab-controls">
