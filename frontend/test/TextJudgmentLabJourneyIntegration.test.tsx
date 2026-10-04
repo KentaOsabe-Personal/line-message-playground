@@ -8,6 +8,8 @@ import TextJudgmentLabPage from '../src/TextJudgmentLabPage'
 import { LabHttpError, type LabHttpClient } from '../src/textJudgmentLabApi'
 import type { LinePlatformLiffAdapter } from '../src/liffClient'
 import { createTextJudgmentLabController } from '../src/useTextJudgmentLab'
+import { conversationQuestion } from '../src/textJudgmentLabState'
+import { LAB_SKIP_REASONS, LAB_APPLICATION_REASONS } from '../src/textJudgmentLabContent'
 import type { JudgmentRequest, JudgmentResponse } from '../src/textJudgmentLabTypes'
 
 ;(
@@ -149,6 +151,7 @@ describe('文章判定ラボの相談全体', () => {
     document.body.append(container)
     root = createRoot(container)
     id = 0
+    activeController = undefined
   })
 
   afterEach(async () => {
@@ -172,7 +175,39 @@ describe('文章判定ラボの相談全体', () => {
         />,
       ),
     )
+    activeController = controller
     return controller
+  }
+
+  let activeController: ReturnType<typeof createTextJudgmentLabController> | undefined
+  const assertExplanation = () => {
+    if (!activeController) return
+    const state = activeController.getState()
+    const record = state.messages.at(-1)
+    if (!record || (record.kind !== 'judged' && record.kind !== 'choice')) return
+    if (state.core.stage.kind === 'ended' && state.core.stage.outcome === 'interrupted') return
+    // 自由文の送信や選択肢への回答ごとに、発言の説明と実際の次の会話状態を照合する。
+    expect(record.application.next).toEqual(state.core.stage)
+    expect(record.application.nextQuestion).toEqual(conversationQuestion(state.core))
+    const row = [...container.querySelectorAll('[aria-label="あなたのメッセージ"]')].at(-1)!
+    const summary = row.querySelector('.lab-turn-summary')!
+    expect(summary.textContent).toContain(record.previousQuestion.prompt)
+    if (record.application.nextQuestion) {
+      expect(summary.textContent).toContain(record.application.nextQuestion.prompt)
+      expect(container.querySelector('[aria-label="ラボからのメッセージ"]')?.textContent).toContain(
+        record.application.nextQuestion.prompt,
+      )
+    }
+    for (const skip of record.application.skipped)
+      expect(summary.textContent).toContain(LAB_SKIP_REASONS[skip.reason])
+    if (record.kind === 'judged') {
+      const details = row.querySelector('.lab-judgment-details')!
+      for (const decision of record.application.decisions)
+        expect(details.textContent).toContain(LAB_APPLICATION_REASONS[decision.reason])
+    } else {
+      expect(row.textContent).toContain('Jev呼び出しなし')
+      expect(row.querySelector('.lab-judgment-details')).toBeNull()
+    }
   }
 
   const click = async (label: string) => {
@@ -181,6 +216,7 @@ describe('文章判定ラボの相談全体', () => {
     )
     expect(button, `button: ${label}`).toBeDefined()
     await act(async () => button!.click())
+    assertExplanation()
   }
 
   const submitText = async (text: string) => {
@@ -198,6 +234,7 @@ describe('文章判定ラボの相談全体', () => {
         .querySelector('form')!
         .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
     )
+    assertExplanation()
   }
 
   // テストケース: 通知不達の例文をhighかつ急ぎの固定判定へ通し、各質問へ選択肢で回答する。
