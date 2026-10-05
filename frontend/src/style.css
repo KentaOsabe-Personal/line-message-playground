@@ -20,6 +20,9 @@
   --color-info-soft: #eef7ff;
   --color-disabled: #eef2f0;
   --color-on-action: #ffffff;
+  --color-action: #087f3e;
+  --color-action-strong: #056331;
+  --color-danger-action: #a52a20;
   --radius-none: 0;
   --radius-control: 0.55rem;
   --radius-card: 0.875rem;
@@ -36,10 +39,35 @@
 }
 
 :root {
+  /* LIFF SDKが設定するインラインのcolor-schemeより、アプリの配色を優先する。 */
+  color-scheme: light !important;
   font-family: Inter, 'Hiragino Sans', 'Yu Gothic UI', system-ui, sans-serif;
   color: var(--color-text);
   background: var(--color-page);
   --focus-ring: 3px solid var(--color-focus);
+}
+
+/* 自動設定ではブラウザの配色通知を使い、手動設定では選択した配色を使う。 */
+:root[data-theme='dark'] {
+  color-scheme: dark !important;
+  --color-page: #101913;
+  --color-page-deep: #0c140f;
+  --color-surface: #17251e;
+  --color-surface-soft: #1c2d23;
+  --color-text: #e5efe8;
+  --color-muted: #b0c2b6;
+  --color-border: #759484;
+  --color-line: #68d996;
+  --color-line-strong: #91e8b0;
+  --color-focus: #80e5a4;
+  --color-danger: #ffaaa2;
+  --color-danger-soft: #38221f;
+  --color-warning: #f4d278;
+  --color-warning-soft: #352d18;
+  --color-success-soft: #203b2a;
+  --color-info: #8bcaff;
+  --color-info-soft: #1c2f3d;
+  --color-disabled: #24372b;
 }
 
 body {
@@ -88,7 +116,7 @@ a:focus-visible {
   flex: 0 0 auto;
   place-items: center;
   border-radius: var(--radius-control);
-  background: var(--color-line);
+  background: var(--color-action);
   color: var(--color-on-action);
   font-size: 1.05rem;
   font-weight: 900;
@@ -256,8 +284,8 @@ main {
   padding: 0.68rem 1rem;
   border: 0;
   border-radius: var(--radius-control);
-  background: var(--color-line);
-  color: var(--color-surface);
+  background: var(--color-action);
+  color: var(--color-on-action);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -277,8 +305,8 @@ main {
 }
 
 .rich-menu-admin button.danger {
-  background: var(--color-danger);
-  color: var(--color-surface);
+  background: var(--color-danger-action);
+  color: var(--color-on-action);
 }
 
 .rich-menu-admin button:disabled {
@@ -966,7 +994,7 @@ h1 {
   border: 0;
   border-radius: var(--radius-control);
   color: var(--color-on-action);
-  background: var(--color-line);
+  background: var(--color-action);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -1177,7 +1205,7 @@ h1 {
   border: 0;
   border-radius: var(--radius-control);
   color: var(--color-on-action);
-  background: var(--color-line);
+  background: var(--color-action);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -1189,7 +1217,7 @@ h1 {
 }
 
 .channel-admin button.danger {
-  background: var(--color-danger);
+  background: var(--color-danger-action);
 }
 
 .channel-admin button:disabled {
@@ -1226,7 +1254,7 @@ h1 {
 .account-console button {
   border: 0;
   border-radius: var(--radius-control);
-  background: var(--color-line);
+  background: var(--color-action);
   color: var(--color-on-action);
   cursor: pointer;
   font: inherit;
@@ -1240,7 +1268,7 @@ h1 {
 }
 
 .account-console button.danger {
-  background: var(--color-danger);
+  background: var(--color-danger-action);
 }
 
 .account-console button:disabled {
@@ -1441,8 +1469,8 @@ label {
   width: fit-content;
   padding: 0.65rem 0.9rem;
   border-radius: var(--radius-control);
-  background: var(--color-line);
-  color: var(--color-surface);
+  background: var(--color-action);
+  color: var(--color-on-action);
   font-weight: 700;
   text-decoration: none;
 }
@@ -1469,8 +1497,8 @@ label {
 .channel-admin button.danger,
 .account-console button.danger,
 .rich-menu-admin button.danger {
-  background: var(--color-danger);
-  color: var(--color-surface);
+  background: var(--color-danger-action);
+  color: var(--color-on-action);
 }
 
 .account-console,
@@ -1626,6 +1654,51 @@ label {
 .page-heading {
   max-width: 52rem;
   margin-bottom: clamp(1.75rem, 4vw, 3rem);
+}
+
+.theme-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 2);
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.theme-selector select {
+  min-height: 2.5rem;
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.page-heading > .theme-selector {
+  float: right;
+  margin: 0 0 calc(var(--spacing) * 3) calc(var(--spacing) * 3);
+}
+
+.page-heading::after {
+  display: block;
+  clear: both;
+  content: '';
+}
+
+.auth-action-panel > .theme-selector {
+  align-self: center;
+  margin-top: calc(var(--spacing) * 5);
+}
+
+@media (max-width: 480px) {
+  .page-heading > .theme-selector {
+    float: none;
+    display: flex;
+    justify-content: flex-end;
+    margin-left: 0;
+  }
 }
 
 .page-heading .eyebrow,
@@ -2126,7 +2199,7 @@ main.lab-page-frame {
   margin-top: 0.6rem;
 }
 .judgment-user .judgment-bubble {
-  background: var(--color-line-strong);
+  background: var(--color-action-strong);
   color: var(--color-on-action);
   white-space: pre-wrap;
   border-radius: var(--radius-card) 0 var(--radius-card) var(--radius-card);
@@ -2273,7 +2346,7 @@ main.lab-page-frame {
   padding: 0.65rem 1.1rem;
   border: 0;
   border-radius: var(--radius-control);
-  background: var(--color-line-strong);
+  background: var(--color-action-strong);
   color: var(--color-on-action);
   font-weight: 700;
   cursor: pointer;

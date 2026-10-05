@@ -295,7 +295,9 @@ describe('比較ラボのPage・実認証ゲート・通信寿命', () => {
         expect(input().value).toBe('')
         expect(container.querySelector('.judgment-source')).toBeNull()
         expect(container.querySelectorAll('.judgment-turn, .judgment-comparison')).toHaveLength(0)
-        expect(container.querySelector('label')?.textContent).toBe('試したい文章')
+        expect(container.querySelector('label[for="judgment-text"]')?.textContent).toBe(
+          '試したい文章',
+        )
         expect(judge).toHaveBeenCalledTimes(3)
         expect(getItem).not.toHaveBeenCalled()
         expect(setItem).not.toHaveBeenCalled()

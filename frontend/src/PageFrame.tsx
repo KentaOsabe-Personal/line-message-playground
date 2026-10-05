@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import ThemeSelector from './ThemeSelector'
 
 export type PageStatus = Readonly<{
   kind: 'loading' | 'success' | 'error'
@@ -42,6 +43,7 @@ export default function PageFrame({
       aria-labelledby="page-heading"
     >
       <header className="page-heading">
+        <ThemeSelector />
         <p className="eyebrow">LINE MESSAGE PLAYGROUND</p>
         <h1 id="page-heading">{heading}</h1>
         {description && <p className="page-description">{description}</p>}
