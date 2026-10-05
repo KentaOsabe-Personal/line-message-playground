@@ -1,8 +1,9 @@
-import { act } from 'react'
+import { act, useEffect, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import TextJudgmentLabAuthGate, { conservativeRemainingMs } from '../src/TextJudgmentLabAuthGate'
+import type { LabAuthContext } from '../src/TextJudgmentLabAuthGate'
 import { LabHttpError } from '../src/textJudgmentLabApi'
 import type { LabHttpClient } from '../src/textJudgmentLabApi'
 import type { LinePlatformLiffAdapter } from '../src/liffClient'
@@ -38,6 +39,39 @@ const api = (overrides: Partial<LabHttpClient> = {}): LabHttpClient => ({
   judge: vi.fn(),
   ...overrides,
 })
+
+const authorizedResponse = {
+  status: 'authorized' as const,
+  expiresAt: '2026-09-21T00:01:00Z',
+  serverTime: '2026-09-21T00:00:00Z',
+}
+
+function StatefulConversation({
+  context,
+  onMount,
+  onUnmount,
+}: {
+  context: LabAuthContext
+  onMount: () => void
+  onUnmount: () => void
+}) {
+  const [draft, setDraft] = useState('保存した入力')
+  useEffect(() => {
+    onMount()
+    return onUnmount
+  }, [onMount, onUnmount])
+  return (
+    <section aria-label="保存した会話">
+      <p>会話:{context.access.kind}</p>
+      <input
+        aria-label="入力"
+        value={draft}
+        readOnly={context.access.kind !== 'authorized'}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+    </section>
+  )
+}
 
 describe('TextJudgmentLabAuthGate', () => {
   let container: HTMLDivElement
@@ -154,6 +188,184 @@ describe('TextJudgmentLabAuthGate', () => {
     )
     expect(container.textContent).toContain('利用できません')
     expect(container.textContent).not.toContain('秘密の相談')
+  })
+
+  // テストケース: 初回の利用資格確認が未完了、拒否、失効、確認不可になる
+  // 期待値: 許可履歴がない子は一度もmountせず、既存の認証案内だけを表示する
+  test.each([
+    'initializing',
+    'not_allowed',
+    'wrong_channel',
+    'reauthentication_required',
+    'access_unavailable',
+  ] as const)('does not mount content before initial authorization: %s', async (reason) => {
+    const onMount = vi.fn()
+    const onUnmount = vi.fn()
+    const checkAccess =
+      reason === 'initializing'
+        ? vi.fn(() => new Promise<never>(() => {}))
+        : vi.fn().mockRejectedValue(new LabHttpError(reason))
+    await act(async () =>
+      root.render(
+        <TextJudgmentLabAuthGate config={config} liffAdapter={adapter()} api={api({ checkAccess })}>
+          {(context) => (
+            <StatefulConversation context={context} onMount={onMount} onUnmount={onUnmount} />
+          )}
+        </TextJudgmentLabAuthGate>,
+      ),
+    )
+    expect(container.querySelector('input')).toBeNull()
+    expect(onMount).not.toHaveBeenCalled()
+    expect(onUnmount).not.toHaveBeenCalled()
+    expect(container.querySelector('[role="status"], [role="alert"]')).not.toBeNull()
+  })
+
+  // テストケース: 許可後に再確認中、確認不可、再許可、本人またはチャネル拒否へ遷移する
+  // 期待値: 同じ子と入力を保持し、非許可中は読取専用の案内を表示し、再許可で判定しない
+  test.each(['not_allowed', 'wrong_channel'] as const)(
+    'preserves child identity through rechecking, outage, reauthorization and denial: %s',
+    async (reason) => {
+      const onMount = vi.fn()
+      const onUnmount = vi.fn()
+      let rejectRecheck: ((error: LabHttpError) => void) | undefined
+      const checkAccess = vi
+        .fn()
+        .mockResolvedValueOnce(authorizedResponse)
+        .mockImplementationOnce(
+          () =>
+            new Promise((_, reject) => {
+              rejectRecheck = reject
+            }),
+        )
+        .mockResolvedValueOnce(authorizedResponse)
+        .mockRejectedValueOnce(new LabHttpError(reason))
+      const client = api({ checkAccess })
+      const liff = adapter()
+      await act(async () =>
+        root.render(
+          <TextJudgmentLabAuthGate config={config} liffAdapter={liff} api={client}>
+            {(context) => (
+              <StatefulConversation
+                key="conversation"
+                context={context}
+                onMount={onMount}
+                onUnmount={onUnmount}
+              />
+            )}
+          </TextJudgmentLabAuthGate>,
+        ),
+      )
+      const input = container.querySelector('input')!
+      expect(input.readOnly).toBe(false)
+      const expectPreserved = (kind: string) => {
+        expect(container.querySelector('input')).toBe(input)
+        expect(input.value).toBe('保存した入力')
+        expect(input.readOnly).toBe(kind !== 'authorized')
+        expect(container.textContent).toContain(`会話:${kind}`)
+        expect(onMount).toHaveBeenCalledTimes(1)
+        expect(onUnmount).not.toHaveBeenCalled()
+        expect(client.judge).not.toHaveBeenCalled()
+        if (kind !== 'authorized') expect(container.textContent).toContain('読取専用')
+      }
+      await act(async () => window.dispatchEvent(new PageTransitionEvent('pageshow')))
+      expectPreserved('initializing')
+      await act(async () => rejectRecheck?.(new LabHttpError('access_unavailable')))
+      expectPreserved('unavailable')
+      const retry = [...container.querySelectorAll('button')].find(
+        (button) => button.textContent === '利用確認を再試行',
+      )!
+      await act(async () => retry.click())
+      expectPreserved('authorized')
+      expect(checkAccess).toHaveBeenCalledTimes(3)
+      await act(async () => window.dispatchEvent(new PageTransitionEvent('pageshow')))
+      expectPreserved('denied')
+      expect(container.textContent).toContain(
+        reason === 'wrong_channel' ? '対応するLINEミニアプリ' : 'このラボは利用できません',
+      )
+      expect(liff.reauthenticate).not.toHaveBeenCalled()
+      await act(async () => root.unmount())
+      expect(onUnmount).toHaveBeenCalledTimes(1)
+      root = createRoot(container)
+      await act(async () =>
+        root.render(
+          <TextJudgmentLabAuthGate
+            config={config}
+            liffAdapter={adapter()}
+            api={api({ checkAccess: vi.fn().mockRejectedValue(new LabHttpError(reason)) })}
+          >
+            {(context) => (
+              <StatefulConversation context={context} onMount={onMount} onUnmount={onUnmount} />
+            )}
+          </TextJudgmentLabAuthGate>,
+        ),
+      )
+      expect(container.querySelector('input')).toBeNull()
+      expect(onMount).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  // テストケース: 初回許可の直後に本人拒否またはチャネル拒否になる
+  // 期待値: 拒否の案内を表示しながら子のDOMと入力を保持し、unmountしない
+  test.each(['not_allowed', 'wrong_channel'] as const)(
+    'keeps authorized content mounted after immediate denial: %s',
+    async (reason) => {
+      const onMount = vi.fn()
+      const onUnmount = vi.fn()
+      const checkAccess = vi
+        .fn()
+        .mockResolvedValueOnce(authorizedResponse)
+        .mockRejectedValueOnce(new LabHttpError(reason))
+      await act(async () =>
+        root.render(
+          <TextJudgmentLabAuthGate
+            config={config}
+            liffAdapter={adapter()}
+            api={api({ checkAccess })}
+          >
+            {(context) => (
+              <StatefulConversation context={context} onMount={onMount} onUnmount={onUnmount} />
+            )}
+          </TextJudgmentLabAuthGate>,
+        ),
+      )
+      const input = container.querySelector('input')!
+      await act(async () => window.dispatchEvent(new PageTransitionEvent('pageshow')))
+      expect(container.querySelector('input')).toBe(input)
+      expect(input.value).toBe('保存した入力')
+      expect(input.readOnly).toBe(true)
+      expect(onMount).toHaveBeenCalledTimes(1)
+      expect(onUnmount).not.toHaveBeenCalled()
+      expect(container.textContent).toContain('読取専用')
+    },
+  )
+
+  // テストケース: 初回許可後にtokenの期限へ達する
+  // 期待値: 再認証案内と同時に同じ子を読取専用で保持し、判定や再認証を自動実行しない
+  test('preserves the mounted child and draft when authorization expires', async () => {
+    const onMount = vi.fn()
+    const onUnmount = vi.fn()
+    const client = api()
+    const liff = adapter()
+    await act(async () =>
+      root.render(
+        <TextJudgmentLabAuthGate config={config} liffAdapter={liff} api={client}>
+          {(context) => (
+            <StatefulConversation context={context} onMount={onMount} onUnmount={onUnmount} />
+          )}
+        </TextJudgmentLabAuthGate>,
+      ),
+    )
+    const input = container.querySelector('input')!
+    await act(async () => vi.advanceTimersByTimeAsync(60_000))
+    expect(container.querySelector('input')).toBe(input)
+    expect(input.value).toBe('保存した入力')
+    expect(input.readOnly).toBe(true)
+    expect(container.textContent).toContain('会話:reauthentication_required')
+    expect(container.textContent).toContain('再認証が必要です。会話は読取専用です。')
+    expect(onMount).toHaveBeenCalledTimes(1)
+    expect(onUnmount).not.toHaveBeenCalled()
+    expect(client.judge).not.toHaveBeenCalled()
+    expect(liff.reauthenticate).not.toHaveBeenCalled()
   })
 
   // テストケース: wall-clockが後退する場合とmonotonicより大きく進む場合を計算する
