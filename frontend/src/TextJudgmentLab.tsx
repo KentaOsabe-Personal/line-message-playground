@@ -77,11 +77,7 @@ export default function TextJudgmentLab({
   api,
 }: Readonly<{ context: LabAuthContext; api: LabHttpClient }>) {
   const authorized = context.access.kind === 'authorized'
-  const { turns, draft, setDraft, pending, submit } = useTextJudgmentLab(
-    api,
-    authorized,
-    context.invalidateAccess,
-  )
+  const { turns, draft, setDraft, pending, submit } = useTextJudgmentLab(api, context)
   const end = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const count = [...draft].length
@@ -90,8 +86,7 @@ export default function TextJudgmentLab({
     if (turns.length) end.current?.scrollIntoView?.({ block: 'nearest' })
   }, [turns, pending])
   const send = () => {
-    const token = context.getValidIdToken()
-    if (token) void submit(token)
+    void submit()
   }
   return (
     <section className="simple-judgment-chat" aria-label="Jevと文章を試す">
