@@ -201,6 +201,43 @@ describe('自由文の文章判定ラボ', () => {
   }
   const click = async (label: string) => act(async () => button(label).click())
 
+  // テストケース: 同じ本文・判定値の通常結果を二件作り、二件目から比較を開始し、中止・失敗・成功を試す。
+  // 期待値: 選択した通常履歴だけを隠し、中止時は再表示し、成功後は比較結果だけで確認・再比較できる。
+  test('replaces only the selected original with the source or comparison result', async () => {
+    await render()
+    await type('同じ文章')
+    await send()
+    await type('同じ文章')
+    await send()
+    const turns = container.querySelectorAll<HTMLDivElement>('.judgment-turn')
+    await act(async () => turns[1].querySelector('button')!.click())
+    expect(turns[0].hidden).toBe(false)
+    expect(turns[1].hidden).toBe(true)
+    expect(container.querySelector('.judgment-source')?.textContent).toContain('同じ文章')
+    await type('編集を残す')
+    await click('比較をやめる')
+    expect(turns[1].hidden).toBe(false)
+    expect(container.querySelector('textarea')?.value).toBe('編集を残す')
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await act(async () => turns[1].querySelector('button')!.click())
+    await type('書き換え')
+    api.judge = vi.fn().mockRejectedValueOnce(new LabHttpError('judgment_failed'))
+    await send()
+    expect(turns[1].hidden).toBe(true)
+    expect(container.querySelector('.judgment-source')).not.toBeNull()
+    api.judge = vi.fn().mockResolvedValue(result)
+    await send()
+    expect(turns[0].hidden).toBe(false)
+    expect(turns[1].hidden).toBe(true)
+    expect(container.textContent).not.toContain('比較に使用した判定を見る')
+    expect(container.querySelector('.judgment-source')).toBeNull()
+    const comparison = container.querySelector('.judgment-comparison')!
+    expect(JSON.parse(comparison.querySelector('pre')!.textContent)).toEqual(result)
+    await act(async () => comparison.querySelector('button')!.click())
+    expect(container.querySelector('textarea')?.value).toBe('同じ文章')
+    expect(container.querySelectorAll('.judgment-comparison')).toHaveLength(1)
+  })
+
   // テストケース: 通常成功から入力置換の拒否・承認、中止、比較成功と両側の再選択を行う。
   // 期待値: 入力・比較元・focusを保持または更新し、成功した比較を一組だけ追加する。
   test('selects, confirms, cancels, compares, and reuses either result', async () => {

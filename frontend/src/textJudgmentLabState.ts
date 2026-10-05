@@ -4,6 +4,7 @@ export type Immutable<T> = { readonly [K in keyof T]: Immutable<T[K]> }
 export type JudgmentSnapshot = Readonly<{
   text: string
   result: Immutable<JudgmentResponse>
+  source?: ResultRef
 }>
 export type ResultRef = Readonly<{
   entryId: number
@@ -47,11 +48,11 @@ export function findSuccessfulResult(state: LabState, source: ResultRef): Judgme
   if (!entry) return null
   if (entry.kind === 'single') {
     return source.side === 'single' && entry.outcome.kind === 'succeeded'
-      ? { text: entry.text, result: structuredClone(entry.outcome.result) }
+      ? { text: entry.text, result: structuredClone(entry.outcome.result), source: { ...source } }
       : null
   }
   if (source.side === 'single') return null
-  return structuredClone(entry[source.side])
+  return { ...structuredClone(entry[source.side]), source: { ...source } }
 }
 
 export function isValidDraft(draft: string): boolean {

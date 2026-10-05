@@ -18,6 +18,14 @@ export default function TextJudgmentLab({
   const { entries, composer } = state
   const draft = composer.kind === 'editing' ? composer.draft : composer.submission.draft
   const original = composer.kind === 'editing' ? composer.original : composer.submission.original
+  const replacedSingles = new Set(
+    entries.flatMap((entry) =>
+      entry.kind === 'comparison' && entry.original.source?.side === 'single'
+        ? [entry.original.source.entryId]
+        : [],
+    ),
+  )
+  if (original?.source?.side === 'single') replacedSingles.add(original.source.entryId)
   const end = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const count = [...draft].length
@@ -64,7 +72,10 @@ export default function TextJudgmentLab({
   const comparisonSide = (snapshot: JudgmentSnapshot, source: ResultRef, title: string) => {
     const heading = `judgment-${source.entryId}-${source.side}`
     return (
-      <section className="judgment-comparison-side" aria-labelledby={heading}>
+      <section
+        className={`judgment-comparison-side judgment-comparison-${source.side}`}
+        aria-labelledby={heading}
+      >
         <h2 id={heading}>{title}</h2>
         <p className="judgment-comparison-text">{snapshot.text}</p>
         <TextJudgmentResult result={snapshot.result} labelledBy={heading} />
@@ -97,7 +108,13 @@ export default function TextJudgmentLab({
         {entries.map((entry) =>
           entry.kind === 'comparison' ? (
             <article key={entry.id} className="judgment-comparison" aria-label="成功した比較結果">
-              <p role="status">比較の判定が完了しました。</p>
+              <header className="judgment-comparison-header">
+                <h2>比較結果</h2>
+                <span role="status">比較の判定が完了しました。</span>
+              </header>
+              <p className="judgment-hint judgment-comparison-note">
+                元の判定を使い、書き換え後だけを判定しました。
+              </p>
               <div className="judgment-comparison-columns">
                 {comparisonSide(
                   entry.original,
@@ -112,7 +129,7 @@ export default function TextJudgmentLab({
               </div>
             </article>
           ) : (
-            <div key={entry.id} className="judgment-turn">
+            <div key={entry.id} className="judgment-turn" hidden={replacedSingles.has(entry.id)}>
               <div className="judgment-user">
                 <span className="judgment-speaker">あなた</span>
                 <p className="judgment-bubble">{entry.text}</p>

@@ -9,7 +9,7 @@ export default function TextJudgmentResult({
 }: Readonly<{ result: Immutable<JudgmentResponse>; labelledBy?: string }>) {
   const { intent, sentiment, urgency } = result.answers
   return (
-    <>
+    <div className="judgment-result">
       <div className="judgment-row">
         <div className="judgment-label">
           <h2>文章の分類</h2>
@@ -18,7 +18,10 @@ export default function TextJudgmentResult({
         <strong className="judgment-value">{intentLabels[intent.choice]}</strong>
         <div className="judgment-probabilities">
           {(Object.keys(intentLabels) as Intent[]).map((key) => (
-            <div className="judgment-probability" key={key}>
+            <div
+              className={`judgment-probability${key === intent.choice ? ' judgment-probability-selected' : ''}`}
+              key={key}
+            >
               <span>{intentLabels[key]}</span>
               <meter
                 min="0"
@@ -58,6 +61,7 @@ export default function TextJudgmentResult({
           <span>Noul</span>
         </div>
         <p className="judgment-value">{percent(urgency.noul)}</p>
+        <meter min="0" max="1" value={urgency.noul} aria-label="急ぎの要望の確率" />
         <p className="judgment-hint">早い対応を求めている確率</p>
       </div>
       <p className="judgment-hint">数値はモデルの判定です。</p>
@@ -70,6 +74,6 @@ export default function TextJudgmentResult({
           {JSON.stringify(result, null, 2)}
         </pre>
       </details>
-    </>
+    </div>
   )
 }

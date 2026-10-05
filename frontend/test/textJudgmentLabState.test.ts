@@ -49,7 +49,7 @@ describe('LabState 選択と編集（task 1.1）', () => {
     expect(selected.composer).toEqual({
       kind: 'editing',
       draft: text,
-      original: { text, result: { ...fixture, model } },
+      original: { text, result: { ...fixture, model }, source: ref },
       error: null,
     })
     expect(selected.entries).toBe(state.entries)
@@ -93,7 +93,7 @@ describe('LabState 選択と編集（task 1.1）', () => {
     const edited = transition(selected, { type: 'edit', draft: '編集した文章' })
     if (selected.composer.kind !== 'editing' || edited.composer.kind !== 'editing')
       throw new Error('編集中ではありません')
-    expect(edited.composer.original).toEqual({ text: '元の文章', result: fixture })
+    expect(edited.composer.original).toEqual({ text: '元の文章', result: fixture, source })
     expect(edited.composer.original).toBe(selected.composer.original)
     expect(selected.composer.draft).toBe('元の文章')
     expect(edited.composer.original?.result.answers).not.toBe(response.answers)
@@ -115,7 +115,7 @@ describe('LabState 選択と編集（task 1.1）', () => {
     ).toEqual({
       kind: 'editing',
       draft: '元の文章',
-      original: { text: '元の文章', result: fixture },
+      original: { text: '元の文章', result: fixture, source },
       error: null,
     })
   })
@@ -238,7 +238,7 @@ describe('LabState 判定の開始と完了（task 1.2）', () => {
         id: 5,
         draft: '  書き換え\n文章  ',
         text: '書き換え\n文章',
-        original: { text: '元の文章', result: fixture },
+        original: { text: '元の文章', result: fixture, source },
       },
     })
     const response = { ...result(), model: 'rewritten-model', elapsedMs: 99.9 }
@@ -247,7 +247,7 @@ describe('LabState 判定の開始と完了（task 1.2）', () => {
     expect(completed.entries[4]).toEqual({
       kind: 'comparison',
       id: 5,
-      original: { text: '元の文章', result: fixture },
+      original: { text: '元の文章', result: fixture, source },
       rewritten: { text: '書き換え\n文章', result: response },
     })
     response.answers.intent.confidence = 0
@@ -274,7 +274,7 @@ describe('LabState 判定の開始と完了（task 1.2）', () => {
     expect(completed.entries[4]).toEqual({
       kind: 'comparison',
       id: 6,
-      original: { text: '元の文章', result: fixture },
+      original: { text: '元の文章', result: fixture, source },
       rewritten: { text: '修正して再送', result: fixture },
     })
   })
@@ -320,7 +320,11 @@ describe('LabState 判定の開始と完了（task 1.2）', () => {
     expect(done.entries[4]).toEqual({
       kind: 'comparison',
       id: 6,
-      original: { text: '比較の後', result: { ...fixture, model: 'different-model' } },
+      original: {
+        text: '比較の後',
+        result: { ...fixture, model: 'different-model' },
+        source: { entryId: 4, side: 'rewritten' },
+      },
       rewritten: { text: '比較の後', result: fixture },
     })
   })
@@ -354,7 +358,7 @@ describe('LabState 判定の開始と完了（task 1.2）', () => {
       expect(repeated.entries[5]).toEqual({
         kind: 'comparison',
         id: 6,
-        original: { text: '元の文章', result: fixture },
+        original: { text: '元の文章', result: fixture, source: { entryId: 5, side } },
         rewritten: { text: '元の文章', result: fixture },
       })
     },
