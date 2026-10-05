@@ -52,7 +52,7 @@ LIFF は `VITE_LIFF_ID` から `https://liff.line.me/${VITE_LIFF_ID}` を導出�
 docker compose run --rm backend python manage.py derive_line_owner_digest
 ```
 
-既存の Backend 専用 `LINE_USER_ID` を入力源にする場合だけ、`--use-line-user-id` を指定できます。このコマンドも本人識別情報自体は出力しません。
+既存の Backend 専用 `LINE_USER_ID` を本人digest生成の入力源にする場合だけ、`--use-line-user-id` を指定できます。現在の配信は登録済みの配信先を使うため、この環境変数の設定は配信に不要です。通常は上記の非表示入力を使います。どちらの方法でも本人識別情報自体は出力しません。
 
 ```bash
 docker compose run --rm backend python manage.py derive_line_owner_digest --use-line-user-id
@@ -76,7 +76,7 @@ LINE Developers Consoleで開発用Mini App channelを開き、次の値を確�
 | `TEXT_JUDGMENT_LAB_ORIGIN` | `https://${NGROK_DOMAIN}`。末尾slash、path、portなし | Backendのみ |
 | `TYPESAFE_API_KEY` | TypeSafe/Jevから発行されたAPI key | Backend秘密情報 |
 | `TEXT_JUDGMENT_LAB_MODEL` | 固定値`jev-1.13.0` | Backendのみ |
-| `TEXT_JUDGMENT_LAB_ENABLED` | 全ラボ実装と検証が完了するまでは`false`、実機確認時は`true` | Backendのみ |
+| `TEXT_JUDGMENT_LAB_ENABLED` | 既定は`false`。必要な設定を揃え、ラボを利用するときだけ`true` | Backendのみ |
 
 #### 本人digestの生成
 
@@ -123,7 +123,7 @@ unfunction derive_text_judgment_lab_owner_digest
 
 Mini App ID tokenは、LINEが現在のログイン利用者へ発行する有効期間の短いJWTです。`.env`へ保存する設定値ではありません。Mini AppのLIFF設定では`openid` scopeを有効にします。ID tokenの取得条件と有効期間はLINE公式の[`liff.getIDToken()`リファレンス](https://developers.line.biz/en/reference/liff/#get-id-token)を参照してください。
 
-実装後の通常フローでは、Frontendがページ起動時に次の処理を行います。
+通常フローでは、Frontendがページ起動時に次の処理を行います。
 
 ```typescript
 import liff from '@line/liff'
@@ -136,7 +136,7 @@ Frontendは取得した生ID tokenをラボAPIの`Authorization: Bearer ...`へ�
 
 通常、利用者がID tokenを求めたりコピーしたりする操作はありません。Frontendの認証実装が`liff.getIDToken()`を呼び、そのままBackendへ送ります。
 
-認証実装後にID token検証を手動確認する必要がある場合だけ、ブラウザ開発者ツールのSourcesで`const idToken = liff.getIDToken()`の直後にbreakpointを置き、ローカル変数`idToken`を一時的にコピーして次を実行します。iPhone上のMini Appを調べる場合はmacOS SafariのWebインスペクタから対象ページへ接続します。tokenをコマンドラインへ直接書かず、非表示入力します。確認後はtokenと応答を保存せず破棄します。
+ID token検証を手動確認する必要がある場合だけ、ブラウザ開発者ツールのSourcesで`const idToken = liff.getIDToken()`の直後にbreakpointを置き、ローカル変数`idToken`を一時的にコピーして次を実行します。iPhone上のMini Appを調べる場合はmacOS SafariのWebインスペクタから対象ページへ接続します。tokenをコマンドラインへ直接書かず、非表示入力します。確認後はtokenと応答を保存せず破棄します。
 
 ```zsh
 verify_text_judgment_lab_id_token() {
@@ -216,7 +216,9 @@ unset LINE_BOT_TOKEN
 
 登録後はチャネルを有効化し、［接続を確認］を実行します。［接続できました］と表示されたら、表示されたWebhook URLをLINE Developers Consoleの［Messaging API設定］へ設定し、［検証］を実行してください。接続確認はアクセストークンとBot user IDの組み合わせだけを確認するため、チャネルシークレットとWebhookはLINE Developers Console側の検証成功まで確認できません。
 
-登録済み資格情報を正常に利用できることを確認した後、従来の `LINE_CHANNEL_SECRET` がローカル `.env` に残っていれば削除してください。既存配信が利用する `LINE_CHANNEL_ACCESS_TOKEN` と `LINE_USER_ID` は、配信機能の移行が完了するまで維持します。
+現在の配信は、選択した登録済みチャネルの暗号化資格情報と、本人連携済みの配信先を使います。固定設定の `LINE_CHANNEL_ACCESS_TOKEN` と `LINE_USER_ID` は配信に使用せず、選択した資格情報が利用できない場合も固定設定へ切り替えません。
+
+登録済み資格情報を正常に利用できることを確認した後、旧設定の `LINE_CHANNEL_SECRET` と `LINE_CHANNEL_ACCESS_TOKEN` がローカル `.env` に残っていれば削除してください。`LINE_USER_ID` も、上記の本人digest生成コマンドで `--use-line-user-id` を使わない場合は削除できます。
 
 新しいチャネルの登録時は、LINE Developers Consoleで確認したprovider IDを入力します。provider IDは1〜64文字のASCII数字列としてそのまま保存され、空白除去・整数化・leading zero除去は行いません。既存チャネルはmigration後もprovider未設定のまま利用できますが、アカウント連携候補には表示されません。既存チャネルの公開UUIDを指定して、次の非対話コマンドで安全にbackfillします。
 
@@ -238,13 +240,23 @@ docker compose run --rm backend python manage.py manage_line_channel \
 
 ローテーション中の keyring とbackupを同時に失うと保存済み資格情報を復号できません。ローテーション完了前、または旧backupを復元する可能性がある間は旧鍵を破棄しないでください。
 
+### 登録済み配信先へのテスト配信
+
+1. LIFFから管理画面へログインします。
+2. チャネル管理画面（`/liff/channels`）でチャネルを登録・有効化し、接続とWebhookを確認します。
+3. アカウント管理画面（`/liff/account`）で本人の配信先を登録・有効化し、対象のLINE公式アカウントを友だち追加します。画面で友だち状態と配信可否を確認します。
+4. 配信画面（`/liff/deliveries`）でチャネルと配信先を選び、本文をプレビューしてから送信します。
+5. 送信結果を確認します。結果不明の場合は同じ操作の状態を確認し、新しい送信を自動で始めません。受取確認を要求した場合は、送信結果とは別に確認状態を追跡します。
+
+配信APIは有効なownerセッションを必要とします。プレビュー、送信、状態確認のPOSTでは、設定済みHTTPS originと`Origin`ヘッダーの完全一致、およびCSRF tokenを検証します。
+
 ## スマートフォンからの確認
 
 ngrokの開発用ドメインを使うと、スマートフォンのLINEアプリからローカルのFrontendと`/api`へHTTPSでアクセスできます。
 
-起動後は、設定した開発用ドメイン（例: `https://your-domain.ngrok-free.app`）でFrontendを確認できます。`/api`はViteの既存proxyを経由してBackendへ転送されます。相談本文やtokenをトンネル側に記録しないため、ngrokのHTTP inspectionは無効化しており、ローカル検査画面も公開しません。
+起動後は、設定した開発用ドメイン（例: `https://your-domain.ngrok-free.app`）でFrontendを確認できます。`/api`はViteの既存proxyを経由してBackendへ転送されます。文章やtokenをトンネル側に記録しないため、ngrokのHTTP inspectionは無効化しており、ローカル検査画面も公開しません。
 
-現時点の配信APIはローカル利用を前提として認証がないため、公開URLを共有せず、利用後は`docker compose down`で全サービスとトンネルを停止します。ngrokのauthtokenはLINEのチャネル資格情報とは別の秘密情報として`.env`だけで管理します。
+管理画面と配信APIはownerセッション、文章判定ラボはMini App ID tokenのBearer認証、Webhookはチャネル別の署名検証で保護します。Compose起動中は開発用HTTPSトンネルも有効になるため、公開URLを共有せず、利用後は`docker compose down`で全サービスとトンネルを停止します。ngrokのauthtokenはLINEのチャネル資格情報とは別の秘密情報として`.env`だけで管理します。
 
 ## ローカル品質チェック
 

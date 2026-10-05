@@ -32,6 +32,7 @@ ADR は連番付きファイル名を使い、実装の網羅説明ではなく�
 - Backend app 間は相手 app の Model ではなく、公開型と明示的な adapter／builder を依存境界にする
 - 複数 app の参照整合性を伴う削除は、各 app の公開 reference contract を composition root で束ね、削除側から相手 Model を直接探索しない
 - Frontend と Backend など実行サービス間の契約は HTTP API で表現し、同一 Backend 内の app 間は公開 typed contract を composition root で合成する
+- 文章判定ラボは独立した route と認証 gate、Backend app を持ち、管理画面の owner session や共有 state に接続しない。共通の LIFF adapter とページ表示部品は再利用できるが、本人確認と判定データの寿命はラボが所有する。詳細は [text-judgment-lab.md](text-judgment-lab.md) を参照する
 
 ## コード配置の原則
 
@@ -41,3 +42,5 @@ ADR は連番付きファイル名を使い、実装の網羅説明ではなく�
 - 新しいコードが既存パターンに従う限り、この文書へファイル単位の追記を必要としない
 
 _移行日: 2026-09-27。サービス固有の配置・命名・import・テスト規則を各AGENTSへ移動。_
+
+_更新日: 2026-10-05。文章判定ラボの独立した認証・データ寿命と共通部品の再利用境界を反映。_
