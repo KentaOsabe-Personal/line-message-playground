@@ -192,4 +192,117 @@ describe('自由文の文章判定ラボ', () => {
     expect(container.textContent).toContain('送信回数が上限に達しました')
     expect(container.textContent).not.toContain('文章の分類')
   })
+  const button = (label: string) => {
+    const found = [...container.querySelectorAll('button')].find(
+      (item) => item.textContent === label,
+    )
+    if (!found) throw new Error(`missing button: ${label}`)
+    return found
+  }
+  const click = async (label: string) => act(async () => button(label).click())
+
+  // テストケース: 通常成功から入力置換の拒否・承認、中止、比較成功と両側の再選択を行う。
+  // 期待値: 入力・比較元・focusを保持または更新し、成功した比較を一組だけ追加する。
+  test('selects, confirms, cancels, compares, and reuses either result', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await render()
+    await type('元の文章')
+    await send()
+    await click('書き換えて試す')
+    expect(container.querySelector('textarea')?.value).toBe('元の文章')
+    expect(document.activeElement).toBe(container.querySelector('textarea'))
+    expect(container.querySelector('.judgment-source')?.textContent).toContain('元の文章')
+    await type('  \n')
+    const origin = button('書き換えて試す')
+    await click('書き換えて試す')
+    expect(confirm).toHaveBeenCalledWith('入力中の文章を選択した文章に置き換えますか？')
+    expect(container.querySelector('textarea')?.value).toBe('  \n')
+    expect(document.activeElement).toBe(origin)
+    confirm.mockReturnValue(true)
+    await click('書き換えて試す')
+    expect(container.querySelector('textarea')?.value).toBe('元の文章')
+    await type('編集を残す')
+    await click('比較をやめる')
+    expect(container.querySelector('.judgment-source')).toBeNull()
+    expect(container.querySelector('textarea')?.value).toBe('編集を残す')
+    expect(document.activeElement).toBe(container.querySelector('textarea'))
+    await click('書き換えて試す')
+    await type('書き換えた文章')
+    await send()
+    expect(api.judge).toHaveBeenCalledTimes(2)
+    expect(api.judge).toHaveBeenLastCalledWith(
+      'test-token',
+      { contractVersion: 3, text: '書き換えた文章' },
+      expect.any(AbortSignal),
+    )
+    expect(container.querySelectorAll('.judgment-turn')).toHaveLength(1)
+    expect(container.querySelectorAll('.judgment-comparison')).toHaveLength(1)
+    expect(container.querySelector('textarea')?.value).toBe('')
+    expect(container.querySelector('.judgment-source')).toBeNull()
+    expect(document.activeElement).toBe(container.querySelector('textarea'))
+    const sides = container.querySelectorAll('.judgment-comparison section')
+    expect(sides[0].textContent).toContain('元の文章')
+    expect(sides[1].textContent).toContain('書き換えた文章')
+    await act(async () => sides[1].querySelector('button')!.click())
+    expect(container.querySelector('textarea')?.value).toBe('書き換えた文章')
+    await click('比較をやめる')
+    await act(async () => sides[0].querySelector('button')!.click())
+    expect(container.querySelector('textarea')?.value).toBe('元の文章')
+    expect(container.querySelector('.judgment-footnote')?.textContent).toContain(
+      '個人情報・秘密情報',
+    )
+  })
+
+  // テストケース: 比較の判定待ちと利用資格喪失を画面へ反映する。
+  // 期待値: 送信時の入力と比較元を表示し、変更操作をすべて止め、失敗を案内する。
+  test('keeps pending comparison readable and disables all mutations without access', async () => {
+    await render()
+    await type('元です')
+    await send()
+    await click('書き換えて試す')
+    await type('  書き換え\n本文  ')
+    api.judge = vi.fn().mockReturnValue(new Promise(() => {}))
+    await send()
+    expect(container.querySelector('textarea')?.value).toBe('  書き換え\n本文  ')
+    expect(container.querySelector('textarea')?.readOnly).toBe(true)
+    expect([...container.querySelectorAll('button')].every((item) => item.disabled)).toBe(true)
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('判定中')
+    context = { ...context, access: { kind: 'unavailable' } }
+    await render()
+    expect(container.querySelector('.judgment-source')?.textContent).toContain('元です')
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('中断')
+    expect([...container.querySelectorAll('button')].every((item) => item.disabled)).toBe(true)
+    expect(container.querySelector('textarea')?.disabled).toBe(true)
+  })
+  // テストケース: 比較の各側の見出しと、詳細をキーボードで操作する要素を関連付ける。
+  // 期待値: 独立article内で元・書き換え後のsectionを順に並べ、見出しとの関連とJSONへのfocus経路を持つ。
+  test('provides full-width comparison sections and keyboard-accessible raw responses', async () => {
+    await render()
+    await type('元の文章\n二行目')
+    await send()
+    await click('書き換えて試す')
+    await type('新しい文章\n二行目')
+    await send()
+    const article = container.querySelector('article.judgment-comparison')!
+    expect(article.parentElement?.getAttribute('role')).toBe('log')
+    expect(article.closest('.judgment-assistant, .judgment-user')).toBeNull()
+    const sides = article.querySelectorAll('section')
+    expect([...sides].map((side) => side.querySelector('h2')?.textContent)).toEqual([
+      '元の文章',
+      '書き換え後',
+    ])
+    for (const side of sides) {
+      const heading = side.querySelector('h2')!.id
+      expect(side.getAttribute('aria-labelledby')).toBe(heading)
+      expect(side.querySelector('button')?.getAttribute('aria-describedby')).toBe(heading)
+      expect(side.querySelector('summary')?.getAttribute('aria-describedby')).toBe(heading)
+      const raw = side.querySelector('pre')!
+      expect(raw.tabIndex).toBe(0)
+      expect(raw.getAttribute('aria-describedby')).toBe(heading)
+      side.querySelector('details')!.open = true
+      raw.focus()
+      expect(document.activeElement).toBe(raw)
+      expect(JSON.parse(raw.textContent)).toEqual(result)
+    }
+  })
 })

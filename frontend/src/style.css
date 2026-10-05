@@ -2310,3 +2310,65 @@ main.lab-page-frame {
     position: static;
   }
 }
+
+/* 比較結果はチャット列の全幅を使い、画面幅にかかわらず両側のDOM順を維持する。 */
+.simple-judgment-chat .judgment-comparison,
+.simple-judgment-chat .judgment-comparison-columns,
+.simple-judgment-chat .judgment-comparison-side,
+.simple-judgment-chat .judgment-source {
+  min-width: 0;
+}
+.simple-judgment-chat .judgment-comparison {
+  width: 100%;
+}
+.simple-judgment-chat .judgment-comparison-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--spacing) * 4);
+}
+.simple-judgment-chat .judgment-comparison-side {
+  padding: calc(var(--spacing) * 4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow-wrap: anywhere;
+}
+.simple-judgment-chat .judgment-comparison-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.simple-judgment-chat .judgment-meta {
+  overflow-wrap: anywhere;
+}
+.simple-judgment-chat .judgment-raw pre {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.simple-judgment-chat .judgment-probability {
+  grid-template-columns: 3.5rem minmax(0, 1fr) 4rem;
+}
+.simple-judgment-chat button[type='button'] {
+  margin-top: calc(var(--spacing) * 3);
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  font: inherit;
+  cursor: pointer;
+}
+.simple-judgment-chat button[type='button']:disabled {
+  color: var(--color-muted);
+  cursor: default;
+}
+.simple-judgment-chat :is(button, textarea, summary, pre):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--spacing);
+}
+@media (min-width: 768px) {
+  .simple-judgment-chat .judgment-comparison-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
