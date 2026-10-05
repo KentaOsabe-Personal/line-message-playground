@@ -148,3 +148,16 @@ _更新日: 2026-08-29。Phase 3としてFrontendのアプリ画面分割を追�
 通知相談の会話・固定案内・採用閾値・実験テーマを撤去し、業務操作・LLM比較・集計は追加しない。既存LIFF認証とJev通信・利用制限を再利用する。会話と結果はページ内メモリのみ。既存の管理認証・LINE配信の契約は維持する。
 
 仕様と受入条件は[text-judgment-lab](../specs/text-judgment-lab/requirements.md)、規模判定は[brief](../specs/text-judgment-lab/brief.md)を参照。1成果・5実行タスクでPASS (single-spec)。Dependencies: line-account-linking, app-screen-separation。
+
+### 現行の追加機能: 書き換え比較
+
+2026-10-05時点では、同じ Jev による2文章の判定比較を `text-judgment-lab-comparison` として実装している。自由文ラボへ簡素化した時点の範囲を新規 spec で拡張し、異なるモデル間の比較は引き続き対象外とする。
+
+判定成功済みの文章と結果を比較元に固定し、書き換え後だけを既存 API へ送る。比較は Frontend の現在のページ内で完結し、Backend・DB・既存 API 契約を拡張しない。失敗時や利用資格の確認中・失効時は、画面が存続する間の入力と比較元を保ち、再許可後も自動送信しない。画面離脱と再読み込みで消去する。
+
+- [x] text-judgment-lab -- 自由文と固定3質問の判定を、本人向け Mini App の独立した認証境界で提供する。Dependencies: line-account-linking, app-screen-separation
+- [x] text-judgment-lab-comparison -- 判定成功結果から書き換え、元の結果と新しい判定を一組で比較する。Dependencies: text-judgment-lab
+
+比較の受入条件は [requirements](../specs/text-judgment-lab-comparison/requirements.md)、実装タスクは [tasks](../specs/text-judgment-lab-comparison/tasks.md)、現在の共通契約は [text-judgment-lab.md](text-judgment-lab.md) を参照する。承認時の規模判定は [brief](../specs/text-judgment-lab-comparison/brief.md) に保持する。
+
+_更新日: 2026-10-05。既存 Phase 4 の判断履歴を保持し、コードと完了済みタスクに合わせて書き換え比較の現在範囲を追記。_

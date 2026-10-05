@@ -2,6 +2,8 @@
 
 LINE送信、LIFF／LINE Login、チャネル資格情報、Webhook、リッチメニューの実装・設計・画面・API契約・検証に適用します。core steeringの安全境界を具体化する文書です。
 
+LINE ミニアプリの文章判定ラボは、以下の管理画面向け session 認証とは別の Bearer 認証境界です。専用 ID token の検証と Jev 判定の契約は [text-judgment-lab.md](text-judgment-lab.md) を参照します。
+
 ## LINE 配信
 
 送信処理は Backend のサービス境界に閉じ込めます。プレビュー時に正規化済み内容を確認トークンへ結び付け、送信時に内容の一致を再検証します。トークンは不透明な値とし、本文や操作 ID を含めません。
@@ -34,7 +36,7 @@ follow／unfollow handler は、active owner、provider、LINE subject、チャ�
 
 友だち状態、最終イベントの順序 cursor、PII を含まない同期監査は、行ロックを使った同一 transaction で確定します。登録時刻を baseline とし、`(occurred_at_ms, webhookEventId の ASCII 順)` を比較して、遅延、重複、同時刻、同状態のイベントを到着順に依存しない単一状態へ収束させます。message／postback、reply、配信は別 handler の責任です。
 
-message／postback handler は、完全一致の静的 command／action registry と既存の owner・provider・recipient 照合を通過した入力だけを処理します。現在の command は `/ping` から固定 `pong` 一件への reply に限定し、production の postback action registry は明示登録がない限り空です。未知、不正、未連携、group／room source は identity や recipient を作らず、外部作用のない結果として扱います。
+message／postback handler は、完全一致の静的 command／action registry と既存の owner・provider・recipient 照合を通過した入力だけを処理します。現在の command は `/ping` から固定 `pong` 一件への reply に限定します。production の postback action registry は、Webhook の composition root が `delivery.received` を明示登録し、署名済み capability による受取確認を配信 app の handler へ委譲します。その他の action も明示登録されたものだけを扱い、未知、不正、未連携、group／room source は identity や recipient を作らず、外部作用のない結果として扱います。
 
 Webhook request は View 入口から単一の monotonic deadline を共有し、handler を local と deadline-managed external の実行プロファイルへ分けます。LINE reply は同一チャネルの資格情報と一回限りの reply token を使い、自動再試行せず、期限不足なら開始しません。accepted、rejected、unknown を区別し、受信内容、token、LINE user ID、access token を保存しない interaction 監査へ収束させます。
 
@@ -51,3 +53,5 @@ LINE の rich-menu mutation には retry key がないため、タイムアウ�
 無効化前の評価と解除はリッチメニュー app の headless typed port を介し、所有権を証明できるチャネル既定資源だけを対象にします。外部既定、結果不明、後片付け待ち、revision 競合ではチャネルを無効化せず、確認待ちとして実状態の再取得を要求します。再有効化も owner、provider、revision を再検証し、必要な場合は資格情報ペアの修復と同じ操作で行います。mutation の有効化には reference probe、履歴 purge、無効化ライフサイクル、統合 marker の全条件を要求します。
 
 _移行日: 2026-09-27。tech.mdの既存契約を内容を変えず条件付き参照へ移動。_
+
+_更新日: 2026-10-05。受取確認 action の production 登録を現行 composition root へ同期し、Mini App ラボの独立した認証契約への参照を追加。_

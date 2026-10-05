@@ -9,6 +9,7 @@ Browser ---------------------> Vite (/api proxy) -> Django REST API -> MySQL
 LINE / Smartphone -> ngrok --/                        |
                          LIFF / LINE Login ------------+
                                                       +-> LINE Messaging API
+                                                      +-> Jev API (文章判定)
 ```
 
 ブラウザは相対パス `/api/...` で Backend と通信します。データベースと外部 API の認証情報には Backend だけがアクセスします。
@@ -16,6 +17,8 @@ LINE / Smartphone -> ngrok --/                        |
 ngrokは通常のDocker Composeサービスとして他のサービスと一緒に起動します。単一のHTTPSトンネルをFrontendへ接続し、`/api`は既存のVite proxyを経由させます。
 
 認証付きの owner 操作と LINE Webhook は同じ Django API に到達しますが、信頼境界は分けます。owner 操作は Backend が検証した LINE identity、サーバー側 session、exact-origin CSRF で保護し、公開 Webhook はチャネル別 URL と署名検証によって認証します。
+
+文章判定ラボの認証は管理画面の owner session と分けます。専用 Mini App の ID token を Bearer として送り、Backend が毎回検証します。Frontend は cookie を送らず、Backend が exact origin と本人 digest を照合します。Jev への判定通信と API key は Backend に閉じ込めます。詳細は [text-judgment-lab.md](text-judgment-lab.md) を参照します。
 
 ## コア技術
 
@@ -26,6 +29,7 @@ ngrokは通常のDocker Composeサービスとして他のサービスと一緒�
 - **Database**: MySQL 8.4、文字セット `utf8mb4`
 - **Runtime**: Docker、Docker Compose
 - **LINE integration**: LIFF SDK、LINE Bot SDK、HTTPX
+- **Text judgment**: HTTPX 経由の Jev API と固定モデル。専用 SDK は使用しない
 - **Credential encryption**: `cryptography` の Fernet／MultiFernet
 - **Deterministic image generation**: Pillow と版・digest を固定した同梱日本語フォント
 
@@ -52,6 +56,7 @@ Frontendの配色は共通のテーマトークンで管理します。既定の
 - LINE のトークン、シークレット、ユーザー ID は Backend サービスだけへ渡す
 - Messaging API チャネルのアクセストークンとシークレットは認証付き暗号で DB へ保存し、専用 keyring だけを Backend の環境変数へ渡す
 - LINE Login の secret と owner allowlist 用 digest は Backend に閉じ込め、LIFF ID だけを公開設定として Frontend へ渡す
+- 文章判定ラボの API key と本人 digest は Backend の環境変数へ隔離し、専用 LIFF ID だけを Frontend の公開設定にする。ラボ有効時も設定不備や `DEBUG=true` では利用を拒否する
 - ngrok の authtoken は開発インフラ用の秘密情報として `.env` から ngrok サービスだけへ渡す
 - リポジトリ内の既定パスワードや secret はローカル開発専用とし、本番相当環境では必ず上書きする
 - 秘密情報を含む DB の general query log は無効にし、ログや例外は秘密値を保持しない安全な分類へ変換する
@@ -82,7 +87,7 @@ docker compose down
 
 `docker compose down -v` はデータベース volume も削除する破壊的操作として区別します。
 
-ngrokの割り当て済み開発用ドメインを`NGROK_DOMAIN`、authtokenを`NGROK_AUTHTOKEN`として`.env`へ設定します。Viteはそのドメインだけを追加Hostとして許可し、任意Hostを許可しません。ngrokの検査APIはホストの`127.0.0.1:4040`にだけ公開します。Compose起動中は公開トンネルも有効になるため、公開URLを共有せず、利用後は全サービスを停止します。
+ngrokの割り当て済み開発用ドメインを`NGROK_DOMAIN`、authtokenを`NGROK_AUTHTOKEN`として`.env`へ設定します。Viteはそのドメインだけを追加Hostとして許可し、任意Hostを許可しません。ngrokの通信検査は`--inspect=false`で無効にし、検査APIのポートはホストへ公開しません。ngrokはFrontendのhealthcheck成功後に起動します。Compose起動中は公開トンネルも有効になるため、公開URLを共有せず、利用後は全サービスを停止します。
 
 ## 重要な技術判断
 
@@ -95,3 +100,5 @@ Backend は MySQL の healthcheck 成功後に起動し、起動時に migration
 送信、認証・資格情報、Webhook、リッチメニューの詳細は [line-integration.md](line-integration.md) にあります。これらの機能・画面・契約の設計や変更時に読みます。結果不明を成功扱いせず、外部作用の自動再送を避け、所有権を証明できない外部資源を変更・削除しない原則を守ります。
 
 _移行日: 2026-09-27。サービス固有規則とLINE契約を局所・条件付き参照へ移動。_
+
+_更新日: 2026-10-05。文章判定ラボの認証・外部通信境界を追加し、ngrok の検査無効化と起動条件を compose.yaml へ同期。_
