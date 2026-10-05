@@ -233,7 +233,12 @@ export default function TextJudgmentLabAuthGate({
 
   return (
     <>
-      {access.kind === 'initializing' && <p role="status">利用資格を確認しています…</p>}
+      {access.kind === 'initializing' && (
+        <p role="status">
+          利用資格を確認しています…
+          {showContent && '会話は読取専用です。'}
+        </p>
+      )}
       {access.kind === 'unavailable' && (
         <section role="alert">
           <p>利用資格を確認できませんでした。会話は読取専用です。</p>
@@ -256,11 +261,11 @@ export default function TextJudgmentLabAuthGate({
             {access.reason === 'wrong_channel'
               ? '対応するLINEミニアプリから開き直してください。'
               : 'このラボは利用できません。'}
+            {showContent && '会話は読取専用です。'}
           </p>
         </section>
       )}
-      {(access.kind === 'authorized' || (showContent && access.kind !== 'denied')) &&
-        protectedContent}
+      {(access.kind === 'authorized' || showContent) && protectedContent}
     </>
   )
 }

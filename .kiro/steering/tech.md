@@ -31,6 +31,8 @@ ngrokは通常のDocker Composeサービスとして他のサービスと一緒�
 
 Frontend は ES Modules、React JSX transform、ES2022 を前提とします。Backend は日本語、Asia/Tokyo、timezone-aware datetime を既定とします。
 
+Frontendの配色は共通のテーマトークンで管理します。既定の「自動」では`prefers-color-scheme`でブラウザが通知する配色に追従し、「ライト」「ダーク」を選んだ場合は手動設定を優先します。選択はブラウザのlocalStorageに保存し、保存できない場合も画面を開いている間は反映します。暗い背景で状態を示す文字色と、白い文字を表示する操作用の背景色には別のトークンを使い、両配色でコントラストを保ちます。
+
 ## 依存関係の管理
 
 - Frontend は `package-lock.json` と `npm ci` で再現可能なインストールを行う

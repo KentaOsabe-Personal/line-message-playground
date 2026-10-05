@@ -50,7 +50,11 @@
   gap: 0;
   border: 1px solid color-mix(in srgb, var(--color-border) 58%, transparent);
   border-radius: calc(var(--radius-card) * 1.65);
-  background: linear-gradient(90deg, var(--color-line-strong) 0 54%, var(--color-surface) 54% 100%);
+  background: linear-gradient(
+    90deg,
+    var(--color-action-strong) 0 54%,
+    var(--color-surface) 54% 100%
+  );
   box-shadow: 0 28px 90px color-mix(in srgb, var(--color-text) 17%, transparent);
   backdrop-filter: none;
 }
@@ -101,7 +105,7 @@
   flex: 0 0 auto;
   place-items: center;
   border-radius: var(--radius-control);
-  color: var(--color-line-strong);
+  color: var(--color-action-strong);
   background: var(--color-on-action);
 }
 
@@ -211,7 +215,7 @@
   border: 0;
   border-radius: calc(var(--radius-control) * 1.15);
   color: var(--color-on-action);
-  background: var(--color-line);
+  background: var(--color-action);
   box-shadow: 0 12px 28px color-mix(in srgb, var(--color-line) 27%, transparent);
   font: inherit;
   font-weight: 800;
@@ -227,8 +231,8 @@
 }
 
 .auth-page .line-login-button:hover {
-  background: var(--color-line-strong);
-  box-shadow: 0 15px 34px color-mix(in srgb, var(--color-line-strong) 31%, transparent);
+  background: var(--color-action-strong);
+  box-shadow: 0 15px 34px color-mix(in srgb, var(--color-action-strong) 31%, transparent);
   transform: translateY(-2px);
 }
 
@@ -277,7 +281,7 @@
     grid-template-rows: auto minmax(12rem, auto) auto;
     border: 0;
     border-radius: 0;
-    background: var(--color-line-strong);
+    background: var(--color-action-strong);
   }
 
   .auth-page .auth-brand {

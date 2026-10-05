@@ -10,7 +10,7 @@ description: Implement approved Kiro tasks with task-level workers and independe
 ## 前提と実行単位
 
 - `.kiro/specs/<feature>/` の `spec.json`、`requirements.md`、`design.md`、`tasks.md` が必要。tasksの承認がなければ編集前に停止する。
-- core steering、対象サービスAGENTS、関連custom steering、Implementation Notesを読む。未関係のSkill一式は読み込まない。
+- core steering、対象サービスAGENTS、関連custom steeringを読む。Implementation Notesは既存のものがある場合だけ参照する。未関係のSkill一式は読み込まない。
 - project manifest／task runner／CI・既存integration設定／READMEからcanonicalな `TEST_COMMANDS`、`BUILD_COMMANDS`、`SMOKE_COMMANDS`、`STATIC_CHECK_COMMANDS` を確定する。runtime smokeは実成果物が最初の使用可能状態へ達する最小の信頼できる方法。workerへは該当部分を渡す。
 - 開始時に既存差分を記録し、無関係な変更を保護する。
 - **実行task**は子を持たないmajor task `X.`、または子task `X.Y`。子を持つmajorはreview単位のheader。単独majorは自身が1つのreview単位になる。
@@ -28,13 +28,19 @@ description: Implement approved Kiro tasks with task-level workers and independe
 
 controllerは実装reportの `## Status Report`／`- STATUS:`、reviewの `## Review Verdict`／`- VERDICT:` をexactに読む。値が欠落・曖昧なら構造化blockのみを1回再要求し、解釈で補って先へ進まない。
 
+## Implementation Notesの記録方針
+
+手動・自律の両モードで、後続taskの実装・検証・再開に必要な情報がある場合だけ、tasks.mdの `## Implementation Notes` に残します。既存specやコードから分からない制約、依存taskへの注意、再開に必要な未解決事項などを、必要なtaskと用途が分かる形で簡潔に記録します。
+
+毎taskの実装要約、完了報告、検証結果、RED／GREENの履歴はImplementation Notesへ転記しません。レビュー・完了gateに必要なreportと証拠は実行中の記録として保持し、結果は最終回答で報告します。残す情報がなければ、見出しやtask別の記録を作りません。
+
 ## 自律モード
 
 - [implementer-prompt.md](templates/implementer-prompt.md) でfresh workerを**1実行taskずつ**起動する。独立した所有範囲を渡す。workerはtasks.mdとcommitを操作しない。
 - 各iterationでtasks.mdを読み直す。reviewまで全taskのreport・RED・検証・変更fileを保持し、単位承認後は短い要約へ縮約できる。
 - `READY_FOR_REVIEW` は保留recordへ保存する。`NEEDS_CONTEXT` は1回追加contextで再試行し、未解消ならdebug。`BLOCKED` は直ちにskipせずdebugする。
 - review・完了gate通過後、単位の変更fileとtasks.mdだけ明示pathでstageし、1回commitする。`git add -A`／`git add .` は使わない。
-- commit形式は `feat(<feature-name>): complete task <review-unit-number> <description>`。横断的な学びはtasks.mdの `## Implementation Notes` に残す。
+- commit形式は `feat(<feature-name>): complete task <review-unit-number> <description>`。
 
 ## 手動モード
 
@@ -53,7 +59,7 @@ refactor、設定、文書などbehaviorを変更しないtaskではこのflag p
 - `RETRY_TASK`: 現在のworktreeを維持し、新しいimplementerへFIX_PLAN・NOTES・diffを渡して明示編集で修復する。ready後に単位全体を再reviewする。
 - `BLOCK_TASK`: `_Blocked: <ROOT_CAUSE>_` を記録し、依存関係が許す次のtaskへ進む。
 - `STOP_FOR_HUMAN`: blockを記録し、feature実行を停止する。順序・境界・分解が不正なら承認済みtask planの見直しへ返す。
-- debugはtaskごとに最大2round。解決しなければblockedにし、学びをNotesへ記録する。全taskがblockedなら停止する。
+- debugはtaskごとに最大2round。解決しなければblockedにし、再開に必要な情報がある場合だけ上記方針に従ってNotesへ記録する。全taskがblockedなら停止する。
 - 破壊的reset／checkoutで復旧しない。上流specが原因なら所有するspecへ返し、下流の回避策で隠さない。上流修正後は依存specのvalidation／smokeを再確認する。
 - 予期したRED失敗は証拠。GREEN以降・review・regressionの予期しない失敗時は後続へ進まず診断する。
 - implementerを使えない場合はmain contextへfallback可能。独立reviewerが使えなければ `MANUAL_VERIFY_REQUIRED` としてcheckboxを変えず停止する。必要なfresh debuggerが使えない場合も自己承認しない。

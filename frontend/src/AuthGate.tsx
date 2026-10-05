@@ -20,6 +20,7 @@ import { createLiffRuntimeConfig } from './liffConfig'
 import type { LiffRuntimeConfig } from './liffConfig'
 import { parseProtectedPath } from './appRoutes'
 import { createOwnerSessionStorage } from './ownerSessionStorage'
+import ThemeSelector from './ThemeSelector'
 import type { OwnerSessionStorage } from './ownerSessionStorage'
 
 export type AuthGateProps = {
@@ -357,6 +358,7 @@ export default function AuthGate({
               </span>
             </button>
             <p className="auth-assurance">本人確認にはLINE Loginを使用します</p>
+            <ThemeSelector />
           </div>
         </section>
       </main>

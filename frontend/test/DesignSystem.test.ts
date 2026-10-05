@@ -5,10 +5,16 @@ import { describe, expect, test } from 'vitest'
 const stylesheet = readFileSync(`${process.cwd()}/src/style.css`, 'utf8')
 const authStylesheet = readFileSync(`${process.cwd()}/src/auth-login.css`, 'utf8')
 const themeBlock = stylesheet.match(/@theme\s*\{([\s\S]*?)\}/)?.[1] ?? ''
-const implementationCss = stylesheet.replace(/@theme\s*\{[\s\S]*?\}/, '')
+const darkThemePattern = /:root\[data-theme='dark'\]\s*\{([^}]+)\}/
+const darkThemeBlock = stylesheet.match(darkThemePattern)?.[1] ?? ''
+const implementationCss = stylesheet
+  .replace(/@theme\s*\{[\s\S]*?\}/, '')
+  .replace(darkThemePattern, '')
 
-const themeColor = (name: string) => {
-  const value = themeBlock.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`))?.[1]
+const themeColor = (name: string, mode: 'light' | 'dark' = 'light') => {
+  const palette = mode === 'dark' ? darkThemeBlock : ''
+  const pattern = new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`)
+  const value = palette.match(pattern)?.[1] ?? themeBlock.match(pattern)?.[1]
   if (value === undefined) throw new Error(`theme color not found: ${name}`)
   return value
 }
@@ -85,7 +91,7 @@ describe('全画面design system', () => {
       /\.auth-page \.auth-card\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.08fr\)/s,
     )
     expect(authStylesheet).toMatch(
-      /\.auth-page \.line-login-button\s*\{[^}]*width:\s*100%[^}]*background:\s*var\(--color-line\)/s,
+      /\.auth-page \.line-login-button\s*\{[^}]*width:\s*100%[^}]*background:\s*var\(--color-action\)/s,
     )
     expect(authStylesheet).toMatch(
       /@media\s*\(max-width:\s*820px\)[\s\S]*\.auth-page \.auth-card\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
@@ -111,7 +117,7 @@ describe('全画面design system', () => {
       /@media\s*\(max-width:\s*720px\)[\s\S]*\.channel-card-heading[\s\S]*flex-direction:\s*column/s,
     )
     expect(stylesheet).toMatch(
-      /\.channel-admin button\.danger,[\s\S]*\.rich-menu-admin button\.danger\s*\{[^}]*var\(--color-danger\)/s,
+      /\.channel-admin button\.danger,[\s\S]*\.rich-menu-admin button\.danger\s*\{[^}]*var\(--color-danger-action\)/s,
     )
   })
 
@@ -166,5 +172,34 @@ describe('全画面design system', () => {
     expect(contrast(themeColor('--color-border'), surface)).toBeGreaterThanOrEqual(3)
     expect(contrast(themeColor('--color-line'), surface)).toBeGreaterThanOrEqual(3)
     expect(contrast(themeColor('--color-focus'), surface)).toBeGreaterThanOrEqual(3)
+  })
+
+  // テストケース: OSの設定に追従するライト／ダーク配色で、本文、補助文字、状態、主要操作を表示する。
+  // 期待値: 両配色の文字は4.5:1、入力欄の境界とフォーカス表示は3:1以上のコントラストを保つ。
+  test.each(['light', 'dark'] as const)('preserves readable contrast in %s mode', (mode) => {
+    expect(stylesheet).toMatch(/:root\s*\{[^}]*color-scheme:\s*light/s)
+    expect(darkThemeBlock).toMatch(/color-scheme:\s*dark/)
+    expect(darkThemeBlock).not.toBe('')
+    const color = (name: string) => themeColor(name, mode)
+    for (const background of ['--color-page', '--color-surface', '--color-surface-soft']) {
+      for (const foreground of ['--color-text', '--color-muted', '--color-line-strong']) {
+        expect(contrast(color(foreground), color(background))).toBeGreaterThanOrEqual(4.5)
+      }
+      for (const foreground of ['--color-border', '--color-focus']) {
+        expect(contrast(color(foreground), color(background))).toBeGreaterThanOrEqual(3)
+      }
+    }
+    for (const [foreground, background] of [
+      ['--color-line-strong', '--color-success-soft'],
+      ['--color-danger', '--color-danger-soft'],
+      ['--color-warning', '--color-warning-soft'],
+      ['--color-info', '--color-info-soft'],
+      ['--color-muted', '--color-disabled'],
+      ['--color-on-action', '--color-action'],
+      ['--color-on-action', '--color-action-strong'],
+      ['--color-on-action', '--color-danger-action'],
+    ]) {
+      expect(contrast(color(foreground), color(background))).toBeGreaterThanOrEqual(4.5)
+    }
   })
 })
