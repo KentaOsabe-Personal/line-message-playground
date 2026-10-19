@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    ChannelCurrentAPIView,
     ChannelHistoryAPIView,
     ChannelOperationAPIView,
     ChannelPreviewAPIView,
@@ -12,6 +13,7 @@ from .views import (
 app_name = "linerichmenus"
 
 urlpatterns = [
+    path("channels/<uuid:channel_id>/current/", ChannelCurrentAPIView.as_view(), name="current"),
     path("templates/", TemplateListAPIView.as_view(), name="templates"),
     path("channels/<uuid:channel_id>/preview/", ChannelPreviewAPIView.as_view(), name="preview"),
     path("channels/<uuid:channel_id>/state/", ChannelStateAPIView.as_view(), name="state"),

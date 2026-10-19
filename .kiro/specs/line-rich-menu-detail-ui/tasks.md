@@ -62,7 +62,7 @@
   - _Depends: 2.1_
   - _Requirements: 3.4, 3.5, 6.6, 6.7, 7.3, 7.4_
 
-- [ ] 5. 認証済み閲覧APIを既存公開portへ統合する
+- [x] 5. 認証済み閲覧APIを既存公開portへ統合する
   - containerで具象adapterを合成し、UUIDとtimezone-aware revision必須の単発GETをappのURLへ登録する。他appのModelや非公開repositoryを閲覧serviceから参照しない。
   - presenterはallowlistで現在結果をJSON化し、停止情報は既存presenterへ委譲する。停止中checkedAtはnullとし、閲覧応答にconfirmationToken・expiresAtを付与しない。
   - 成功と400/401/403/404/409/503のstatus/body、no-store、画像部分失敗をHTTP試験する。非公開情報、画像・完全URL・内部例外をログや安全なエラーへ出さないことをcanaryで確認する。

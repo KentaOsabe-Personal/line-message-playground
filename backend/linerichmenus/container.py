@@ -5,18 +5,23 @@ from django.conf import settings
 from lineaccounts.admin_authorization import DjangoOwnerOperationFence
 from lineaccounts.repositories import DjangoAccountRepository
 from linechannels import runtime as channel_runtime
-from linechannels.admin_lifecycle_repositories import DjangoPendingDeactivationFence
+from linechannels.admin_lifecycle_repositories import (
+    DjangoChannelDeactivationRepository,
+    DjangoPendingDeactivationFence,
+)
 from linechannels.admin_repositories import DjangoAdminChannelRepository
 from linechannels.admin_types import ChannelRevisionProof, ChannelRevisionUnchanged
 from linechannels.crypto import FernetCredentialCipher
 
 from .catalog import DefaultTemplateCatalog
 from .confirmation import DefaultRichMenuConfirmation
+from .current_service import CurrentMenuService
 from .gateway import DefaultRichMenuGateway
 from .headless import DefaultRichMenuLifecyclePort, DjangoHeadlessReferenceContracts
 from .reconciliation import DefaultRichMenuReconciler
 from .renderer import DefaultDeterministicRenderer
 from .repository import (
+    DjangoCurrentReadRepository,
     DjangoRichMenuRepository,
     OperationFenceResult,
     OperationFenceSnapshot,
@@ -122,3 +127,21 @@ def build_headless_lifecycle_port() -> DefaultRichMenuLifecyclePort:
 
 def build_headless_reference_contracts() -> DjangoHeadlessReferenceContracts:
     return DjangoHeadlessReferenceContracts()
+
+
+def build_current_menu_service() -> CurrentMenuService:
+    cipher = FernetCredentialCipher(channel_runtime.get_validated_keyring())
+    channel_port = DjangoAdminChannelRepository(cipher)
+    gateway = DefaultRichMenuGateway()
+    return CurrentMenuService(
+        owner_fence=DjangoOwnerOperationFence(DjangoAccountRepository()),
+        channel_port=channel_port,
+        current_repository=DjangoCurrentReadRepository(
+            deactivation=DjangoChannelDeactivationRepository(),
+            catalog=DefaultTemplateCatalog(),
+        ),
+        repository=DjangoRichMenuRepository(),
+        gateway=gateway,
+        reconciler=DefaultRichMenuReconciler(gateway),
+        readiness=build_configured_mutation_readiness(),
+    )
