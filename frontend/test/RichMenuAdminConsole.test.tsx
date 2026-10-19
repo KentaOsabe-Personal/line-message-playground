@@ -62,6 +62,7 @@ const channels = (active = true): ChannelAdminApiClient => ({
 const menus = (): RichMenuAdminApiClient => ({
   listTemplates: vi.fn().mockResolvedValue([]),
   createPreview: vi.fn(),
+  getCurrent: vi.fn(),
   getState: vi.fn().mockResolvedValue(rich()),
   startOperation: vi.fn(),
   getOperation: vi.fn(),

@@ -71,8 +71,8 @@
   - _Depends: 4.1, 4.2_
   - _Requirements: 2.1, 2.4, 2.6, 2.7, 3.1, 3.2, 3.7_
 
-- [ ] 6. Frontendの閲覧通信境界を追加する
-- [ ] 6.1 現在結果の整合性と部分失敗を検証する
+- [x] 6. Frontendの閲覧通信境界を追加する
+- [x] 6.1 現在結果の整合性と部分失敗を検証する
   - path対象・revision・richと停止情報のchannel対応、managed資源と観測の一致、回復対象UUID、tagごとの必須項目を検証する。
   - Base64構文・decoded size・形式・寸法・digestを検証し、画像だけの不正は画像失敗へ縮退する。設定だけの不正は編集不可とし、状態・認可・対応関係の不正は全体protocol errorにする。
   - 保存された完全URLを維持し、未知statusを成功にせず、各種不正fixtureと既存DTO互換試験が通る。
@@ -80,7 +80,7 @@
   - _Depends: 5_
   - _Requirements: 2.3, 2.7, 3.1, 3.2, 3.5_
 
-- [ ] 6.2 単発閲覧と安全なエラー変換を追加する
+- [x] 6.2 単発閲覧と安全なエラー変換を追加する
   - 既存protected HTTP clientからchannelとrevisionを指定して読み取り、read用AbortSignalを伝える。
   - 閲覧限定のcurrent_changed、既存stale_channel、認証失効・利用不能を安全に区別し、既存通知経路へ接続する。
   - HTTP mockで単発GET、DTO検証、失効通知、中止を確認する。自動retryや未配置404を旧画面の成功へ置き換えるfallbackを追加しない。

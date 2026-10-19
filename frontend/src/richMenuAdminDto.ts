@@ -159,6 +159,309 @@ export type DeactivationView = {
   completedAt: string | null
 }
 
+export type CurrentImage =
+  | {
+      status: 'available'
+      contentType: 'image/png' | 'image/jpeg'
+      width: number
+      height: number
+      digest: string
+      base64: string
+    }
+  | { status: 'unavailable'; reason: 'missing' | 'invalid' | 'fetch_failed' | 'rate_limited' }
+export type CurrentConfiguration =
+  | {
+      status: 'available'
+      templateId: string
+      templateVersion: number
+      fields: TemplateField[]
+      editability: 'editable' | 'template_unavailable'
+    }
+  | { status: 'unavailable'; reason: 'mapping_missing' | 'configuration_invalid' }
+export type CurrentContent =
+  | {
+      kind: 'managed'
+      resourceId: string
+      image: CurrentImage
+      configuration: CurrentConfiguration
+    }
+  | { kind: 'unset' | 'external' | 'attention' | 'inactive' }
+export type RecoveryTarget = {
+  kind: 'cleanup'
+  subjectOperationId: string
+  targetResourceId: string
+}
+export type CurrentMenuView = {
+  channelId: string
+  channelRevision: string
+  checkedAt: string | null
+  rich: RichMenuStateView
+  deactivation: DeactivationView | null
+  current: CurrentContent
+  recoveryTargets: RecoveryTarget[]
+}
+
+// 実際の画素decodeは表示時にも確認する。ここでは展開前に形式・寸法を照合する。
+const imageDimensions = (
+  bytes: Uint8Array,
+  contentType: 'image/png' | 'image/jpeg',
+): [number, number] | null => {
+  const data = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  if (contentType === 'image/png') {
+    const signature = [137, 80, 78, 71, 13, 10, 26, 10]
+    if (
+      bytes.length < 33 ||
+      !signature.every((byte, index) => bytes[index] === byte) ||
+      data.getUint32(8) !== 13 ||
+      data.getUint32(12) !== 0x49484452
+    )
+      return null
+    return [data.getUint32(16), data.getUint32(20)]
+  }
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null
+  let offset = 2
+  while (offset + 3 < bytes.length) {
+    if (bytes[offset++] !== 0xff) return null
+    while (bytes[offset] === 0xff) offset++
+    const marker = bytes[offset++]
+    if (marker === 0xda || marker === 0xd9) return null
+    const length = offset + 2 <= bytes.length ? data.getUint16(offset) : 0
+    if (length < 2 || offset + length > bytes.length) return null
+    if ([0xc0, 0xc1, 0xc2].includes(marker)) {
+      if (length < 8) return null
+      return [data.getUint16(offset + 5), data.getUint16(offset + 3)]
+    }
+    offset += length
+  }
+  return null
+}
+
+const parseCurrentImage = (value: unknown, digest: string): CurrentImage => {
+  const invalid: CurrentImage = { status: 'unavailable', reason: 'invalid' }
+  if (!isRecord(value)) return invalid
+  if (
+    value.status === 'unavailable' &&
+    exact(value, ['status', 'reason']) &&
+    isEnum(value.reason, ['missing', 'invalid', 'fetch_failed', 'rate_limited'])
+  ) {
+    return { status: 'unavailable', reason: value.reason }
+  }
+  if (
+    value.status !== 'available' ||
+    !exact(value, ['status', 'contentType', 'width', 'height', 'digest', 'base64']) ||
+    !isEnum(value.contentType, ['image/png', 'image/jpeg']) ||
+    !isInt(value.width, 800, 2500) ||
+    !isInt(value.height, 250, Math.floor(2500 / 1.45)) ||
+    value.width / value.height < 1.45 ||
+    !sha256(value.digest) ||
+    value.digest !== digest ||
+    !isString(value.base64, 4, 4 * Math.ceil(1_048_576 / 3)) ||
+    value.base64.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(value.base64)
+  )
+    return invalid
+  const padding = value.base64.endsWith('==') ? 2 : value.base64.endsWith('=') ? 1 : 0
+  if ((value.base64.length / 4) * 3 - padding > 1_048_576) return invalid
+  try {
+    const binary = atob(value.base64)
+    if (btoa(binary) !== value.base64) return invalid
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
+    const dimensions = imageDimensions(bytes, value.contentType)
+    if (dimensions === null || dimensions[0] !== value.width || dimensions[1] !== value.height)
+      return invalid
+  } catch {
+    return invalid
+  }
+  return {
+    status: 'available',
+    contentType: value.contentType,
+    width: value.width,
+    height: value.height,
+    digest: value.digest,
+    base64: value.base64,
+  }
+}
+
+const parseCurrentConfiguration = (value: unknown): CurrentConfiguration => {
+  const invalid: CurrentConfiguration = { status: 'unavailable', reason: 'configuration_invalid' }
+  if (!isRecord(value)) return invalid
+  if (
+    value.status === 'unavailable' &&
+    exact(value, ['status', 'reason']) &&
+    isEnum(value.reason, ['mapping_missing', 'configuration_invalid'])
+  )
+    return { status: 'unavailable', reason: value.reason }
+  if (
+    value.status !== 'available' ||
+    !exact(value, ['status', 'templateId', 'templateVersion', 'fields', 'editability']) ||
+    !isString(value.templateId, 1, 64) ||
+    !/^[a-z0-9][a-z0-9-]*$/.test(value.templateId) ||
+    !isInt(value.templateVersion, 1) ||
+    !isEnum(value.editability, ['editable', 'template_unavailable'])
+  )
+    return invalid
+  const fields = listOf(
+    value.fields,
+    (field) => {
+      const parsed = parseField(field)
+      if (
+        parsed === null ||
+        /[\r\n]/.test(parsed.displayName) ||
+        parsed.uri.trim() !== parsed.uri ||
+        /[\s\\]/u.test(parsed.uri)
+      )
+        return null
+      return parsed
+    },
+    20,
+  )
+  if (fields === null || fields.length === 0) return invalid
+  return {
+    status: 'available',
+    templateId: value.templateId,
+    templateVersion: value.templateVersion,
+    fields,
+    editability: value.editability,
+  }
+}
+
+// Dateだけでは末尾3桁のマイクロ秒を失うため、秒と小数部を別に比較する。
+const sameRevision = (value: unknown, expected: string): value is string => {
+  if (!isChannelAdminDateTime(value)) return false
+  const fraction = (revision: string) => (/\.(\d+)/.exec(revision)?.[1] ?? '').padEnd(6, '0')
+  const seconds = (revision: string) => Date.parse(revision.replace(/\.\d+/, ''))
+  return seconds(value) === seconds(expected) && fraction(value) === fraction(expected)
+}
+
+export function parseCurrentMenu(
+  value: unknown,
+  channelId: string,
+  channelRevision: string,
+): Parsed<CurrentMenuView> {
+  if (
+    !isChannelAdminUuid(channelId) ||
+    !isChannelAdminDateTime(channelRevision) ||
+    !isRecord(value) ||
+    !exact(value, [
+      'channelId',
+      'channelRevision',
+      'checkedAt',
+      'rich',
+      'deactivation',
+      'current',
+      'recoveryTargets',
+    ]) ||
+    value.channelId !== channelId ||
+    !sameRevision(value.channelRevision, channelRevision) ||
+    !dateOrNull(value.checkedAt) ||
+    !isRecord(value.current) ||
+    !isEnum(value.current.kind, ['managed', 'unset', 'external', 'attention', 'inactive'])
+  )
+    return protocolError()
+  const richResult = parseRichMenuState(value.rich)
+  const deactivationResult = parseDeactivation(value.deactivation)
+  if (!richResult.ok || !deactivationResult.ok) return protocolError()
+  const rich = richResult.value
+  const deactivation = deactivationResult.value
+  const kind = value.current.kind
+  const inactive = kind === 'inactive'
+  if (
+    rich.channelId !== channelId ||
+    inactive !== (value.checkedAt === null) ||
+    (deactivation !== null &&
+      (deactivation.channelId !== channelId ||
+        !sameRevision(deactivation.channelUpdatedAt, channelRevision) ||
+        deactivation.channelActive === inactive)) ||
+    new Set(rich.nextAllowedActions).size !== rich.nextAllowedActions.length ||
+    new Set(rich.effectiveActions).size !== rich.effectiveActions.length ||
+    rich.effectiveActions.some((action) => !rich.nextAllowedActions.includes(action)) ||
+    ((inactive || rich.mode === 'read_only') &&
+      rich.effectiveActions.some((action) => !['get_state', 'view_history'].includes(action))) ||
+    (rich.mode === 'recovery_only' &&
+      rich.effectiveActions.some((action) =>
+        ['new_preview', 'apply', 'clear_to_disable'].includes(action),
+      ))
+  )
+    return protocolError()
+  const recoveryTargets = listOf(
+    value.recoveryTargets,
+    (target): RecoveryTarget | null => {
+      if (
+        !isRecord(target) ||
+        !exact(target, ['kind', 'subjectOperationId', 'targetResourceId']) ||
+        target.kind !== 'cleanup' ||
+        !isChannelAdminUuid(target.subjectOperationId) ||
+        !isChannelAdminUuid(target.targetResourceId) ||
+        target.subjectOperationId !== rich.blockingOperation?.operationId ||
+        rich.blockingOperation.status !== 'cleanup_required' ||
+        !rich.cleanupResources.some(
+          (resource) =>
+            resource.resourceId === target.targetResourceId &&
+            ['old', 'cleanup_required'].includes(resource.lifecycle),
+        )
+      )
+        return null
+      return {
+        kind: 'cleanup',
+        subjectOperationId: target.subjectOperationId,
+        targetResourceId: target.targetResourceId,
+      }
+    },
+    50,
+  )
+  if (
+    recoveryTargets === null ||
+    new Set(recoveryTargets.map((target) => target.targetResourceId)).size !==
+      recoveryTargets.length
+  )
+    return protocolError()
+  let current: CurrentContent
+  if (kind === 'managed') {
+    if (
+      !exact(value.current, ['kind', 'resourceId', 'image', 'configuration']) ||
+      !isChannelAdminUuid(value.current.resourceId) ||
+      rich.currentResource === null ||
+      rich.currentResource.resourceId !== value.current.resourceId ||
+      rich.currentResource.lifecycle !== 'applied' ||
+      rich.latestObservation?.kind !== 'managed_default' ||
+      rich.latestObservation.managedResourceId !== value.current.resourceId ||
+      rich.activeOperation !== null ||
+      (rich.blockingOperation !== null && rich.blockingOperation.status !== 'cleanup_required')
+    )
+      return protocolError()
+    current = {
+      kind,
+      resourceId: value.current.resourceId,
+      image: parseCurrentImage(value.current.image, rich.currentResource.imageDigest),
+      configuration: parseCurrentConfiguration(value.current.configuration),
+    }
+  } else {
+    if (!exact(value.current, ['kind'])) return protocolError()
+    if (
+      (kind === 'unset' || kind === 'external') &&
+      (rich.currentResource !== null ||
+        rich.activeOperation !== null ||
+        rich.blockingOperation !== null ||
+        rich.latestObservation?.kind !== (kind === 'unset' ? 'default_none' : 'external_default'))
+    )
+      return protocolError()
+    if (kind === 'unset' && rich.cleanupResources.length !== 0) return protocolError()
+    current = { kind }
+  }
+  return {
+    ok: true,
+    value: {
+      channelId,
+      channelRevision: value.channelRevision,
+      checkedAt: value.checkedAt,
+      rich,
+      deactivation,
+      current,
+      recoveryTargets,
+    },
+  }
+}
+
 const protocolError = (): Parsed<never> => ({
   ok: false,
   error: { code: 'protocol_error', summary: '応答形式を確認できません。' },
@@ -694,13 +997,29 @@ export function parseDeactivation(value: unknown): Parsed<DeactivationView | nul
 }
 
 export function parseRichMenuError(value: unknown): Parsed<SafeApiError> {
+  return parseRichMenuErrorValue(value, false)
+}
+
+export function parseCurrentMenuError(value: unknown): Parsed<SafeApiError> {
+  return parseRichMenuErrorValue(value, true)
+}
+
+function parseRichMenuErrorValue(value: unknown, currentRead: boolean): Parsed<SafeApiError> {
   if (!isRecord(value) || !exact(value, ['error']) || !isRecord(value.error)) return protocolError()
   const keys =
     'fields' in value.error
       ? ['code', 'nextAllowedActions', 'fields']
       : ['code', 'nextAllowedActions']
   const next = parseActions(value.error.nextAllowedActions)
-  if (!exact(value.error, keys) || !isEnum(value.error.code, resultCodes) || next === null)
+  if (
+    typeof value.error.code !== 'string' ||
+    !exact(value.error, keys) ||
+    !(
+      isEnum(value.error.code, resultCodes) ||
+      (currentRead && value.error.code === 'current_changed')
+    ) ||
+    next === null
+  )
     return protocolError()
   return { ok: true, value: { code: value.error.code, summary: '操作を完了できませんでした。' } }
 }

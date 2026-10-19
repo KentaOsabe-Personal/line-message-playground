@@ -1,7 +1,11 @@
 import { describe, expect, test, vi } from 'vitest'
 
 import { createRichMenuAdminApiClient, RichMenuAdminApiError } from '../src/richMenuAdminApi'
+import { createProtectedHttpClient } from '../src/httpApi'
 import type { ProtectedHttpClient } from '../src/httpApi'
+import { parseRichMenuError } from '../src/richMenuAdminDto'
+import currentFixtures from './fixtures/rich-menu-current.json'
+import currentErrors from './fixtures/rich-menu-current-errors.json'
 
 const channelId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const operationId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
@@ -192,5 +196,117 @@ describe('rich menu admin API', () => {
     expect(caught).toMatchObject({ outcome: 'refresh_required' })
     expect(JSON.stringify(caught)).not.toContain(secret)
     expect(String(caught)).not.toContain(secret)
+  })
+})
+
+describe('現在閲覧API', () => {
+  const current = currentFixtures.managed
+  // テストケース: channelとtimezone付きrevisionを指定して現在表示を読む。
+  // 期待値: AbortSignalを付けた単発GETだけを送信し、DTOを検証して返す。
+  test('gets the current result once with revision and read signal', async () => {
+    const signal = new AbortController().signal
+    const request = vi.fn<ProtectedHttpClient['request']>().mockResolvedValue(response(current))
+    const api = createRichMenuAdminApiClient({ request })
+    await expect(api.getCurrent(channelId, current.channelRevision, { signal })).resolves.toEqual(
+      current,
+    )
+    expect(request.mock.calls).toEqual([
+      [
+        {
+          path: `/api/line/rich-menus/channels/${channelId}/current/?channelRevision=${encodeURIComponent(current.channelRevision)}`,
+          method: 'GET',
+          signal,
+        },
+      ],
+    ])
+  })
+
+  // テストケース: 閲覧競合・stale・認証・認可・利用不能のHTTP応答を受ける。
+  // 期待値: 安全なcodeとstatusを維持し、再試行や旧画面へのfallbackを行わない。
+  test.each(currentErrors)(
+    'classifies current HTTP $status without retry',
+    async ({ status, body }) => {
+      const request = vi
+        .fn<ProtectedHttpClient['request']>()
+        .mockResolvedValue(response(body, status))
+      const api = createRichMenuAdminApiClient({ request })
+      await expect(api.getCurrent(channelId, current.channelRevision)).rejects.toMatchObject({
+        error: { code: body.error.code },
+        httpStatus: status,
+        outcome: 'load_failed',
+      })
+      expect(request).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  // テストケース: 閲覧限定のcurrent_changedを既存mutation用parserへ渡す。
+  // 期待値: 既存mutation契約では未知codeとして拒否する。
+  test('keeps current_changed scoped to reads', () => {
+    expect(
+      parseRichMenuError({ error: { code: 'current_changed', nextAllowedActions: [] } }).ok,
+    ).toBe(false)
+  })
+
+  // テストケース: 401とread中止を既存protected clientを介して受ける。
+  // 期待値: 401で失効通知を一回呼び、中止はabortedとして保持する。
+  test('notifies invalid session and preserves abort classification', async () => {
+    const onSessionInvalid = vi.fn()
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        response({ error: { code: 'authentication_required', nextAllowedActions: [] } }, 401),
+      )
+    const api = createRichMenuAdminApiClient(
+      createProtectedHttpClient({ fetch: fetchMock, onSessionInvalid }),
+    )
+    await expect(api.getCurrent(channelId, current.channelRevision)).rejects.toMatchObject({
+      error: { code: 'authentication_required' },
+    })
+    expect(onSessionInvalid).toHaveBeenCalledTimes(1)
+    const controller = new AbortController()
+    fetchMock.mockImplementationOnce(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('safe abort', 'AbortError')),
+          )
+        }),
+    )
+    const pending = api.getCurrent(channelId, current.channelRevision, {
+      signal: controller.signal,
+    })
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ error: { code: 'aborted' } })
+    expect(onSessionInvalid).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  // テストケース: 不正な引数や別チャネルの応答・未知エラーを受ける。
+  // 期待値: 入力不正は通信せず、応答不正は秘密を含まないprotocol errorへ変換する。
+  test('validates input and response without retaining unsafe data', async () => {
+    const request = vi
+      .fn<ProtectedHttpClient['request']>()
+      .mockResolvedValue(response({ ...current, channelId: operationId }))
+    const api = createRichMenuAdminApiClient({ request })
+    await expect(api.getCurrent('bad', current.channelRevision)).rejects.toMatchObject({
+      error: { code: 'protocol_error' },
+    })
+    await expect(api.getCurrent(channelId, '2026-10-18T00:00:00')).rejects.toMatchObject({
+      error: { code: 'protocol_error' },
+    })
+    expect(request).not.toHaveBeenCalled()
+    await expect(api.getCurrent(channelId, current.channelRevision)).rejects.toMatchObject({
+      error: { code: 'protocol_error' },
+    })
+    const secret = 'unsafe-image-url-canary'
+    request.mockResolvedValueOnce(response({ error: { code: secret, detail: secret } }, 503))
+    try {
+      await api.getCurrent(channelId, current.channelRevision)
+    } catch (error) {
+      expect(JSON.stringify(error)).not.toContain(secret)
+      expect(String(error)).not.toContain(secret)
+      expect(error).toMatchObject({ error: { code: 'protocol_error' } })
+    }
+    expect(request).toHaveBeenCalledTimes(2)
   })
 })
