@@ -513,3 +513,299 @@ class GatewayImageContractTests(SimpleTestCase):
                     else gateway.download(self.context, "id")
                 )
                 self.assertEqual(result.status, "unknown")
+
+
+class ContentDownloadTests(SimpleTestCase):
+    @staticmethod
+    def image_bytes(size=(800, 550), image_format="PNG"):
+        from io import BytesIO
+
+        from PIL import Image
+
+        output = BytesIO()
+        Image.new("RGB", size, (20, 90, 120)).save(output, format=image_format)
+        return output.getvalue()
+
+    def download(self, chunks=(), status=200, *, delay=0, timeout=5, error=None):
+        import asyncio
+
+        import httpx
+
+        calls = []
+        closed = []
+        clients = []
+        kwargs_seen = []
+
+        class Stream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                for chunk in chunks:
+                    calls.append("read")
+                    if delay:
+                        await asyncio.sleep(delay)
+                    if error:
+                        raise error
+                    yield chunk
+
+            async def aclose(self):
+                closed.append(True)
+
+        def handle(request):
+            calls.append(request)
+            return httpx.Response(status, stream=Stream(), headers={"Content-Type": "text/html"})
+
+        def factory(**kwargs):
+            kwargs_seen.append(kwargs)
+            client = httpx.AsyncClient(transport=httpx.MockTransport(handle), **kwargs)
+            clients.append(client)
+            return client
+
+        self.content_calls = calls
+        self.content_closed = closed
+        self.content_clients = clients
+        self.content_options = kwargs_seen
+        gateway = DefaultRichMenuGateway(content_client_factory=factory, timeout_seconds=timeout)
+        return gateway.download_content(context(), "rich-menu-id-canary")
+
+    # テストケース: PNG/JPEGを上流Content-Typeに依存せずstreamで取得する。
+    # 期待値: 元bytesとcanonical digestがSDK downloadと一致し、一度だけ取得してcloseする。
+    def test_original_png_and_jpeg_bytes_and_sdk_digest_are_preserved(self):
+        from linerichmenus.gateway import DownloadedImage
+
+        for image_format in ("PNG", "JPEG"):
+            with self.subTest(image_format=image_format):
+                binary = self.image_bytes(image_format=image_format)
+                result = self.download((binary[:32], binary[32:]))
+                self.assertIsInstance(result, DownloadedImage)
+                self.assertEqual(result.binary, binary)
+                self.assertEqual(result.content_type, f"image/{image_format.lower()}")
+                factory = FakeFactory()
+                factory.blob.responses["get_rich_menu_image"] = binary
+                old_result = DefaultRichMenuGateway(factory).download(context(), "id")
+                self.assertEqual(result.pixel_digest, old_result.pixel_digest)
+                self.assertEqual(result.byte_size, len(binary))
+                self.assertEqual(len(self.content_closed), 1)
+                self.assertTrue(self.content_clients[0].is_closed)
+                request = self.content_calls[0]
+                self.assertEqual(request.method, "GET")
+                self.assertEqual(
+                    str(request.url),
+                    "https://api-data.line.me/v2/bot/richmenu/rich-menu-id-canary/content",
+                )
+                self.assertEqual(request.headers["Authorization"], "Bearer access-token-canary")
+                self.assertFalse(self.content_options[0]["follow_redirects"])
+                self.assertFalse(self.content_options[0]["trust_env"])
+                self.assertEqual(
+                    request.extensions["timeout"],
+                    dict.fromkeys(("connect", "read", "write", "pool"), 5.0),
+                )
+                self.assertNotIn("canary", repr(result))
+                self.assertNotIn(str(binary), str(result))
+                with self.assertRaises(TypeError):
+                    pickle.dumps(result)
+
+    # テストケース: 404、429、5xx、認証拒否、redirectを受け取る。
+    # 期待値: bodyを読まず安全分類し、redirect追従・retryなしで必ずcloseする。
+    def test_http_failure_matrix_does_not_read_or_retry(self):
+        for status, expected in (
+            (404, ImageAbsent()),
+            (429, ImageObservationUnknown("rate_limited")),
+            (500, ImageObservationUnknown()),
+            (503, ImageObservationUnknown()),
+            (401, GatewayRejected("line_rejected")),
+            (403, GatewayRejected("line_rejected")),
+            (302, ImageObservationUnknown()),
+        ):
+            with self.subTest(status=status):
+                self.assertEqual(self.download((b"body-canary",), status), expected)
+                self.assertEqual(len(self.content_calls), 1)
+                self.assertEqual(len(self.content_closed), 1)
+                self.assertTrue(self.content_clients[0].is_closed)
+
+    # テストケース: 破損、禁止形式、範囲外寸法、過大bytesを取得する。
+    # 期待値: 画像不正となり、上限+1 byteに達した後のchunkを読まない。
+    def test_invalid_images_and_oversize_stop_before_further_reads(self):
+        invalid = (
+            b"broken-image-canary",
+            b"<svg>image-canary</svg>",
+            b"<html>image-canary</html>",
+            self.image_bytes(image_format="GIF"),
+            self.image_bytes((799, 250)),
+            self.image_bytes((2501, 250)),
+            self.image_bytes((800, 249)),
+            self.image_bytes((800, 552)),
+        )
+        for binary in invalid:
+            with self.subTest(length=len(binary)):
+                self.assertEqual(self.download((binary,)), GatewayRejected("image_invalid"))
+                self.assertTrue(self.content_clients[0].is_closed)
+        self.assertEqual(
+            self.download((b"x" * (1024 * 1024), b"x", b"must-not-read")),
+            GatewayRejected("image_invalid"),
+        )
+        self.assertEqual(self.content_calls.count("read"), 2)
+        self.assertEqual(len(self.content_closed), 1)
+
+    # テストケース: 各readはtimeout未満だが累積時間が単一budgetを超えるstreamを取得する。
+    # 期待値: readごとの猶予更新をせず、途中でtimeoutとなりresponse/clientをcloseする。
+    def test_single_deadline_cancels_slow_drip_and_closes(self):
+        import time
+
+        started = time.monotonic()
+        result = self.download((b"a",) * 20, delay=0.015, timeout=0.05)
+        elapsed = time.monotonic() - started
+        self.assertEqual(result, ImageObservationUnknown("timeout_unknown"))
+        self.assertLess(elapsed, 0.25)
+        self.assertLess(self.content_calls.count("read"), 20)
+        self.assertEqual(len(self.content_closed), 1)
+        self.assertTrue(self.content_clients[0].is_closed)
+
+    # テストケース: HTTPXの各I/O timeoutと途中切断へ秘密canaryを含める。
+    # 期待値: 安全な理由だけが返り、例外・token・bodyはログにも結果にも露出しない。
+    def test_transport_failures_are_safe_and_close(self):
+        import logging
+        from unittest.mock import patch
+
+        import httpx
+
+        for error in (
+            httpx.ConnectTimeout("token-canary"),
+            httpx.ReadTimeout("body-canary"),
+            httpx.WriteTimeout("body-canary"),
+            httpx.PoolTimeout("body-canary"),
+            httpx.ReadError("body-canary"),
+        ):
+            with self.subTest(error_type=type(error)), patch.object(logging.Logger, "_log") as log:
+                result = self.download((b"image-canary",), error=error)
+                expected = (
+                    "timeout_unknown"
+                    if isinstance(error, httpx.TimeoutException)
+                    else "response_unknown"
+                )
+                self.assertEqual(result, ImageObservationUnknown(expected))
+                self.assertNotIn("canary", repr(result))
+                self.assertNotIn("access-token-canary", str(log.call_args_list))
+                self.assertNotIn("body-canary", str(log.call_args_list))
+                self.assertEqual(len(self.content_closed), 1)
+                self.assertTrue(self.content_clients[0].is_closed)
+
+    # テストケース: 寸法不正画像を既存SDK経路でdownloadする。
+    # 期待値: pixel展開のloadを呼ぶ前に寸法で拒否し、既存のunknown型を保つ。
+    def test_dimensions_and_format_are_checked_before_pixel_expansion(self):
+        from unittest.mock import patch
+
+        for binary in (self.image_bytes((2501, 250)), self.image_bytes(image_format="GIF")):
+            factory = FakeFactory()
+            factory.blob.responses["get_rich_menu_image"] = binary
+            with patch(
+                "PIL.Image.Image.load", side_effect=AssertionError("must-not-decode")
+            ) as load:
+                result = DefaultRichMenuGateway(factory).download(context(), "id")
+            self.assertIsInstance(result, ImageObservationUnknown)
+            load.assert_not_called()
+
+    # テストケース: 許可境界の寸法とちょうど1 MiBのPNGを取得する。
+    # 期待値: 境界を過剰に拒否せず、末尾を含む元bytesをそのまま返す。
+    def test_exact_size_and_dimension_boundaries(self):
+        from linerichmenus.gateway import DownloadedImage
+
+        for size in ((800, 250), (2500, 1724)):
+            with self.subTest(size=size):
+                binary = self.image_bytes(size)
+                binary += b"\x00" * (1024 * 1024 - len(binary))
+                result = self.download((binary,))
+                self.assertIsInstance(result, DownloadedImage)
+                self.assertEqual(result.binary, binary)
+                self.assertEqual((result.width, result.height), size)
+
+    # テストケース: 不正IDとpath記号を含むIDで閲覧を要求する。
+    # 期待値: 不正IDは接続せず、許可IDの記号はencodeして固定host/path内だけで使う。
+    def test_resource_id_cannot_change_host_or_path(self):
+        import httpx
+
+        requests = []
+
+        def handle(request):
+            requests.append(request)
+            return httpx.Response(404)
+
+        def factory(**kwargs):
+            return httpx.AsyncClient(transport=httpx.MockTransport(handle), **kwargs)
+
+        gateway = DefaultRichMenuGateway(content_client_factory=factory)
+        for invalid in (None, "", " ", ".", "..", "あ", "x" * 129, "x\n"):
+            self.assertEqual(
+                gateway.download_content(context(), invalid), GatewayRejected("invalid_input")
+            )
+        self.assertEqual(requests, [])
+        result = gateway.download_content(context(), "id/../?secret#fragment%")
+        self.assertEqual(result, ImageAbsent())
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0].url.host, "api-data.line.me")
+        self.assertEqual(
+            requests[0].url.raw_path,
+            b"/v2/bot/richmenu/id%2F..%2F%3Fsecret%23fragment%25/content",
+        )
+        self.assertEqual(requests[0].url.query, b"")
+
+    # テストケース: headers受信前の停止と接続失敗、response/clientのclose失敗を発生させる。
+    # 期待値: timeoutと安全な失敗へ分類し、取得を再試行せずclientもcloseする。
+    def test_header_timeout_and_close_failures(self):
+        import asyncio
+
+        import httpx
+
+        for phase in ("headers", "connect", "response_close", "client_close"):
+            calls = []
+            response_closes = []
+            client_closes = []
+            binary = self.image_bytes()
+
+            class Stream(httpx.AsyncByteStream):
+                async def __aiter__(self):
+                    yield binary
+
+                async def aclose(self):
+                    response_closes.append(True)
+                    if phase == "response_close":
+                        raise RuntimeError("close-secret-canary")
+
+            async def handle(request):
+                calls.append(request)
+                if phase == "headers":
+                    await asyncio.sleep(0.2)
+                if phase == "connect":
+                    raise httpx.ConnectError("connect-secret-canary")
+                return httpx.Response(200, stream=Stream())
+
+            class Client(httpx.AsyncClient):
+                async def __aexit__(self, *args):
+                    try:
+                        await super().__aexit__(*args)
+                    finally:
+                        client_closes.append(True)
+                    if phase == "client_close":
+                        raise RuntimeError("client-secret-canary")
+
+            def factory(**kwargs):
+                return Client(transport=httpx.MockTransport(handle), **kwargs)
+
+            with self.subTest(phase=phase):
+                gateway = DefaultRichMenuGateway(
+                    content_client_factory=factory, timeout_seconds=0.03
+                )
+                result = gateway.download_content(context(), "id")
+                expected = "timeout_unknown" if phase == "headers" else "response_unknown"
+                self.assertEqual(result, ImageObservationUnknown(expected))
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(len(client_closes), 1)
+                self.assertEqual(
+                    len(response_closes), int(phase in {"response_close", "client_close"})
+                )
+                self.assertNotIn("canary", repr(result))
+
+    # テストケース: 個別timeoutが5秒を超える設定で新downloadを開始する。
+    # 期待値: 閲覧取得の総budgetと各I/O timeoutは5秒を超えない。
+    def test_total_budget_never_exceeds_five_seconds(self):
+        self.assertEqual(self.download((), status=404, timeout=30), ImageAbsent())
+        self.assertEqual(self.content_options[0]["timeout"].read, 5)
+        self.assertEqual(self.content_options[0]["timeout"].connect, 5)

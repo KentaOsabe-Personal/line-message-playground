@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from hashlib import sha256
+from time import monotonic
 from typing import Literal, Protocol
+from urllib.parse import quote
 from uuid import UUID
 
+import httpx
 from django.utils import timezone
 
 from linechannels.types import AccessToken
@@ -335,6 +339,21 @@ class ImageObserved(_SerializationDisabled):
     __str__ = __repr__
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class DownloadedImage(ImageObserved):
+    binary: bytes = field(kw_only=True, repr=False)
+
+    def __post_init__(self) -> None:
+        ImageObserved.__post_init__(self)
+        if not isinstance(self.binary, bytes) or len(self.binary) != self.byte_size:
+            raise ValueError("invalid downloaded image bytes")
+
+    def __repr__(self) -> str:
+        return "<DownloadedImage binary=redacted>"
+
+    __str__ = __repr__
+
+
 @dataclass(frozen=True, slots=True)
 class ImageObservationUnknown:
     code: GatewayUnknownCode = "response_unknown"
@@ -366,6 +385,9 @@ DefaultObservation = (
 ImageObservation = ImageObserved | ImageAbsent | ImageObservationUnknown | GatewayRejected
 
 
+ImageContentObservation = DownloadedImage | ImageAbsent | ImageObservationUnknown | GatewayRejected
+
+
 class RichMenuGateway(Protocol):
     def validate(
         self, context: RichMenuGatewayContext, request: RichMenuObject
@@ -378,6 +400,10 @@ class RichMenuGateway(Protocol):
     ) -> MutationResult: ...
 
     def download(self, context: RichMenuGatewayContext, rich_menu_id: str) -> ImageObservation: ...
+
+    def download_content(
+        self, context: RichMenuGatewayContext, rich_menu_id: str
+    ) -> ImageContentObservation: ...
 
     def list_resources(self, context: RichMenuGatewayContext) -> ResourceListObservation: ...
 
@@ -446,9 +472,11 @@ class DefaultRichMenuGateway:
         client_factory: _SdkRichMenuClientFactory = _build_sdk_clients,
         *,
         timeout_seconds: float = 5.0,
+        content_client_factory: Callable[..., httpx.AsyncClient] = httpx.AsyncClient,
     ) -> None:
         if not isinstance(timeout_seconds, (int, float)) or timeout_seconds <= 0:
             raise ValueError("invalid timeout")
+        self._content_client_factory = content_client_factory
         self._client_factory = client_factory
         self._timeout_seconds = float(timeout_seconds)
 
@@ -519,6 +547,79 @@ class DefaultRichMenuGateway:
             handler=handle,
             not_found=ImageAbsent(),
         )
+
+    def download_content(
+        self, context: RichMenuGatewayContext, rich_menu_id: str
+    ) -> ImageContentObservation:
+        if not isinstance(context, RichMenuGatewayContext):
+            raise TypeError("rich menu gateway context required")
+        if not _valid_line_id(rich_menu_id) or rich_menu_id in {".", ".."}:
+            return GatewayRejected("invalid_input")
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            return ImageObservationUnknown()
+        try:
+            return asyncio.run(self._download_content_once(context, rich_menu_id))
+        except TimeoutError, httpx.TimeoutException:
+            return ImageObservationUnknown("timeout_unknown")
+        except Exception:
+            return ImageObservationUnknown()
+
+    async def _download_content_once(
+        self, context: RichMenuGatewayContext, rich_menu_id: str
+    ) -> ImageContentObservation:
+        # A single cancellable budget covers connect, headers and every body read.
+        budget = min(5.0, self._timeout_seconds)
+        deadline = monotonic() + budget
+        async with asyncio.timeout(budget):
+            async with self._content_client_factory(
+                timeout=httpx.Timeout(budget), follow_redirects=False, trust_env=False
+            ) as client:
+                url = (
+                    "https://api-data.line.me/v2/bot/richmenu/"
+                    + quote(rich_menu_id, safe="")
+                    + "/content"
+                )
+                async with client.stream(
+                    "GET",
+                    url,
+                    headers={"Authorization": f"Bearer {context.access_token.reveal_for_use()}"},
+                ) as response:
+                    if response.status_code == 404:
+                        return ImageAbsent()
+                    if response.status_code == 429:
+                        return ImageObservationUnknown("rate_limited")
+                    if 400 <= response.status_code < 500:
+                        return GatewayRejected("line_rejected")
+                    if response.status_code != 200:
+                        return ImageObservationUnknown()
+                    binary = bytearray()
+                    async for chunk in response.aiter_raw():
+                        if monotonic() >= deadline:
+                            raise TimeoutError
+                        remaining = 1024 * 1024 + 1 - len(binary)
+                        binary.extend(chunk[:remaining])
+                        if len(binary) > 1024 * 1024:
+                            return GatewayRejected("image_invalid")
+                    if monotonic() >= deadline:
+                        raise TimeoutError
+                    original = bytes(binary)
+                    decoded = _decode_image(original)
+                    if not isinstance(decoded, ImageObserved):
+                        return GatewayRejected("image_invalid")
+                    if monotonic() >= deadline:
+                        raise TimeoutError
+                    return DownloadedImage(
+                        decoded.content_type,
+                        decoded.width,
+                        decoded.height,
+                        decoded.pixel_digest,
+                        decoded.byte_size,
+                        binary=original,
+                    )
 
     def list_resources(self, context: RichMenuGatewayContext) -> ResourceListObservation:
         def handle(response):
@@ -814,7 +915,6 @@ def _decode_image(binary: bytes) -> ImageObservation:
         return ImageObservationUnknown("response_unknown")
     try:
         with Image.open(BytesIO(binary)) as image:
-            image.load()
             if image.format == "PNG":
                 content_type = "image/png"
             elif image.format in {"JPEG", "JPG"}:
@@ -824,6 +924,7 @@ def _decode_image(binary: bytes) -> ImageObservation:
             width, height = image.size
             if not (800 <= width <= 2500 and height >= 250 and width / height >= 1.45):
                 return ImageObservationUnknown("response_unknown")
+            image.load()
             rgba = image.convert("RGBA").tobytes()
     except Exception:
         return ImageObservationUnknown("response_unknown")

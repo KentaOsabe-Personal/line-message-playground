@@ -34,7 +34,7 @@
   - _Boundary: CurrentReadRepository_
   - _Requirements: 2.4, 2.7, 3.4, 3.7_
 
-- [ ] 3. (P) 元の画像を上限付きで取得・検証する
+- [x] 3. (P) 元の画像を上限付きで取得・検証する
   - 固定hostと検証済み資源IDを使うHTTPX streamで一度だけ取得し、redirect禁止、上限+1 byteで打ち切り、response/clientの確実なcloseを実装する。
   - 最大1 MiB、PNG/JPEG実decode、幅800〜2500・高さ250以上・比率1.45以上を展開前に検証する。各I/O timeoutに加えて開始から5秒の単一deadlineを適用し、残り時間を超えて読まない。
   - canonical pixel digestと元bytesを返し、再エンコードしない。既存downloadの戻り値・SDK経路は維持してdecode検証だけを共用する。
