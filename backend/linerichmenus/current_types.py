@@ -167,6 +167,7 @@ class CurrentResourceSnapshot:
     lifecycle: ResourceLifecycle
     image_digest: str
     updated_at: datetime
+    ownership_digest: str | None = None
 
     def __post_init__(self) -> None:
         for value in (self.public_id, self.channel_public_id, self.origin_operation_id):
@@ -180,6 +181,8 @@ class CurrentResourceSnapshot:
             raise ValueError("invalid current resource lifecycle")
         _require_sha256(self.image_digest, "current resource digest")
         _require_aware_datetime(self.updated_at, "current resource updated at")
+        if self.ownership_digest is not None:
+            _require_sha256(self.ownership_digest, "current ownership digest")
 
     def __repr__(self) -> str:
         return "<CurrentResourceSnapshot references=redacted>"
@@ -228,6 +231,8 @@ class CurrentReadSnapshot:
     configuration: CurrentConfiguration
     release_target_id: UUID | None
     recovery_targets: tuple[RecoveryTarget, ...]
+    history_exists: bool = False
+    latest_operation_id: UUID | None = None
 
     def __post_init__(self) -> None:
         if self.state is not None and not isinstance(self.state, CurrentStateSnapshot):
@@ -240,6 +245,9 @@ class CurrentReadSnapshot:
             raise ValueError("invalid snapshot configuration")
         _require_optional_uuid(self.release_target_id, "release target")
         _require_tuple_of(self.recovery_targets, RecoveryTarget, "recovery targets")
+        if type(self.history_exists) is not bool:
+            raise ValueError("invalid history existence")
+        _require_optional_uuid(self.latest_operation_id, "latest operation")
 
     def __repr__(self) -> str:
         return "<CurrentReadSnapshot axes=redacted configuration=redacted>"

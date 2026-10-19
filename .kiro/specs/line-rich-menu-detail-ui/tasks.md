@@ -16,8 +16,8 @@
   - _Boundary: B1 current_types / types_
   - _Requirements: 2.1, 2.4, 2.6, 2.7, 3.6, 6.7_
 
-- [ ] 2. 現在資源の保存関係と競合検出を実装する
-- [ ] 2.1 現在資源に対応する設定と回復対象を取得する
+- [x] 2. 現在資源の保存関係と競合検出を実装する
+- [x] 2.1 現在資源に対応する設定と回復対象を取得する
   - 現在資源から作成元applyへの保存関係を辿り、owner・provider・channelと確定済み適用状態を検証する。履歴順による推測や再適用を必要としない。
   - template ID・正の版・全fields・完全HTTPS URLを検証し、同一版のarea順と既存入力規則に照合する。補助キー欠落の旧snapshot、版廃止、欠落・不正を区別し、値をトリム・正規化しない。
   - 管理終了対象の所有関係は設定の編集可能性から分離する。回復候補は既存predicateを共用してsubject・target・置換関係が有効な組に限定し、履歴一覧を辿らず必要な履歴有無・操作参照を残す。
@@ -26,7 +26,7 @@
   - _Depends: 1_
   - _Requirements: 2.1, 2.3, 2.5, 3.5, 6.6, 6.7, 7.3_
 
-- [ ] 2.2 取得前後の保存状態を同じ順序で比較する
+- [x] 2.2 取得前後の保存状態を同じ順序で比較する
   - owner → channel → deactivation → rich-menu state → operation/resourceの順序でsnapshotの取得・最終lockを行う。
   - current・active・blocking参照、資源のlifecycle・LINE ID・digest・更新時刻、作成元設定、操作status/stage、停止intent、cleanup関係を比較し、行の新規作成・消滅も検出する。
   - 観測日時だけの更新を競合にせず、設定・所有関係・操作状態の変更は競合として返す。画像や設定を永続化しない。
