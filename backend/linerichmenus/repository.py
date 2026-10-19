@@ -44,6 +44,9 @@ from .types import (
     TemplateFieldValue,
     TemplateReference,
 )
+from .types import (
+    OwnerChannelScope as OwnerChannelScope,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,21 +167,6 @@ class RecoveryHandoffResult:
 class ReplacementRecorded:
     current_resource: ManagedResourceView
     old_resource: ManagedResourceView
-
-
-@dataclass(frozen=True, slots=True)
-class OwnerChannelScope:
-    owner_identity_public_id: UUID
-    provider_id: str
-    channel_public_id: UUID
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.owner_identity_public_id, UUID) or not isinstance(
-            self.channel_public_id, UUID
-        ):
-            raise ValueError("invalid owner channel scope")
-        if not isinstance(self.provider_id, str) or not self.provider_id:
-            raise ValueError("invalid provider scope")
 
 
 @dataclass(frozen=True, slots=True)

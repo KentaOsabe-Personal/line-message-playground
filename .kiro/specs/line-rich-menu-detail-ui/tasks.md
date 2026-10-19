@@ -8,7 +8,7 @@
 
 原則は番号順に進める。並行候補は2.1・2.2と3の間だけとし、3は1の完了後にrepository作業と並行できる。4以降は両方の完了を待つ。Backendの加算的APIを先に検証し、Frontendの切り替えを10.1で行う。旧API・データ・履歴部品を維持し、Frontendを旧版へ戻せる互換性を最終検証する。
 
-- [ ] 1. 閲覧用の値・公開portと検証用fixtureを整える
+- [x] 1. 閲覧用の値・公開portと検証用fixtureを整える
   - 現在資源、作成元、操作、停止intent、設定内容の比較値と不存在を表現するrequest内snapshot、および閲覧結果を既存モデルから独立したimmutable値として用意する。画像・完全URL・資格情報をreprへ出さない。
   - owner・channel・deactivationの既存公開portを利用し、新しい競合codeを閲覧限定で扱えるようにする。既存serviceやrepositoryへの逆向き依存を持ち込まない。
   - 承認済みHTTP契約の各状態を安全なfixtureにし、既存Django・Vitest/jsdomとfake gatewayで後続検証に使えることを確認する。MySQL並行transaction試験の実行経路も既存構成で確保する。
