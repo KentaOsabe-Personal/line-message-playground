@@ -103,6 +103,7 @@ export default function RichMenuRecoveryPanel({
       <div>
         <button
           type="button"
+          className="secondary"
           disabled={busy}
           onClick={() =>
             setConfirmation({ kind, resourceId: currentResource.resourceId, channelLabel })

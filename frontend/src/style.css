@@ -2568,3 +2568,47 @@ main.lab-page-frame {
     font-size: 0.8rem;
   }
 }
+
+.rich-menu-detail {
+  display: grid;
+  gap: calc(var(--spacing) * 4);
+  max-width: 60rem;
+  margin-inline: auto;
+  min-width: 0;
+}
+
+.rich-menu-detail > *,
+.rich-menu-detail .field-label,
+.rich-menu-detail fieldset {
+  min-width: 0;
+}
+
+.rich-menu-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--spacing) * 3);
+}
+
+.rich-menu-detail .rich-menu-header h2,
+.rich-menu-detail .preview-link-list strong,
+.rich-menu-detail .technical-details dd {
+  overflow-wrap: anywhere;
+}
+
+.rich-menu-detail :is(h2, h3)[tabindex='-1']:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--spacing);
+}
+
+@media (max-width: 720px) {
+  .rich-menu-detail-actions,
+  .rich-menu-detail .preview-link-list li {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rich-menu-detail button {
+    width: 100%;
+    white-space: normal;
+  }
+}

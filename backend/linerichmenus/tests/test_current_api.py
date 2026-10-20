@@ -287,6 +287,7 @@ class CurrentRealSessionTests(CurrentServiceFixture):
             )
             .channel
         )
+        self.real_identity_id = identity.public_id
         self.channel_id = channel.public_id
         self.revision = channel.updated_at
         self.client = APIClient(enforce_csrf_checks=True)
@@ -332,3 +333,147 @@ class CurrentRealSessionTests(CurrentServiceFixture):
             self.assertEqual(missing.status_code, 404)
             self.assertEqual(hidden["Cache-Control"], "no-store")
             gateway.return_value.get_default.assert_not_called()
+
+    def seed_current_for_release(self):
+        from dataclasses import replace
+
+        from linerichmenus.models import RichMenuChannelState
+
+        self.scope = replace(
+            self.scope,
+            owner_identity_public_id=self.real_identity_id,
+            channel_public_id=self.channel_id,
+        )
+        self.state = RichMenuChannelState.objects.create(channel_public_id=self.channel_id)
+        self.origin = self.operation(
+            configuration_snapshot=self.configuration(), expected_channel_revision=self.revision
+        )
+        self.resource = self.make_resource(self.origin, lifecycle="applied")
+        self.state.current_resource = self.resource
+        self.state.save()
+
+    def post_release(self, target=None, revision=None):
+        from django.conf import settings
+        from django.middleware.csrf import get_token
+        from rest_framework.test import APIRequestFactory
+
+        seed = APIRequestFactory().get("/api/account/session/")
+        token = get_token(seed)
+        self.client.cookies[settings.CSRF_COOKIE_NAME] = seed.META["CSRF_COOKIE"]
+        return self.client.post(
+            reverse("linerichmenus:operations", args=[self.channel_id]),
+            {
+                "kind": "release",
+                "operationId": str(uuid4()),
+                "channelRevision": (revision or self.revision).isoformat(),
+                "targetResourceId": str(target or self.resource.pk),
+            },
+            format="json",
+            HTTP_ORIGIN=settings.CSRF_TRUSTED_ORIGINS[0],
+            HTTP_X_CSRFTOKEN=token,
+        )
+
+    def release_settings(self):
+        return self.settings(
+            LINE_RICH_MENU_MUTATION_MODE="enabled",
+            LINE_RICH_MENU_REFERENCE_PROBE_INTEGRATED=True,
+            LINE_RICH_MENU_HISTORY_PURGE_INTEGRATED=True,
+            LINE_RICH_MENU_DEACTIVATION_LIFECYCLE_INTEGRATED=True,
+            LINE_RICH_MENU_INTEGRATION_MARKER="line-rich-menu-admin-lifecycle-v1",
+        )
+
+    # テストケース: 実sessionでcurrent候補を読み、既存release APIを確定し再取得する。
+    # 期待値: 現在管理資源だけ追跡終了し、履歴を保持してLINE変更・削除・自動再取込を行わない。
+    def test_current_candidate_connects_to_existing_release_and_retains_history(self):
+        from unittest.mock import Mock
+
+        from linerichmenus.gateway import DownloadedImage
+        from linerichmenus.models import RichMenuOperation
+
+        self.seed_current_for_release()
+        gateway = Mock()
+        gateway.get_default.return_value = RichMenuDefaultPresent(self.resource.line_rich_menu_id)
+        gateway.download_content.return_value = DownloadedImage(
+            "image/png", 800, 400, "b" * 64, 3, binary=b"png"
+        )
+        with (
+            self.release_settings(),
+            patch("linerichmenus.container.DefaultRichMenuGateway", return_value=gateway),
+        ):
+            current = self.client.get(self.url, {"channelRevision": self.revision.isoformat()})
+            self.assertEqual(current.status_code, 200, current.content)
+            self.assertIn("release", current.json()["rich"]["effectiveActions"])
+            target = current.json()["rich"]["currentResource"]["resourceId"]
+            self.assertEqual(target, str(self.resource.pk))
+            gateway.reset_mock()
+            response = self.post_release()
+            self.assertEqual(response.status_code, 200, response.content)
+            self.assertEqual(response.json()["status"], "succeeded")
+            self.assertEqual(response.json()["targetResourceId"], target)
+            self.assertEqual(gateway.mock_calls, [])
+            self.resource.refresh_from_db()
+            self.state.refresh_from_db()
+            self.assertEqual(self.resource.lifecycle, "released")
+            self.assertIsNone(self.state.current_resource_id)
+            self.assertEqual(RichMenuOperation.objects.filter(channel_state=self.state).count(), 2)
+            for _ in range(2):
+                refreshed = self.client.get(
+                    self.url, {"channelRevision": self.revision.isoformat()}
+                )
+                self.assertEqual(refreshed.status_code, 200, refreshed.content)
+                self.assertEqual(refreshed.json()["current"], {"kind": "external"})
+                self.assertIsNone(refreshed.json()["rich"]["currentResource"])
+                self.assertEqual(refreshed.json()["rich"]["cleanupResources"], [])
+                self.assertNotIn("release", refreshed.json()["rich"]["effectiveActions"])
+            self.assertEqual({call[0] for call in gateway.mock_calls}, {"get_default"})
+            self.resource.refresh_from_db()
+            self.assertEqual(self.resource.lifecycle, "released")
+
+    # テストケース: 閲覧後にrevision・対象current・操作参照・停止intentを変更する。
+    # 期待値: 既存mutationが競合を拒否し、LINE変更も追跡終了も発生しない。
+    def test_release_refuses_changed_preconditions_after_current_read(self):
+        from unittest.mock import Mock
+
+        from linechannels.models import ChannelDeactivationState, LineChannel
+        from linerichmenus.models import RichMenuOperation
+
+        self.seed_current_for_release()
+        gateway = Mock()
+        gateway.get_default.return_value = RichMenuDefaultPresent("external-default")
+        with (
+            self.release_settings(),
+            patch("linerichmenus.container.DefaultRichMenuGateway", return_value=gateway),
+        ):
+            current = self.client.get(self.url, {"channelRevision": self.revision.isoformat()})
+            self.assertIn("release", current.json()["rich"]["effectiveActions"])
+            gateway.reset_mock()
+            stale = self.post_release(revision=NOW)
+            self.assertEqual(stale.status_code, 409, stale.content)
+            foreign = self.post_release(target=uuid4())
+            self.assertNotEqual(foreign.status_code, 200)
+            self.state.current_resource = None
+            self.state.save()
+            changed = self.post_release()
+            self.assertNotEqual(changed.status_code, 200)
+            self.state.current_resource = self.resource
+            self.state.active_operation = self.origin
+            self.state.save()
+            RichMenuOperation.objects.filter(pk=self.origin.pk).update(status="processing")
+            active = self.post_release()
+            self.assertEqual(active.status_code, 409, active.content)
+            self.state.active_operation = None
+            self.state.save()
+            RichMenuOperation.objects.filter(pk=self.origin.pk).update(status="succeeded")
+            ChannelDeactivationState.objects.create(
+                line_channel=LineChannel.objects.get(public_id=self.channel_id),
+                owner_identity_public_id=self.real_identity_id,
+                provider_id=self.scope.provider_id,
+                expected_channel_revision=self.revision,
+                operation_id=uuid4(),
+                status="checking",
+            )
+            pending = self.post_release()
+            self.assertEqual(pending.status_code, 409, pending.content)
+            self.assertEqual(gateway.mock_calls, [])
+            self.resource.refresh_from_db()
+            self.assertEqual(self.resource.lifecycle, "applied")

@@ -105,7 +105,7 @@ export default function RichMenuAdminPage({
     <PageFrame
       title={title}
       heading="リッチメニュー管理"
-      description="内容を作成し、プレビューで確認してからLINEへ反映します。"
+      description="現在のメニューを確認し、変更内容をプレビューしてからLINEへ反映します。"
       routeFocusKey={location.pathname}
     >
       <Link className="back-link" to="/liff/rich-menus">
@@ -136,6 +136,7 @@ export default function RichMenuAdminPage({
       {state.kind === 'ready' && (
         <RichMenuAdminConsole
           channelId={state.channel.channelId}
+          initialChannel={state.channel}
           channelApi={channelApi}
           richApi={richApi}
           readSignal={readController.current?.signal}
