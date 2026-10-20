@@ -97,7 +97,7 @@ describe('RichMenuAdminConsole', () => {
       ),
     )
     expect(container.textContent).toContain('通知チャネル')
-    expect(container.textContent).toContain('新しいプレビュー')
+    expect(container.querySelector('[aria-label="リッチメニュー編集"]')).not.toBeNull()
     expect(container.textContent).not.toContain('confirmationToken')
     expect(channelApi.getChannel).toHaveBeenCalledTimes(1)
     expect(richApi.getState).toHaveBeenCalledTimes(1)
@@ -174,12 +174,12 @@ describe('RichMenuAdminConsole', () => {
         <RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi} />,
       ),
     )
-    expect(container.textContent).toContain('新しいプレビュー')
+    expect(container.querySelector('[aria-label="リッチメニュー編集"]')).not.toBeNull()
     const refresh = [...container.querySelectorAll('button')].find(
       (button) => button.textContent === '最新状態を再取得',
     )
     await act(async () => refresh?.click())
-    expect(container.textContent).not.toContain('新しいプレビュー')
+    expect(container.querySelector('[aria-label="リッチメニュー編集"]')).toBeNull()
     expect(container.textContent).toContain('管理状態を取得できませんでした')
   })
 
@@ -194,7 +194,7 @@ describe('RichMenuAdminConsole', () => {
       ),
     )
     expect(container.textContent).toContain('読取専用')
-    expect(container.textContent).not.toContain('新しいプレビュー')
+    expect(container.querySelector('[aria-label="リッチメニュー編集"]')).toBeNull()
     await act(async () =>
       root.render(
         <RichMenuAdminConsole
@@ -532,12 +532,12 @@ describe('RichMenuAdminConsole', () => {
     )
     await act(async () => activate?.click())
     expect(container.textContent).toContain('管理状態を読み込んでいます')
-    expect(container.textContent).not.toContain('新しいプレビュー')
+    expect(container.querySelector('[aria-label="リッチメニュー編集"]')).toBeNull()
     await act(async () => finishRich(rich()))
     expect(container.textContent).toContain(
       '再有効化後の最新チャネル状態とリッチメニュー実状態を取得しました',
     )
-    expect(container.textContent).toContain('新しいプレビュー')
+    expect(container.querySelector('[aria-label="リッチメニュー編集"]')).not.toBeNull()
     expect(container.querySelectorAll('input')).toHaveLength(0)
   })
 
@@ -592,9 +592,9 @@ describe('RichMenuAdminConsole', () => {
     expect(onDeleted).toHaveBeenCalledWith({ channelId, label: '通知チャネル', deleted: true })
   })
 
-  // テストケース: 保存状態とLINE観測が異なるrich menu概要を描画する。
-  // 期待値: 両者を区別し、serverの実効操作だけを安全に表示する。
-  test('shows saved state and LINE observation separately', async () => {
+  // テストケース: LINE観測がアプリ外の既定を示し、連携準備が未完了である。
+  // 期待値: 短い状態と安全な禁止理由を示し、内部codeを表示しない。
+  test('shows concise external state and safe unavailability guidance', async () => {
     const channelApi = channels()
     const richApi = menus()
     vi.mocked(richApi).getState.mockResolvedValue({
@@ -614,9 +614,9 @@ describe('RichMenuAdminConsole', () => {
         <RichMenuAdminConsole channelId={channelId} channelApi={channelApi} richApi={richApi} />,
       ),
     )
-    expect(container.textContent).toContain('LINE実状態')
-    expect(container.textContent).toContain('アプリ外の既定')
-    expect(container.textContent).toContain('integration_not_ready')
+    expect(container.textContent).toContain('アプリ外で設定されています')
+    expect(container.textContent).toContain('連携の準備が整っていないため変更できません')
+    expect(container.textContent).not.toContain('integration_not_ready')
   })
 
   // テストケース: editor入力からpreviewを生成し、未保存確認後に破棄する。
@@ -843,7 +843,7 @@ describe('RichMenuAdminConsole', () => {
         ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
     )
     const apply = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'この内容をLINEに反映',
+      (button) => button.textContent === 'LINEに反映',
     )!
     await act(async () => apply.click())
     const refresh = [...container.querySelectorAll('button')].find(

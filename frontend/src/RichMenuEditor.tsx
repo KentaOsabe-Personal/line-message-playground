@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 
 import type { EditorDraft } from './richMenuAdminState'
 import type { TemplateDescriptor } from './richMenuAdminDto'
@@ -8,6 +8,10 @@ type Props = {
   draft: EditorDraft | null
   onDraftChange: (draft: EditorDraft) => void
   onPreview: (draft: EditorDraft) => void
+  onRebuild?: () => void
+  onCancel?: () => void
+  busy?: boolean
+  fieldErrors?: Record<string, string[]>
   onTemplateChange?: (template: TemplateDescriptor) => void
 }
 
@@ -49,16 +53,24 @@ export default function RichMenuEditor({
   onDraftChange,
   onPreview,
   onTemplateChange,
+  onRebuild,
+  onCancel,
+  busy = false,
+  fieldErrors = {},
 }: Props) {
+  const id = useId()
   const [validationVisible, setValidationVisible] = useState(false)
   const selected =
     templates.find(
       (template) =>
         template.templateId === draft?.templateId && template.version === draft.templateVersion,
-    ) ?? templates[0]
+    ) ?? (draft !== null ? undefined : templates[0])
   const current = useMemo<EditorDraft | null>(
     () =>
-      selected === undefined
+      selected === undefined ||
+      (draft !== null &&
+        (Object.keys(draft.fields).length !== selected.areas.length ||
+          selected.areas.some((area) => !(area.field in draft.fields))))
         ? null
         : {
             templateId: selected.templateId,
@@ -76,7 +88,21 @@ export default function RichMenuEditor({
   if (selected === undefined || current === null)
     return (
       <section aria-label="リッチメニュー編集">
-        <p>利用可能なテンプレートがありません。</p>
+        <p role="alert">
+          {draft === null
+            ? '利用可能なテンプレートがありません。'
+            : '同じテンプレートと版を利用できません、または全項目の設定を確認できません。保存済みの入力は変更していません。'}
+        </p>
+        {onRebuild && (
+          <button type="button" onClick={onRebuild} disabled={busy}>
+            別のテンプレートで作り直す
+          </button>
+        )}
+        {onCancel && (
+          <button type="button" onClick={onCancel}>
+            キャンセル
+          </button>
+        )}
       </section>
     )
 
@@ -97,19 +123,30 @@ export default function RichMenuEditor({
           <span className="step-number">1</span>
           <div>
             <p className="eyebrow">内容を入力</p>
-            <h3 id="rich-menu-editor-heading">リッチメニューを作成</h3>
+            <h3 id="rich-menu-editor-heading" tabIndex={-1}>
+              リッチメニューを作成
+            </h3>
           </div>
         </div>
       </div>
       <label className="field-label">
         レイアウト
         <select
-          value={selected.templateId}
+          value={`${selected.templateId}:${selected.version}`}
+          disabled={busy}
           onChange={(event) => {
-            const next = templates.find((template) => template.templateId === event.target.value)
-            if (next === undefined || next.templateId === selected.templateId) return
+            const next = templates.find(
+              (template) => `${template.templateId}:${template.version}` === event.target.value,
+            )
             if (
-              draft !== null &&
+              next === undefined ||
+              (next.templateId === selected.templateId && next.version === selected.version)
+            )
+              return
+            if (
+              Object.values(current.fields).some(
+                (field) => field.displayName !== '' || field.uri !== '',
+              ) &&
               !window.confirm('現在の未適用入力とプレビューをすべて消去します。よろしいですか？')
             )
               return
@@ -126,8 +163,11 @@ export default function RichMenuEditor({
           }}
         >
           {templates.map((template) => (
-            <option key={`${template.templateId}:${template.version}`} value={template.templateId}>
-              {template.displayName}
+            <option
+              key={`${template.templateId}:${template.version}`}
+              value={`${template.templateId}:${template.version}`}
+            >
+              {template.displayName}（版 {template.version}）
             </option>
           ))}
         </select>
@@ -139,6 +179,7 @@ export default function RichMenuEditor({
       <form
         onSubmit={(event) => {
           event.preventDefault()
+          if (busy) return
           if (Object.keys(errors).length === 0) onPreview(current)
           else setValidationVisible(true)
         }}
@@ -156,6 +197,12 @@ export default function RichMenuEditor({
                 <label className="field-label">
                   メニューに表示する文字
                   <input
+                    disabled={busy}
+                    aria-invalid={Boolean(
+                      (validationVisible && errors[area.field]?.displayName) ||
+                      fieldErrors[`${area.field}.displayName`],
+                    )}
+                    aria-describedby={`${id}-${area.field}-name-error`}
                     placeholder="例：予約する"
                     value={value.displayName}
                     maxLength={selected.limits.displayName + 1}
@@ -164,12 +211,25 @@ export default function RichMenuEditor({
                     }
                   />
                 </label>
-                {validationVisible && errors[area.field]?.displayName && (
-                  <p role="alert">{errors[area.field].displayName}</p>
-                )}
+                <p className="field-help" style={{ overflowWrap: 'anywhere' }}>
+                  {value.displayName}
+                </p>
+                {validationVisible &&
+                  errors[area.field]?.displayName &&
+                  !fieldErrors[`${area.field}.displayName`] && (
+                    <p id={`${id}-${area.field}-name-error`} role="alert">
+                      {errors[area.field].displayName}
+                    </p>
+                  )}
                 <label className="field-label">
                   タップ時に開くURL
                   <input
+                    disabled={busy}
+                    aria-invalid={Boolean(
+                      (validationVisible && errors[area.field]?.uri) ||
+                      fieldErrors[`${area.field}.uri`],
+                    )}
+                    aria-describedby={`${id}-${area.field}-uri-error`}
                     type="url"
                     placeholder="https://example.com/"
                     value={value.uri}
@@ -177,19 +237,43 @@ export default function RichMenuEditor({
                     onInput={(event) => update(area.field, 'uri', event.currentTarget.value)}
                   />
                 </label>
-                {validationVisible && errors[area.field]?.uri && (
-                  <p role="alert">{errors[area.field].uri}</p>
+                <p className="field-help" style={{ overflowWrap: 'anywhere' }}>
+                  {value.uri}
+                </p>
+                {validationVisible &&
+                  errors[area.field]?.uri &&
+                  !fieldErrors[`${area.field}.uri`] && (
+                    <p id={`${id}-${area.field}-uri-error`} role="alert">
+                      {errors[area.field].uri}
+                    </p>
+                  )}
+                {(['displayName', 'uri'] as const).map(
+                  (key) =>
+                    fieldErrors[`${area.field}.${key}`] && (
+                      <p
+                        key={key}
+                        id={`${id}-${area.field}-${key === 'displayName' ? 'name' : 'uri'}-error`}
+                        role="alert"
+                      >
+                        {fieldErrors[`${area.field}.${key}`].join(' ')}
+                      </p>
+                    ),
                 )}
               </fieldset>
             )
           })}
         </div>
         <div className="editor-submit">
-          <p>
-            {draft === null ? '入力するとプレビューを作成できます。' : '未反映の変更があります。'}
-          </p>
-          <button type="submit">プレビューを作成</button>
+          <p>未適用の内容です。LINEにはまだ反映されていません。</p>
+          <button type="submit" disabled={busy}>
+            変更内容をプレビュー
+          </button>
         </div>
+        {onCancel && (
+          <button type="button" onClick={onCancel}>
+            キャンセル
+          </button>
+        )}
       </form>
       <p className="field-help">画像は選んだレイアウトと入力内容から自動生成されます。</p>
     </section>

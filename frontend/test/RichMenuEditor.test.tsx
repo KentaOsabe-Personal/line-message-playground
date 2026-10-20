@@ -78,7 +78,9 @@ describe('RichMenuEditor', () => {
     expect(container.textContent).toContain('URL 1000文字以内')
     expect(container.querySelector('input[type="file"]')).toBeNull()
 
-    const inputs = [...container.querySelectorAll('input')]
+    const inputs = [
+      ...container.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea'),
+    ]
     await act(async () => {
       inputs[0].value = '案内'
       inputs[0].dispatchEvent(new Event('input', { bubbles: true }))
@@ -121,7 +123,7 @@ describe('RichMenuEditor', () => {
 
     const select = container.querySelector('select') as HTMLSelectElement
     await act(async () => {
-      select.value = 'jp-link-one'
+      select.value = 'jp-link-one:1'
       select.dispatchEvent(new Event('change', { bubbles: true }))
     })
 
@@ -129,8 +131,11 @@ describe('RichMenuEditor', () => {
       '現在の未適用入力とプレビューをすべて消去します。よろしいですか？',
     )
     expect(onDraftChange).not.toHaveBeenCalled()
-    expect(container.querySelectorAll('input')[0].value).toBe('左')
-    expect(select.value).toBe('jp-link-two')
+    expect(
+      container.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea')[0]
+        .value,
+    ).toBe('左')
+    expect(select.value).toBe('jp-link-two:3')
   })
 
   // テストケース: 未適用入力があるtemplate切替で消去を承認する。
@@ -158,7 +163,7 @@ describe('RichMenuEditor', () => {
     )
     const select = container.querySelector('select') as HTMLSelectElement
     await act(async () => {
-      select.value = 'jp-link-one'
+      select.value = 'jp-link-one:1'
       select.dispatchEvent(new Event('change', { bubbles: true }))
     })
     expect(onDraftChange).toHaveBeenCalledWith({
@@ -166,5 +171,112 @@ describe('RichMenuEditor', () => {
       templateVersion: 1,
       fields: { whole: { displayName: '', uri: '' } },
     })
+  })
+  // テストケース: 保存済みdraftと同じ版がcatalogに存在しない。
+  // 期待値: 別templateの入力へfallbackせず、理由と明示的な作り直しを示す。
+  test('does not replace a missing saved version with a different template', async () => {
+    const onRebuild = vi.fn()
+    await act(async () =>
+      root.render(
+        <RichMenuEditor
+          templates={templates}
+          draft={{
+            templateId: 'jp-link-two',
+            templateVersion: 2,
+            fields: { left: { displayName: '保持', uri: 'https://example.com/full?q=1#part' } },
+          }}
+          onDraftChange={vi.fn()}
+          onPreview={vi.fn()}
+          onRebuild={onRebuild}
+        />,
+      ),
+    )
+    expect(container.querySelector('input')).toBeNull()
+    expect(container.textContent).toContain('同じテンプレートと版を利用できません')
+    await act(async () => container.querySelector('button')?.click())
+    expect(onRebuild).toHaveBeenCalledOnce()
+  })
+  // テストケース: 同じIDの複数版と長い保存値・項目エラーを表示する。
+  // 期待値: 版を選び分け、全入力をarea順で保持し、エラーを対象欄へ関連付ける。
+  test('distinguishes template versions and preserves complete values and accessible errors', async () => {
+    const draft = {
+      templateId: templates[0].templateId,
+      templateVersion: 3,
+      fields: {
+        right: { displayName: '右', uri: 'https://example.com/right' },
+        left: {
+          displayName: '長い表示名'.repeat(10),
+          uri: 'https://example.com/full?query=one&second=two#fragment',
+        },
+      },
+    }
+    const onChange = vi.fn()
+    const cancel = vi.fn()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await act(async () =>
+      root.render(
+        <RichMenuEditor
+          templates={[templates[0], { ...templates[0], version: 4 }]}
+          draft={draft}
+          onDraftChange={onChange}
+          onPreview={vi.fn()}
+          onCancel={cancel}
+          fieldErrors={{ 'left.displayName': ['表示名を確認してください。'] }}
+        />,
+      ),
+    )
+    expect([...container.querySelectorAll('option')].map((option) => option.value)).toEqual([
+      'jp-link-two:3',
+      'jp-link-two:4',
+    ])
+    const inputs = [...container.querySelectorAll('input')]
+    expect(inputs.map((input) => input.value)).toEqual([
+      draft.fields.left.displayName,
+      draft.fields.left.uri,
+      draft.fields.right.displayName,
+      draft.fields.right.uri,
+    ])
+    expect(container.textContent).toContain(draft.fields.left.uri)
+    expect(container.textContent).toContain(draft.fields.left.displayName)
+    expect(document.getElementById(inputs[0].getAttribute('aria-describedby')!)?.textContent).toBe(
+      '表示名を確認してください。',
+    )
+    const select = container.querySelector('select')!
+    await act(async () => {
+      select.value = 'jp-link-two:4'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(onChange).toHaveBeenCalledWith({
+      templateId: 'jp-link-two',
+      templateVersion: 4,
+      fields: { left: { displayName: '', uri: '' }, right: { displayName: '', uri: '' } },
+    })
+    await act(async () =>
+      [...container.querySelectorAll('button')]
+        .find((button) => button.textContent === 'キャンセル')
+        ?.click(),
+    )
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+  // テストケース: 保存済みdraftに必要な領域が欠けている。
+  // 期待値: 空欄で補って編集を始めず、明示的な作り直しを案内する。
+  test('does not invent missing saved fields', async () => {
+    await act(async () =>
+      root.render(
+        <RichMenuEditor
+          templates={templates}
+          draft={{
+            templateId: 'jp-link-two',
+            templateVersion: 3,
+            fields: { left: { displayName: '左', uri: 'https://example.com' } },
+          }}
+          onDraftChange={vi.fn()}
+          onPreview={vi.fn()}
+          onRebuild={vi.fn()}
+        />,
+      ),
+    )
+    expect(container.querySelector('input')).toBeNull()
+    expect(container.textContent).toContain('全項目の設定を確認できません')
   })
 })

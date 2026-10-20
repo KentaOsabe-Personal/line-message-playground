@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react'
 
+import type { PreviewDisplay } from './richMenuAdminState'
 import type { PreviewView } from './richMenuAdminDto'
 
-type Props = { preview: PreviewView; imageUrl: string; templateName: string; now?: string }
+type Props = {
+  preview: PreviewView | PreviewDisplay
+  imageUrl: string
+  templateName: string
+  now?: string
+  onBack?: () => void
+  onRegenerate?: () => void
+  invalid?: boolean
+}
 
 const observationLabels: Record<PreviewView['observation']['kind'], string> = {
   default_none: '現在のリッチメニューなし',
@@ -12,12 +21,20 @@ const observationLabels: Record<PreviewView['observation']['kind'], string> = {
   unknown: '確認できません',
 }
 
-export default function RichMenuPreview({ preview, imageUrl, templateName, now }: Props) {
+export default function RichMenuPreview({
+  preview,
+  imageUrl,
+  templateName,
+  now,
+  onBack,
+  onRegenerate,
+  invalid = false,
+}: Props) {
   const [clock, setClock] = useState(() => Date.now())
   const expiresAt = new Date(preview.expiresAt).getTime()
   const currentTime = now === undefined ? clock : new Date(now).getTime()
   const remainingMs = expiresAt - currentTime
-  const expired = remainingMs <= 0
+  const expired = remainingMs <= 0 || invalid
   const remainingMinutes = Math.max(1, Math.ceil(remainingMs / 60_000))
 
   useEffect(() => {
@@ -46,19 +63,23 @@ export default function RichMenuPreview({ preview, imageUrl, templateName, now }
           <span className="step-number">2</span>
           <div>
             <p className="eyebrow">表示を確認</p>
-            <h3 id="rich-menu-preview-heading">プレビュー</h3>
+            <h3 id="rich-menu-preview-heading" tabIndex={-1}>
+              変更内容のプレビュー
+            </h3>
           </div>
         </div>
         <span className={expired ? 'status inactive' : 'status active'}>
           {expired ? '期限切れ' : `残り ${remainingMinutes}分`}
         </span>
       </div>
+      <p role="status">未適用の内容です。LINEにはまだ反映されていません。</p>
       <div className="rich-menu-image-frame">
         <img
           src={imageUrl}
           width={preview.image.width}
           height={preview.image.height}
-          alt={`${preview.channelLabel} のリッチメニュープレビュー`}
+          alt={`${preview.channelLabel} の未適用メニューのプレビュー`}
+          style={{ width: '100%', height: 'auto' }}
         />
       </div>
       {preview.warnings.includes('external_default_replaced') && (
@@ -68,8 +89,19 @@ export default function RichMenuPreview({ preview, imageUrl, templateName, now }
         {preview.fields.map((field, index) => (
           <li key={`${field.displayName}:${index}`}>
             <div>
-              <strong>{field.displayName}</strong>
-              <span>{field.uri}</span>
+              <strong>
+                領域 {index + 1}: {field.displayName}
+              </strong>
+              <span
+                style={{
+                  overflowWrap: 'anywhere',
+                  whiteSpace: 'normal',
+                  overflow: 'visible',
+                  textOverflow: 'clip',
+                }}
+              >
+                {field.uri}
+              </span>
             </div>
             <button type="button" className="secondary compact" onClick={() => openLink(field.uri)}>
               リンクを開く
@@ -86,8 +118,7 @@ export default function RichMenuPreview({ preview, imageUrl, templateName, now }
           適用可能です。内容を確認したら「LINEに反映」へ進んでください。
         </p>
       )}
-      <details className="technical-details">
-        <summary>確認情報</summary>
+      <div className="technical-details">
         <dl>
           <div>
             <dt>対象</dt>
@@ -105,11 +136,27 @@ export default function RichMenuPreview({ preview, imageUrl, templateName, now }
           </div>
           <div>
             <dt>有効期限</dt>
-            <dd>{new Date(preview.expiresAt).toLocaleString('ja-JP')}</dd>
+            <dd>
+              {new Date(preview.expiresAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+            </dd>
           </div>
         </dl>
+        <p>適用するとチャネル既定のメニューを置き換えます。アプリ外の資源は編集・削除しません。</p>
+        <p>
+          利用者別のメニューが設定されている場合は、そちらが優先されます。端末での実際の表示は保証しません。
+        </p>
         <p>リンク先の到達や表示結果は保証・保存しません。</p>
-      </details>
+      </div>
+      {onBack && (
+        <button type="button" onClick={onBack}>
+          編集へ戻る
+        </button>
+      )}
+      {onRegenerate && (expired || preview.observation.kind === 'unknown') && (
+        <button type="button" onClick={onRegenerate}>
+          プレビューを再生成
+        </button>
+      )}
     </section>
   )
 }

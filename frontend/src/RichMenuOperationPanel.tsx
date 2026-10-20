@@ -1,95 +1,101 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { OperationView, PreviewView } from './richMenuAdminDto'
-import { operationStatusLabels, richMenuActionLabels } from './RichMenuStatePanel'
+import type { OperationState, PreviewDisplay } from './richMenuAdminState'
+import { operationStatusLabels } from './RichMenuStatePanel'
 
 type Props = {
   channelLabel: string
-  preview: PreviewView
-  currentDefault: string
+  preview?: PreviewView | PreviewDisplay | null
+  currentDefault?: string
   busy: boolean
   result: OperationView | null
+  operation?: OperationState
   onApply: () => void
+  valid?: boolean
+  now?: string
+  refreshFailed?: boolean
+  onRefresh?: () => void
+  onTrack?: () => void
 }
-
 export default function RichMenuOperationPanel({
   channelLabel,
   preview,
-  currentDefault,
   busy,
   result,
+  operation,
   onApply,
+  valid = true,
+  now,
+  refreshFailed = false,
+  onRefresh,
+  onTrack,
 }: Props) {
   const submitted = useRef(false)
+  const [clock, setClock] = useState(() => Date.now())
+  const deadline = preview ? Date.parse(preview.expiresAt) : NaN
+  useEffect(() => {
+    if (now !== undefined || !Number.isFinite(deadline)) return
+    const timer = window.setInterval(() => setClock(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [deadline, now])
   useEffect(() => {
     if (!busy) submitted.current = false
   }, [busy, result])
+  const processing = busy || operation?.state === 'submitting' || operation?.state === 'tracking'
+  const unknown = operation?.state === 'transport_unknown' || result?.status === 'unknown'
+  const canApply = Boolean(
+    preview &&
+    valid &&
+    Number.isFinite(deadline) &&
+    (now ? Date.parse(now) : clock) < deadline &&
+    preview.observation.kind !== 'unknown' &&
+    !processing &&
+    !unknown &&
+    result === null,
+  )
   const submit = () => {
-    if (busy || submitted.current) return
+    if (submitted.current || !canApply || (Date.now() >= deadline && now === undefined)) return
     submitted.current = true
     onApply()
   }
   return (
-    <section className="rich-menu-apply-card" aria-labelledby="rich-menu-apply-heading">
-      <div className="card-heading">
-        <div>
-          <span className="step-number">3</span>
-          <div>
-            <p className="eyebrow">公開する</p>
-            <h3 id="rich-menu-apply-heading">LINEに反映</h3>
-          </div>
-        </div>
-      </div>
-      <p>
-        <strong>{channelLabel}</strong> のリッチメニューとして反映します。
-      </p>
-      {preview.observation.kind === 'external_default' && (
-        <p className="notice warning">
-          適用すると既定を置き換えますが、アプリ外資源自体は削除しません。現在LINE側で設定されているリッチメニューから切り替わります。
-        </p>
-      )}
-      <button
-        type="button"
-        className="primary-action"
-        disabled={busy || result !== null}
-        onClick={submit}
-      >
-        {busy
-          ? '反映しています…'
-          : result !== null
-            ? '操作結果を確認してください'
-            : 'この内容をLINEに反映'}
-      </button>
-      {result !== null && (
-        <div
-          className={`operation-result ${result.status === 'succeeded' ? 'success' : result.status === 'unknown' ? 'uncertain' : ''}`}
-          role="status"
-        >
-          <strong>{operationStatusLabels[result.status]}</strong>
+    <section className="rich-menu-apply-card" aria-label="LINEへの反映と直前結果">
+      {preview && (
+        <>
+          <h3>LINEに反映</h3>
           <p>
-            次にできること:{' '}
-            {result.nextAllowedActions.length === 0
-              ? 'ありません'
-              : result.nextAllowedActions.map((action) => richMenuActionLabels[action]).join('、')}
+            <strong>{channelLabel}</strong> のリッチメニューとして反映します。
           </p>
-          <details className="technical-details">
-            <summary>操作IDを確認</summary>
-            <code>{result.operationId}</code>
-          </details>
+          {preview.observation.kind === 'external_default' && (
+            <p>既定を置き換えますが、アプリ外資源自体は削除しません。</p>
+          )}
+          <button type="button" disabled={!canApply} onClick={submit}>
+            LINEに反映
+          </button>
+        </>
+      )}
+      {processing && <p role="status">操作の結果を確認しています…</p>}
+      {result && (
+        <p
+          role={
+            ['failed', 'unknown', 'cleanup_required'].includes(result.status) ? 'alert' : 'status'
+          }
+        >
+          直前の操作: {operationStatusLabels[result.status]}
+        </p>
+      )}
+      {unknown && (
+        <div role="alert">
+          <p>結果を確認できません。同じ操作の結果を確認してください。自動再送は行いません。</p>
+          {onTrack && <button onClick={onTrack}>同じ操作の結果を確認</button>}
         </div>
       )}
-      <details className="technical-details">
-        <summary>反映内容の詳細</summary>
-        <p>
-          {preview.templateId} v{preview.templateVersion} / 現在の状態: {currentDefault}
-        </p>
-        <ul>
-          {preview.fields.map((field, index) => (
-            <li key={`${index}-${field.displayName}`}>
-              {field.displayName}: {field.uri}
-            </li>
-          ))}
-        </ul>
-      </details>
+      {refreshFailed && (
+        <div role="alert">
+          <p>現在表示の再取得に失敗しました。直前の操作結果は保持しています。</p>
+          {onRefresh && <button onClick={onRefresh}>現在表示を更新</button>}
+        </div>
+      )}
     </section>
   )
 }
