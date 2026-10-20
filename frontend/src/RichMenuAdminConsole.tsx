@@ -15,8 +15,8 @@ import RichMenuStatePanel, {
   operationStatusLabels,
   richMenuActionLabels,
 } from './RichMenuStatePanel'
-import { initialRichMenuAdminState, transitionRichMenuAdmin } from './richMenuAdminState'
-import type { EditorDraft } from './richMenuAdminState'
+import { initialRichMenuAdminState, transitionRichMenuAdmin } from './richMenuAdminLegacyState'
+import type { EditorDraft } from './richMenuAdminLegacyState'
 import type { OperationKind, OperationView } from './richMenuAdminDto'
 import type { DeactivationView } from './richMenuAdminDto'
 import type { DeletedChannel } from './channelAdminDto'
