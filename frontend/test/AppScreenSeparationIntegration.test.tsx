@@ -12,6 +12,8 @@ import type { LinkedDeliveryApiClient } from '../src/deliveryApi'
 import type { LinkedDeliveryStatus } from '../src/deliveryDto'
 import type { LinePlatformLiffAdapter } from '../src/liffClient'
 import type { RichMenuAdminApiClient } from '../src/richMenuAdminApi'
+import { parseCurrentMenu, type CurrentMenuView, type OperationView } from '../src/richMenuAdminDto'
+import currentFixtures from './fixtures/rich-menu-current.json'
 
 ;(
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
@@ -499,6 +501,122 @@ describe('app-screen-separation task 8 integration contracts', () => {
       expect(clients.channelApi.listChannels).toHaveBeenCalledTimes(2)
       expect(JSON.stringify(window.sessionStorage)).not.toContain('access-token-canary')
       expect(JSON.stringify(window.sessionStorage)).not.toContain('channel-secret-canary')
+    })
+
+    // テストケース: rich-menu read中に離脱し、再訪後の解除POST中にも離脱・再訪する。
+    // 期待値: readだけ中止し、後着結果を捨て、再訪時は同じoperationをGETしPOSTを再送しない。
+    test('fences rich-menu route reads and resumes accepted operations without replay', async () => {
+      const clients = featureClients()
+      const item = channel({
+        channelId: currentFixtures.managed.channelId,
+        updatedAt: currentFixtures.managed.channelRevision,
+      })
+      vi.mocked(clients.channelApi).getChannel.mockResolvedValue(item)
+      const parsed = parseCurrentMenu(currentFixtures.managed, item.channelId, item.updatedAt)
+      if (!parsed.ok) throw new Error('invalid current fixture')
+      let resolveRead!: (value: CurrentMenuView) => void
+      let resolveMutation!: (value: OperationView) => void
+      const settled: OperationView = {
+        operationId: '33333333-3333-4333-8333-333333333333',
+        kind: 'unlink',
+        status: 'succeeded',
+        stage: null,
+        result: 'succeeded',
+        subjectOperationId: null,
+        targetResourceId: currentFixtures.managed.current.resourceId,
+        acceptedAt: item.updatedAt,
+        completedAt: item.updatedAt,
+        nextAllowedActions: [],
+      }
+      const rich: RichMenuAdminApiClient = {
+        listTemplates: vi.fn(),
+        createPreview: vi.fn(),
+        getState: vi.fn(),
+        getHistory: vi.fn(),
+        getDeactivation: vi.fn(),
+        startDeactivation: vi.fn(),
+        recheckDeactivation: vi.fn(),
+        getCurrent: vi
+          .fn()
+          .mockReturnValueOnce(
+            new Promise<CurrentMenuView>((resolve) => {
+              resolveRead = resolve
+            }),
+          )
+          .mockResolvedValue(parsed.value),
+        startOperation: vi.fn().mockReturnValue(
+          new Promise<OperationView>((resolve) => {
+            resolveMutation = resolve
+          }),
+        ),
+        getOperation: vi.fn().mockResolvedValue(settled),
+      }
+      clients.richMenuApi = rich
+      const router = createMemoryRouter(
+        [
+          {
+            path: '*',
+            element: (
+              <AppRouter authGateProps={authGateProps(authApi())} featureClients={clients} />
+            ),
+          },
+        ],
+        { initialEntries: [`/liff/rich-menus/${item.channelId}`] },
+      )
+      const createUrl = vi.fn(() => `blob:${crypto.randomUUID()}`)
+      const revokeUrl = vi.fn()
+      vi.stubGlobal(
+        'URL',
+        class extends URL {
+          static createObjectURL = createUrl
+          static revokeObjectURL = revokeUrl
+        },
+      )
+      try {
+        await act(async () => root.render(<RouterProvider router={router} />))
+        const signal = vi.spyOn(rich, 'getCurrent').mock.calls[0][2]?.signal
+        await act(async () => {
+          await router.navigate('/liff/account')
+        })
+        expect(signal?.aborted).toBe(true)
+        await act(async () => resolveRead(parsed.value))
+        expect(createUrl).not.toHaveBeenCalled()
+        await act(async () => {
+          await router.navigate(`/liff/rich-menus/${item.channelId}`)
+        })
+        const click = async (label: string) => {
+          const button = [...container.querySelectorAll('button')].find(
+            (value) => value.textContent === label,
+          )
+          expect(button).toBeDefined()
+          await act(async () => button?.click())
+        }
+        await click('適用解除')
+        await click('適用解除を確定')
+        expect(rich.startOperation).toHaveBeenCalledTimes(1)
+        expect(vi.mocked(rich.startOperation).mock.calls[0]).toHaveLength(2)
+        await act(async () => {
+          await router.navigate('/liff/account')
+        })
+        await act(async () => resolveMutation(settled))
+        expect(container.textContent).not.toContain('適用を解除しました')
+        const resumed = structuredClone(parsed.value)
+        resumed.rich.historySummary.latestOperationId = settled.operationId
+        resumed.rich.historySummary.latestStatus = 'processing'
+        vi.mocked(rich.getCurrent).mockResolvedValue(resumed)
+        await act(async () => {
+          await router.navigate(`/liff/rich-menus/${item.channelId}`)
+        })
+        expect(rich.getOperation).toHaveBeenCalledWith(
+          settled.operationId,
+          expect.objectContaining({ signal: expect.any(AbortSignal) as unknown }),
+        )
+        expect(rich.startOperation).toHaveBeenCalledTimes(1)
+        expect(rich.getHistory).not.toHaveBeenCalled()
+        expect(revokeUrl).toHaveBeenCalled()
+      } finally {
+        vi.unstubAllGlobals()
+      }
     })
 
     // テストケース: 認証入口から表示される機能画面の共通shellをkeyboard操作可能なDOMとして確認する。

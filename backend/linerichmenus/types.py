@@ -9,6 +9,21 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 
+@dataclass(frozen=True, slots=True)
+class OwnerChannelScope:
+    owner_identity_public_id: UUID
+    provider_id: str
+    channel_public_id: UUID
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.owner_identity_public_id, UUID) or not isinstance(
+            self.channel_public_id, UUID
+        ):
+            raise ValueError("invalid owner channel scope")
+        if not isinstance(self.provider_id, str) or not self.provider_id:
+            raise ValueError("invalid provider scope")
+
+
 class OperationKind(StrEnum):
     APPLY = "apply"
     UNLINK = "unlink"
@@ -120,6 +135,8 @@ class SafeResultCode(StrEnum):
     CHANNEL_UNAVAILABLE = "channel_unavailable"
     CHANNEL_INACTIVE = "channel_inactive"
     STALE_CHANNEL = "stale_channel"
+    # 現在閲覧API限定。既存mutationの競合分類は変更しない。
+    CURRENT_CHANGED = "current_changed"
     OPERATION_CONFLICT = "operation_conflict"
     OPERATION_IN_PROGRESS = "operation_in_progress"
     PREVIEW_EXPIRED = "preview_expired"

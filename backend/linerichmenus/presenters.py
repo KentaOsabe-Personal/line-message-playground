@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from base64 import b64encode
+
+from linechannels.admin_presenters import AdminPresenter
+
+from .current_types import ConfigurationAvailable, CurrentImageAvailable, CurrentMenuSucceeded
 from .services import (
     HistorySucceeded,
     OperationSucceeded,
@@ -49,6 +54,63 @@ def _iso(value):
 
 
 class RichMenuPresenter:
+    def current(self, result: CurrentMenuSucceeded) -> dict[str, object]:
+        content = result.current
+        current = {"kind": content.kind}
+        if content.kind == "managed":
+            image = content.image
+            configuration = content.configuration
+            if isinstance(image, CurrentImageAvailable):
+                rendered_image = {
+                    "status": "available",
+                    "contentType": image.content_type,
+                    "width": image.width,
+                    "height": image.height,
+                    "digest": image.pixel_digest,
+                    "base64": b64encode(image.binary).decode("ascii"),
+                }
+            else:
+                rendered_image = {"status": "unavailable", "reason": image.reason}
+            if isinstance(configuration, ConfigurationAvailable):
+                template = configuration.template
+                rendered_configuration = {
+                    "status": "available",
+                    "templateId": template.reference.template_id,
+                    "templateVersion": template.reference.version,
+                    "fields": [
+                        {"displayName": field.display_name, "uri": field.uri}
+                        for field in template.fields
+                    ],
+                    "editability": configuration.editability,
+                }
+            else:
+                rendered_configuration = {"status": "unavailable", "reason": configuration.reason}
+            current.update(
+                resourceId=str(content.resource_id),
+                image=rendered_image,
+                configuration=rendered_configuration,
+            )
+        return {
+            "channelId": str(result.channel_public_id),
+            "channelRevision": _iso(result.channel_revision),
+            "checkedAt": _iso(result.checked_at),
+            "rich": self.state(StateSucceeded(result.rich)),
+            "deactivation": (
+                None
+                if result.deactivation is None
+                else AdminPresenter().deactivation(result.deactivation)
+            ),
+            "current": current,
+            "recoveryTargets": [
+                {
+                    "kind": item.kind,
+                    "subjectOperationId": str(item.subject_operation_id),
+                    "targetResourceId": str(item.target_resource_id),
+                }
+                for item in result.recovery_targets
+            ],
+        }
+
     def templates(self, templates: tuple[TemplateDescriptor, ...]) -> dict[str, object]:
         return {
             "items": [

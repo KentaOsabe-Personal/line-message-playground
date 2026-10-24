@@ -40,7 +40,10 @@ class AwareDateTimeField(serializers.Field):
     def to_internal_value(self, data):
         if not isinstance(data, str) or not data or data != data.strip():
             raise serializers.ValidationError(_INVALID)
-        parsed = parse_datetime(data)
+        try:
+            parsed = parse_datetime(data)
+        except ValueError, TypeError:
+            raise serializers.ValidationError(_INVALID) from None
         if parsed is None or timezone.is_naive(parsed):
             raise serializers.ValidationError(_INVALID)
         return parsed
@@ -160,3 +163,14 @@ class HistoryQuerySerializer(ExactRequestSerializer):
             limit=self.validated_data["limit"],
             cursor=self.validated_data.get("cursor"),
         )
+
+
+class CurrentQuerySerializer(ExactRequestSerializer):
+    channelRevision = AwareDateTimeField()
+
+    def validate(self, attrs):
+        if hasattr(self.initial_data, "getlist") and any(
+            len(self.initial_data.getlist(key)) != 1 for key in self.initial_data
+        ):
+            raise serializers.ValidationError({"request": [_INVALID]})
+        return attrs

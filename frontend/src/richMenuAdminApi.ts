@@ -7,6 +7,8 @@ import {
 import { createProtectedHttpClient, ProtectedHttpClientError } from './httpApi'
 import type { HttpMethod, ProtectedHttpClient, ReadRequestOptions } from './httpApi'
 import {
+  parseCurrentMenu,
+  parseCurrentMenuError,
   parseDeactivation,
   parseHistoryPage,
   parseOperation,
@@ -16,6 +18,7 @@ import {
   parseTemplates,
 } from './richMenuAdminDto'
 import type {
+  CurrentMenuView,
   DeactivationView,
   HistoryPageView,
   OperationView,
@@ -49,6 +52,11 @@ export type RecheckDeactivationInput = StartDeactivationInput & { recoveryOperat
 export interface RichMenuAdminApiClient {
   listTemplates(options?: ReadRequestOptions): Promise<TemplateDescriptor[]>
   createPreview(channelId: string, input: PreviewInput): Promise<PreviewView>
+  getCurrent(
+    channelId: string,
+    channelRevision: string,
+    options?: ReadRequestOptions,
+  ): Promise<CurrentMenuView>
   getState(channelId: string, options?: ReadRequestOptions): Promise<RichMenuStateView>
   startOperation(channelId: string, input: RichMenuOperationInput): Promise<OperationView>
   getOperation(operationId: string, options?: ReadRequestOptions): Promise<OperationView>
@@ -92,6 +100,7 @@ async function requestOnce<T>(
   client: ProtectedHttpClient,
   input: { path: string; method: HttpMethod; body?: unknown; signal?: AbortSignal },
   parse: (value: unknown) => Parsed<T>,
+  parseError: (value: unknown) => Parsed<SafeApiError> = parseRichMenuError,
 ): Promise<T> {
   const outcome = input.method === 'GET' ? 'load_failed' : 'refresh_required'
   let response: Response
@@ -109,7 +118,7 @@ async function requestOnce<T>(
     throw safeError('protocol_error', '応答形式を確認できません。', outcome, response.status)
   }
   if (!response.ok) {
-    const rich = parseRichMenuError(payload)
+    const rich = parseError(payload)
     if (rich.ok) throw new RichMenuAdminApiError(rich.value, outcome, response.status)
     const channel = parseChannelAdminError(payload)
     throw new RichMenuAdminApiError(
@@ -147,6 +156,24 @@ export function createRichMenuAdminApiClient(
         client,
         { path: `${richChannel(channelId)}preview/`, method: 'POST', body: input },
         parsePreview,
+      )
+    },
+    getCurrent: async (
+      channelId: string,
+      channelRevision: string,
+      options: ReadRequestOptions = {},
+    ) => {
+      assertDate(channelRevision, 'load_failed')
+      const query = new URLSearchParams({ channelRevision })
+      return requestOnce(
+        client,
+        {
+          path: `${richChannel(channelId)}current/?${query.toString()}`,
+          method: 'GET',
+          ...options,
+        },
+        (value) => parseCurrentMenu(value, channelId, channelRevision),
+        parseCurrentMenuError,
       )
     },
     getState: (channelId: string, options: ReadRequestOptions = {}) =>

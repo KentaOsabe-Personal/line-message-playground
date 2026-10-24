@@ -250,6 +250,29 @@ docker compose run --rm backend python manage.py manage_line_channel \
 
 配信APIは有効なownerセッションを必要とします。プレビュー、送信、状態確認のPOSTでは、設定済みHTTPS originと`Origin`ヘッダーの完全一致、およびCSRF tokenを検証します。
 
+### 旧版で残ったリッチメニューの後片付け状態の修復
+
+旧版の不具合により、置換操作が成功済みなのに旧メニューが残り、編集と後片付けの両方ができない場合に使います。Backendへアクセスできる管理者向けのコマンドです。通常APIのterminal状態制約は変更せず、所有者・チャネルの版・現在資源・保存済みの置換関係を照合できる一件だけを修復します。
+
+```bash
+docker compose run --rm --no-deps backend python manage.py repair_rich_menu_cleanup \
+  --channel-id <チャネルの公開UUID> \
+  --expected-revision <チャネルのupdatedAt>
+```
+
+既定はdry-runです。出力のsubjectOperationIdとtargetResourceIdを確認し、同じ値を指定して実行します。
+
+```bash
+docker compose run --rm --no-deps backend python manage.py repair_rich_menu_cleanup \
+  --channel-id <チャネルの公開UUID> \
+  --expected-revision <チャネルのupdatedAt> \
+  --subject-operation-id <確認した操作UUID> \
+  --target-resource-id <確認した資源UUID> \
+  --apply
+```
+
+修復は元の成功履歴を残して修復transitionを追加し、LINEへの変更や資源削除は行いません。画面を更新して、表示された対象の後片付けを明示実行します。複数の旧資源がある場合は、保存済みの置換関係に従い古い資源から選ばれます。一件の後片付け完了後に次のdry-runから繰り返します。操作中、認可・revisionの変更、置換関係不明、停止中・停止処理中は修復しません。
+
 ## スマートフォンからの確認
 
 ngrokの開発用ドメインを使うと、スマートフォンのLINEアプリからローカルのFrontendと`/api`へHTTPSでアクセスできます。

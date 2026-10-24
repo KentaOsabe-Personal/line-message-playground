@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import secrets
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from hashlib import sha256
 from typing import Callable, Mapping, Protocol
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from django.core import signing
@@ -13,8 +15,23 @@ from django.db import IntegrityError, transaction
 from django.db.models import Prefetch, Q
 from django.utils import timezone
 
+from linechannels.admin_lifecycle_types import DeactivationConflict
 from linechannels.reference_fence import ChannelReferenceFence, DjangoChannelReferenceFence
 
+from .catalog import DefaultTemplateCatalog
+from .current_types import (
+    ConfigurationAvailable,
+    ConfigurationUnavailable,
+    CurrentConfiguration,
+    CurrentOperationSnapshot,
+    CurrentReadConflict,
+    CurrentReadMatched,
+    CurrentReadSnapshot,
+    CurrentResourceSnapshot,
+    CurrentStateSnapshot,
+    DeactivationReadPort,
+    RecoveryTarget,
+)
 from .models import (
     ManagedRichMenu,
     RichMenuChannelState,
@@ -42,7 +59,11 @@ from .types import (
     ResourceLifecycle,
     SafeResultCode,
     TemplateFieldValue,
+    TemplateInput,
     TemplateReference,
+)
+from .types import (
+    OwnerChannelScope as OwnerChannelScope,
 )
 
 
@@ -164,21 +185,6 @@ class RecoveryHandoffResult:
 class ReplacementRecorded:
     current_resource: ManagedResourceView
     old_resource: ManagedResourceView
-
-
-@dataclass(frozen=True, slots=True)
-class OwnerChannelScope:
-    owner_identity_public_id: UUID
-    provider_id: str
-    channel_public_id: UUID
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.owner_identity_public_id, UUID) or not isinstance(
-            self.channel_public_id, UUID
-        ):
-            raise ValueError("invalid owner channel scope")
-        if not isinstance(self.provider_id, str) or not self.provider_id:
-            raise ValueError("invalid provider scope")
 
 
 @dataclass(frozen=True, slots=True)
@@ -1090,6 +1096,108 @@ class DjangoRichMenuRepository:
             resource.save(using=self.using, update_fields=("lifecycle", "deleted_at", "updated_at"))
         return True
 
+    def complete_apply(
+        self, operation_id: UUID, candidate_resource_id: UUID
+    ) -> OperationView | StageConflict:
+        """既定確認済み資源とcleanup blockerを同じtransactionで確定する。"""
+        with transaction.atomic(using=self.using):
+            finalized = self.finalize_apply(operation_id, candidate_resource_id)
+            if isinstance(finalized, OperationConflict) or finalized is False:
+                transaction.set_rollback(True, using=self.using)
+                return StageConflict(
+                    finalized.reason
+                    if isinstance(finalized, OperationConflict)
+                    else "invalid_relation"
+                )
+            has_old = (
+                ManagedRichMenu.objects.using(self.using)
+                .filter(
+                    replacement_operation_id=operation_id,
+                    lifecycle=ResourceLifecycle.OLD.value,
+                )
+                .exists()
+            )
+            result = self.complete_stage(
+                StageOutcome(
+                    operation_id=operation_id,
+                    expected_stage=OperationStage.VERIFYING,
+                    next_status=(
+                        OperationStatus.CLEANUP_REQUIRED if has_old else OperationStatus.SUCCEEDED
+                    ),
+                    next_stage=OperationStage.CLEANING if has_old else OperationStage.VERIFYING,
+                    result=SafeResultCode.CLEANUP_REQUIRED if has_old else SafeResultCode.SUCCEEDED,
+                )
+            )
+            if isinstance(result, StageConflict) or result.status is not (
+                OperationStatus.CLEANUP_REQUIRED if has_old else OperationStatus.SUCCEEDED
+            ):
+                transaction.set_rollback(True, using=self.using)
+                return StageConflict("stale_stage")
+            return result
+
+    def complete_apply_recovery(
+        self, recovery_operation_id: UUID, candidate_resource_id: UUID
+    ) -> OperationView | StageConflict:
+        """明示再確認済みapplyを再送せず、資源・元操作・recoveryへatomicに反映する。"""
+        with transaction.atomic(using=self.using):
+            recovery = (
+                RichMenuOperation.objects.using(self.using)
+                .select_for_update()
+                .select_related("subject_operation")
+                .filter(operation_id=recovery_operation_id)
+                .first()
+            )
+            subject = None if recovery is None else recovery.subject_operation
+            if (
+                recovery is None
+                or recovery.kind != OperationKind.RECHECK.value
+                or subject is None
+                or subject.kind != OperationKind.APPLY.value
+                or subject.status != OperationStatus.UNKNOWN.value
+                or subject.stage
+                not in {
+                    OperationStage.SETTING_DEFAULT.value,
+                    OperationStage.VERIFYING.value,
+                }
+            ):
+                return StageConflict("invalid_transition")
+            candidate = (
+                ManagedRichMenu.objects.using(self.using)
+                .filter(
+                    public_id=candidate_resource_id,
+                    origin_operation_id=subject.operation_id,
+                    channel_state_id=subject.channel_state_id,
+                    lifecycle=ResourceLifecycle.CANDIDATE.value,
+                    line_rich_menu_id__isnull=False,
+                )
+                .first()
+            )
+            if candidate is None:
+                return StageConflict("invalid_transition")
+            handoff = self.handoff_recovery(
+                RecoveryOutcome(
+                    recovery_operation_id=recovery_operation_id,
+                    subject_operation_id=subject.operation_id,
+                    subject_next_status=OperationStatus.PROCESSING,
+                    subject_next_stage=OperationStage.VERIFYING,
+                    subject_result=SafeResultCode.ACCEPTED,
+                    blocker_moves_to_recovery=False,
+                )
+            )
+            if isinstance(handoff, StageConflict):
+                return handoff
+            if handoff.recovery.status is not OperationStatus.SUCCEEDED:
+                return handoff.recovery
+            claim = self.claim_stage(subject.operation_id, OperationStage.VERIFYING)
+            if not isinstance(claim, StageClaimed):
+                transaction.set_rollback(True, using=self.using)
+                return StageConflict("stale_stage")
+            completed = self.complete_apply(subject.operation_id, candidate_resource_id)
+            if isinstance(completed, StageConflict):
+                transaction.set_rollback(True, using=self.using)
+                return completed
+            return handoff.recovery
+
     def finalize_apply(
         self, operation_id: UUID, candidate_resource_id: UUID
     ) -> bool | OperationConflict:
@@ -1310,6 +1418,39 @@ class DjangoRichMenuRepository:
                 .select_for_update()
                 .get(channel_public_id=operation.channel_state_id)
             )
+            subject = (
+                RichMenuOperation.objects.using(self.using)
+                .select_for_update()
+                .filter(operation_id=operation.subject_operation_id, channel_state=state)
+                .first()
+            )
+            if (
+                subject is None
+                or subject.status != OperationStatus.CLEANUP_REQUIRED.value
+                or subject.stage != OperationStage.CLEANING.value
+                or operation.target_resource_id != target.public_id
+                or not (
+                    target.origin_operation_id == subject.operation_id
+                    or target.replacement_operation_id == subject.operation_id
+                )
+                or state.active_operation_id != operation.operation_id
+                or state.blocking_operation_id != subject.operation_id
+            ):
+                return StageConflict("invalid_transition")
+            self._append_transition(
+                operation=subject,
+                from_status=OperationStatus.CLEANUP_REQUIRED,
+                to_status=OperationStatus.SUCCEEDED,
+                stage=OperationStage.CLEANING,
+                reason=SafeResultCode.SUCCEEDED,
+            )
+            subject.status = OperationStatus.SUCCEEDED.value
+            subject.result_code = SafeResultCode.SUCCEEDED.value
+            subject.completed_at = self._clock()
+            subject.save(
+                using=self.using,
+                update_fields=("status", "result_code", "completed_at", "updated_at"),
+            )
             self._append_transition(
                 operation=operation,
                 from_status=OperationStatus.RECOVERY_ACTIVE,
@@ -1422,11 +1563,7 @@ class DjangoRichMenuRepository:
                 )
                 if target is None:
                     return OperationConflict("invalid_relation")
-                directly_related = target.origin_operation_id == subject.operation_id
-                replacement_related = target.replacement_operation_id == subject.operation_id
-                if not directly_related and not replacement_related:
-                    return OperationConflict("invalid_relation")
-                if target.lifecycle == ResourceLifecycle.OLD.value and not replacement_related:
+                if not _cleanup_target_matches_subject(target, subject):
                     return OperationConflict("invalid_relation")
             recovery_fence = self._operation_fence.lock_exact(
                 OperationFenceSnapshot(
@@ -2078,3 +2215,245 @@ def _require_digest(value: object) -> None:
         or any(character not in "0123456789abcdef" for character in value)
     ):
         raise ValueError("invalid digest")
+
+
+class DjangoCurrentReadRepository:
+    """owner/channelのlockを保持した短いtransaction内で使う閲覧adapter。
+
+    呼出側が公開portでowner → channelをlockしてから両メソッドを呼ぶ。
+    停止intentの既存writerもchannelを先にlockするため、get_for_ownerの
+    不存在を含む結果はそのchannel lockで保護される。stateを新規作成せず、
+    最終比較後の観測保存まで呼出側はtransactionを保持する。
+    """
+
+    def __init__(
+        self,
+        *,
+        deactivation: DeactivationReadPort,
+        catalog: DefaultTemplateCatalog | None = None,
+        using: str = "default",
+    ) -> None:
+        self.using = using
+        self._deactivation = deactivation
+        self._catalog = catalog or DefaultTemplateCatalog()
+
+    def capture_current(self, scope: OwnerChannelScope) -> CurrentReadSnapshot:
+        if not isinstance(scope, OwnerChannelScope):
+            raise TypeError("invalid owner channel scope")
+        if not transaction.get_connection(self.using).in_atomic_block:
+            raise RuntimeError("transaction required")
+        return self._capture(scope)
+
+    def lock_current_unchanged(
+        self,
+        scope: OwnerChannelScope,
+        expected: CurrentReadSnapshot,
+    ) -> CurrentReadMatched | CurrentReadConflict:
+        if not isinstance(expected, CurrentReadSnapshot):
+            raise TypeError("invalid current snapshot")
+        actual = self.capture_current(scope)
+        return CurrentReadMatched(actual) if actual == expected else CurrentReadConflict()
+
+    def _capture(self, scope: OwnerChannelScope) -> CurrentReadSnapshot:
+        # 呼出側がowner → channelをlock済み。停止portをstateより先に読む。
+        deactivation = self._deactivation.get_for_owner(
+            scope.owner_identity_public_id, scope.provider_id, scope.channel_public_id
+        )
+        if isinstance(deactivation, DeactivationConflict):
+            raise CurrentReadUnavailable()
+        state = (
+            RichMenuChannelState.objects.using(self.using)
+            .select_for_update()
+            .filter(channel_public_id=scope.channel_public_id)
+            .first()
+        )
+        latest = (
+            RichMenuOperation.objects.using(self.using)
+            .filter(
+                channel_state_id=scope.channel_public_id,
+                owner_identity_public_id=scope.owner_identity_public_id,
+                provider_id=scope.provider_id,
+            )
+            .order_by("-accepted_at", "-operation_id")
+            .values_list("operation_id", flat=True)
+            .first()
+        )
+        references = {latest}
+        if state is not None:
+            references.update((state.active_operation_id, state.blocking_operation_id))
+        if deactivation is not None:
+            references.update(
+                (deactivation.subject_rich_operation_id, deactivation.latest_recovery_operation_id)
+            )
+        resources = list(
+            ManagedRichMenu.objects.using(self.using)
+            .select_for_update()
+            .filter(
+                Q(
+                    channel_state_id=scope.channel_public_id,
+                    lifecycle__in=("candidate", "applied", "old", "cleanup_required"),
+                )
+                | Q(public_id=None if state is None else state.current_resource_id)
+                | Q(targeted_operations__operation_id__in=references - {None})
+            )
+            .distinct()
+            .order_by("public_id")
+        )
+        for resource in resources:
+            references.update((resource.origin_operation_id, resource.replacement_operation_id))
+        operations = list(
+            RichMenuOperation.objects.using(self.using)
+            .select_for_update()
+            .filter(operation_id__in=references - {None})
+            .order_by("operation_id")
+        )
+        by_id = {operation.operation_id: operation for operation in operations}
+        current = next(
+            (
+                resource
+                for resource in resources
+                if state is not None and resource.pk == state.current_resource_id
+            ),
+            None,
+        )
+        origin = None if current is None else by_id.get(current.origin_operation_id)
+        mapped = (
+            current is not None
+            and current.channel_state_id == scope.channel_public_id
+            and current.lifecycle == "applied"
+            and _operation_in_scope(origin, scope)
+            and origin.kind == "apply"
+            and origin.status in {"succeeded", "cleanup_required"}
+        )
+        configuration = (
+            _current_configuration(origin.configuration_snapshot, self._catalog)
+            if mapped
+            else ConfigurationUnavailable("mapping_missing")
+        )
+        blocker = None if state is None else by_id.get(state.blocking_operation_id)
+        targets = ()
+        if (
+            state is not None
+            and state.active_operation_id is None
+            and _operation_in_scope(blocker, scope)
+            and blocker.status == "cleanup_required"
+            and blocker.kind != "cleanup"
+        ):
+            targets = tuple(
+                RecoveryTarget("cleanup", blocker.pk, resource.pk)
+                for resource in resources
+                if resource.pk != state.current_resource_id
+                and resource.channel_state_id == scope.channel_public_id
+                and _operation_in_scope(by_id.get(resource.origin_operation_id), scope)
+                and _cleanup_target_matches_subject(resource, blocker)
+            )
+        return CurrentReadSnapshot(
+            state=None
+            if state is None
+            else CurrentStateSnapshot(
+                state.current_resource_id, state.active_operation_id, state.blocking_operation_id
+            ),
+            resources=tuple(
+                CurrentResourceSnapshot(
+                    resource.pk,
+                    resource.channel_state_id,
+                    resource.origin_operation_id,
+                    resource.replacement_operation_id,
+                    resource.line_rich_menu_id,
+                    ResourceLifecycle(resource.lifecycle),
+                    resource.image_digest,
+                    resource.updated_at,
+                    sha256(resource.ownership_marker.encode()).hexdigest(),
+                )
+                for resource in resources
+            ),
+            operations=tuple(
+                CurrentOperationSnapshot(
+                    operation.pk,
+                    operation.channel_state_id,
+                    operation.owner_identity_public_id,
+                    operation.provider_id,
+                    OperationKind(operation.kind),
+                    OperationStatus(operation.status),
+                    None if operation.stage is None else OperationStage(operation.stage),
+                    operation.subject_operation_id,
+                    operation.target_resource_id,
+                    sha256(
+                        json.dumps(
+                            operation.configuration_snapshot,
+                            sort_keys=True,
+                            ensure_ascii=True,
+                            separators=(",", ":"),
+                        ).encode()
+                    ).hexdigest(),
+                    operation.updated_at,
+                )
+                for operation in operations
+            ),
+            deactivation=deactivation,
+            configuration=configuration,
+            release_target_id=current.pk if mapped else None,
+            recovery_targets=targets,
+            history_exists=latest is not None,
+            latest_operation_id=latest,
+        )
+
+
+class CurrentReadUnavailable(Exception):
+    def __init__(self):
+        super().__init__("current read unavailable")
+
+
+def _cleanup_target_matches_subject(target, subject):
+    """既存cleanup受付と閲覧projectionで共用する資源の因果関係。"""
+    directly_related = target.origin_operation_id == subject.operation_id
+    replacement_related = target.replacement_operation_id == subject.operation_id
+    return (
+        target.channel_state_id == subject.channel_state_id
+        and target.lifecycle in {"candidate", "old", "cleanup_required"}
+        and (directly_related or replacement_related)
+        and (target.lifecycle != "old" or replacement_related)
+    )
+
+
+def _current_configuration(
+    snapshot: object, catalog: DefaultTemplateCatalog
+) -> CurrentConfiguration:
+    invalid = ConfigurationUnavailable("configuration_invalid")
+    template, _ = _configuration_from_snapshot(snapshot)
+    if template is None:
+        return invalid
+    # 廃止版も構造とHTTPSの安全条件を検証する。保存値を修復しない。
+    for field in template.fields:
+        try:
+            parsed = urlsplit(field.uri)
+            parsed.port
+        except ValueError:
+            return invalid
+        if (
+            not field.display_name.strip()
+            or field.display_name != field.display_name.strip()
+            or any(unicodedata.category(c) == "Cc" for c in field.display_name)
+            or any(c.isspace() for c in field.uri)
+            or any(unicodedata.category(c) == "Cc" for c in field.uri)
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
+            return invalid
+    descriptor = catalog.get(template.reference)
+    if descriptor is None:
+        return ConfigurationAvailable(template, "template_unavailable")
+    if len(template.fields) != len(descriptor.areas):
+        return invalid
+    normalized = catalog.normalize(
+        TemplateInput(
+            template.reference,
+            {
+                area.field_name: {"displayName": field.display_name, "uri": field.uri}
+                for area, field in zip(descriptor.areas, template.fields, strict=True)
+            },
+        )
+    )
+    if normalized != template:
+        return invalid
+    return ConfigurationAvailable(template, "editable")

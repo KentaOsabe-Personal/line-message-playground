@@ -1,0 +1,74 @@
+[
+  {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": "invalid_input",
+        "nextAllowedActions": []
+      }
+    }
+  },
+  {
+    "status": 401,
+    "body": {
+      "error": {
+        "code": "authentication_required",
+        "nextAllowedActions": []
+      }
+    }
+  },
+  {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "owner_operation_blocked",
+        "nextAllowedActions": []
+      }
+    }
+  },
+  {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "channel_unavailable",
+        "nextAllowedActions": []
+      }
+    }
+  },
+  {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "current_changed",
+        "nextAllowedActions": []
+      }
+    }
+  },
+  {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "stale_channel",
+        "nextAllowedActions": []
+      }
+    }
+  },
+  {
+    "status": 503,
+    "body": {
+      "error": {
+        "code": "observation_unknown",
+        "nextAllowedActions": []
+      }
+    }
+  },
+  {
+    "status": 503,
+    "body": {
+      "error": {
+        "code": "storage_unavailable",
+        "nextAllowedActions": []
+      }
+    }
+  }
+]

@@ -9,9 +9,11 @@ from lineaccounts.admin_authorization import OwnerOperationContext
 from lineaccounts.authentication import OwnerPrincipal
 from lineaccounts.views import OwnerProtectedAPIView
 
-from .container import build_rich_menu_service
+from .container import build_current_menu_service, build_rich_menu_service
+from .current_types import CurrentMenuSucceeded
 from .presenters import RichMenuPresenter
 from .serializers import (
+    CurrentQuerySerializer,
     HistoryQuerySerializer,
     OperationRequestSerializer,
     PreviewRequestSerializer,
@@ -189,3 +191,23 @@ class ChannelHistoryAPIView(RichMenuAPIView):
         serializer.is_valid(raise_exception=True)
         result = self.service().list_history(_owner(request), serializer.to_request(channel_id))
         return self.respond(result, HistorySucceeded, self.presenter().history)
+
+
+class ChannelCurrentAPIView(RichMenuAPIView):
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response["Cache-Control"] = "no-store"
+        return response
+
+    def get(self, request, channel_id):
+        serializer = CurrentQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = build_current_menu_service().get_current(
+                _owner(request), channel_id, serializer.validated_data["channelRevision"]
+            )
+        except Exception:
+            result = ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
+        if isinstance(result, ServiceFailed) and result.code is SafeResultCode.CURRENT_CHANGED:
+            return Response(self.presenter().error(result), status=409)
+        return self.respond(result, CurrentMenuSucceeded, self.presenter().current)
