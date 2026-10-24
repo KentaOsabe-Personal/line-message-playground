@@ -4,6 +4,7 @@ import type { EditorDraft } from './richMenuAdminState'
 import type { TemplateDescriptor } from './richMenuAdminDto'
 
 type Props = {
+  editing?: boolean
   templates: TemplateDescriptor[]
   draft: EditorDraft | null
   onDraftChange: (draft: EditorDraft) => void
@@ -48,6 +49,7 @@ function validate(template: TemplateDescriptor, draft: EditorDraft): FieldErrors
 }
 
 export default function RichMenuEditor({
+  editing = false,
   templates,
   draft,
   onDraftChange,
@@ -118,19 +120,14 @@ export default function RichMenuEditor({
 
   return (
     <section className="rich-menu-editor" aria-labelledby="rich-menu-editor-heading">
-      <div className="card-heading">
-        <div>
-          <span className="step-number">1</span>
-          <div>
-            <p className="eyebrow">内容を入力</p>
-            <h3 id="rich-menu-editor-heading" tabIndex={-1}>
-              リッチメニューを作成
-            </h3>
-          </div>
-        </div>
-      </div>
+      <header className="rich-menu-editor-heading">
+        <h3 id="rich-menu-editor-heading" tabIndex={-1}>
+          {editing ? 'メニューを編集' : 'メニューを作成'}
+        </h3>
+        <p>変更はまだ適用されていません。現在のメニューは、LINEに反映するまで変わりません。</p>
+      </header>
       <label className="field-label">
-        レイアウト
+        テンプレート
         <select
           value={`${selected.templateId}:${selected.version}`}
           disabled={busy}
@@ -173,8 +170,9 @@ export default function RichMenuEditor({
         </select>
       </label>
       <p className="field-help">
-        {selected.displayName} / 版 {selected.version}・表示名 {selected.limits.displayName}文字以内
-        / URL {selected.limits.uri}文字以内
+        テンプレートを変更すると、確認後に全項目の入力をクリアします。表示名は
+        {selected.limits.displayName}文字以内、URLは{selected.limits.uri}
+        文字以内で入力してください。
       </p>
       <form
         onSubmit={(event) => {
@@ -185,68 +183,76 @@ export default function RichMenuEditor({
         }}
         noValidate
       >
+        <h4>表示名とリンク先</h4>
         <div className="rich-menu-field-list">
           {selected.areas.map((area, index) => {
             const value = current.fields[area.field] ?? { displayName: '', uri: '' }
             return (
-              <fieldset className="rich-menu-link-field" key={area.field}>
-                <legend>
+              <fieldset className="rich-menu-link-field rich-menu-edit-row" key={area.field}>
+                <legend className="visually-hidden">
                   <span>{index + 1}</span>
                   {area.description}
                 </legend>
-                <label className="field-label">
-                  メニューに表示する文字
-                  <input
-                    disabled={busy}
-                    aria-invalid={Boolean(
-                      (validationVisible && errors[area.field]?.displayName) ||
-                      fieldErrors[`${area.field}.displayName`],
+                <div className="rich-menu-edit-control">
+                  <label className="field-label">
+                    表示名
+                    <input
+                      disabled={busy}
+                      aria-invalid={Boolean(
+                        (validationVisible && errors[area.field]?.displayName) ||
+                        fieldErrors[`${area.field}.displayName`],
+                      )}
+                      aria-describedby={`${id}-${area.field}-name-error`}
+                      placeholder="例：予約する"
+                      value={value.displayName}
+                      maxLength={selected.limits.displayName + 1}
+                      onInput={(event) =>
+                        update(area.field, 'displayName', event.currentTarget.value)
+                      }
+                    />
+                  </label>
+                  {validationVisible &&
+                    errors[area.field]?.displayName &&
+                    !fieldErrors[`${area.field}.displayName`] && (
+                      <p id={`${id}-${area.field}-name-error`} role="alert">
+                        {errors[area.field].displayName}
+                      </p>
                     )}
-                    aria-describedby={`${id}-${area.field}-name-error`}
-                    placeholder="例：予約する"
-                    value={value.displayName}
-                    maxLength={selected.limits.displayName + 1}
-                    onInput={(event) =>
-                      update(area.field, 'displayName', event.currentTarget.value)
-                    }
-                  />
-                </label>
-                <p className="field-help" style={{ overflowWrap: 'anywhere' }}>
-                  {value.displayName}
-                </p>
-                {validationVisible &&
-                  errors[area.field]?.displayName &&
-                  !fieldErrors[`${area.field}.displayName`] && (
-                    <p id={`${id}-${area.field}-name-error`} role="alert">
-                      {errors[area.field].displayName}
-                    </p>
-                  )}
-                <label className="field-label">
-                  タップ時に開くURL
-                  <input
-                    disabled={busy}
-                    aria-invalid={Boolean(
-                      (validationVisible && errors[area.field]?.uri) ||
-                      fieldErrors[`${area.field}.uri`],
+                </div>
+                <div className="rich-menu-edit-control">
+                  <label className="field-label">
+                    リンク先URL
+                    <input
+                      disabled={busy}
+                      aria-invalid={Boolean(
+                        (validationVisible && errors[area.field]?.uri) ||
+                        fieldErrors[`${area.field}.uri`],
+                      )}
+                      aria-describedby={`${id}-${area.field}-uri-error`}
+                      type="url"
+                      placeholder="https://example.com/"
+                      value={value.uri}
+                      maxLength={selected.limits.uri + 1}
+                      onInput={(event) => update(area.field, 'uri', event.currentTarget.value)}
+                    />
+                  </label>
+                  {validationVisible &&
+                    errors[area.field]?.uri &&
+                    !fieldErrors[`${area.field}.uri`] && (
+                      <p id={`${id}-${area.field}-uri-error`} role="alert">
+                        {errors[area.field].uri}
+                      </p>
                     )}
-                    aria-describedby={`${id}-${area.field}-uri-error`}
-                    type="url"
-                    placeholder="https://example.com/"
-                    value={value.uri}
-                    maxLength={selected.limits.uri + 1}
-                    onInput={(event) => update(area.field, 'uri', event.currentTarget.value)}
-                  />
-                </label>
-                <p className="field-help" style={{ overflowWrap: 'anywhere' }}>
-                  {value.uri}
-                </p>
-                {validationVisible &&
-                  errors[area.field]?.uri &&
-                  !fieldErrors[`${area.field}.uri`] && (
-                    <p id={`${id}-${area.field}-uri-error`} role="alert">
-                      {errors[area.field].uri}
-                    </p>
-                  )}
+                </div>
+                <details className="rich-menu-complete-values">
+                  <summary>入力内容を全文表示</summary>
+                  <dl style={{ overflowWrap: 'anywhere' }}>
+                    <dt>表示名</dt>
+                    <dd>{value.displayName}</dd>
+                    <dt>リンク先URL</dt>
+                    <dd>{value.uri}</dd>
+                  </dl>
+                </details>
                 {(['displayName', 'uri'] as const).map(
                   (key) =>
                     fieldErrors[`${area.field}.${key}`] && (
@@ -263,17 +269,17 @@ export default function RichMenuEditor({
             )
           })}
         </div>
-        <div className="editor-submit">
-          <p>未適用の内容です。LINEにはまだ反映されていません。</p>
+        <div className="editor-submit rich-menu-edit-actions">
           <button type="submit" disabled={busy}>
             変更内容をプレビュー
           </button>
+          {onCancel && (
+            <button type="button" className="secondary" disabled={busy} onClick={onCancel}>
+              キャンセル
+            </button>
+          )}
         </div>
-        {onCancel && (
-          <button type="button" onClick={onCancel}>
-            キャンセル
-          </button>
-        )}
+        <p className="field-help">キャンセルすると、未適用の入力内容とプレビューを破棄します。</p>
       </form>
       <p className="field-help">画像は選んだレイアウトと入力内容から自動生成されます。</p>
     </section>

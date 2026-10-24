@@ -4,6 +4,9 @@ import type { OperationState, PreviewDisplay } from './richMenuAdminState'
 import { operationStatusLabels } from './RichMenuStatePanel'
 
 type Props = {
+  embedded?: boolean
+  onBack?: () => void
+  onCancel?: () => void
   channelLabel: string
   preview?: PreviewView | PreviewDisplay | null
   currentDefault?: string
@@ -18,6 +21,9 @@ type Props = {
   onTrack?: () => void
 }
 export default function RichMenuOperationPanel({
+  embedded = false,
+  onBack,
+  onCancel,
   channelLabel,
   preview,
   busy,
@@ -31,6 +37,7 @@ export default function RichMenuOperationPanel({
   onTrack,
 }: Props) {
   const submitted = useRef(false)
+  const [submittedTokens, setSubmittedTokens] = useState<ReadonlySet<string>>(() => new Set())
   const [clock, setClock] = useState(() => Date.now())
   const deadline = preview ? Date.parse(preview.expiresAt) : NaN
   useEffect(() => {
@@ -40,7 +47,7 @@ export default function RichMenuOperationPanel({
   }, [deadline, now])
   useEffect(() => {
     if (!busy) submitted.current = false
-  }, [busy, result])
+  }, [busy, result, preview?.confirmationToken])
   const processing = busy || operation?.state === 'submitting' || operation?.state === 'tracking'
   const unknown = operation?.state === 'transport_unknown' || result?.status === 'unknown'
   const canApply = Boolean(
@@ -51,27 +58,48 @@ export default function RichMenuOperationPanel({
     preview.observation.kind !== 'unknown' &&
     !processing &&
     !unknown &&
-    result === null,
+    !submittedTokens.has(preview.confirmationToken) &&
+    (result === null || result.status === 'succeeded' || result.status === 'failed'),
   )
   const submit = () => {
     if (submitted.current || !canApply || (Date.now() >= deadline && now === undefined)) return
     submitted.current = true
+    setSubmittedTokens((tokens) => new Set(tokens).add(preview!.confirmationToken))
     onApply()
   }
   return (
-    <section className="rich-menu-apply-card" aria-label="LINEへの反映と直前結果">
+    <section
+      className={`rich-menu-apply-card${embedded ? ' rich-menu-inline-apply' : ''}`}
+      aria-label="LINEへの反映と直前結果"
+    >
       {preview && (
         <>
-          <h3>LINEに反映</h3>
-          <p>
-            <strong>{channelLabel}</strong> のリッチメニューとして反映します。
-          </p>
+          {!embedded && (
+            <>
+              <h3>LINEに反映</h3>
+              <p>
+                <strong>{channelLabel}</strong> のリッチメニューとして反映します。
+              </p>
+            </>
+          )}
           {preview.observation.kind === 'external_default' && (
             <p>既定を置き換えますが、アプリ外資源自体は削除しません。</p>
           )}
-          <button type="button" disabled={!canApply} onClick={submit}>
-            LINEに反映
-          </button>
+          <div className="rich-menu-confirm-actions">
+            <button type="button" disabled={!canApply} onClick={submit}>
+              LINEに反映
+            </button>
+            {onBack && (
+              <button type="button" className="secondary" disabled={busy} onClick={onBack}>
+                編集へ戻る
+              </button>
+            )}
+            {onCancel && (
+              <button type="button" className="secondary" disabled={busy} onClick={onCancel}>
+                キャンセル
+              </button>
+            )}
+          </div>
         </>
       )}
       {processing && <p role="status">操作の結果を確認しています…</p>}

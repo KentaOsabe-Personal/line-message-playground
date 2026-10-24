@@ -1441,6 +1441,22 @@ class DefaultRichMenuService:
                     return ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
                 if bound is False:
                     return ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
+        if (
+            subject.kind is OperationKind.APPLY
+            and subject.stage in {OperationStage.SETTING_DEFAULT, OperationStage.VERIFYING}
+            and target_resource_id is not None
+        ):
+            finalizer = getattr(self._repository, "complete_apply_recovery", None)
+            if callable(finalizer):
+                try:
+                    result = finalizer(recovery_operation_id, target_resource_id)
+                except Exception:
+                    return ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
+                if isinstance(result, StageConflict):
+                    return self._map_stage_conflict(result.reason)
+                if isinstance(result, OperationView):
+                    return result
+                return ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
         if subject.kind is OperationKind.CLEANUP:
             finalizer = getattr(self._repository, "complete_cleanup_recovery", None)
             if callable(finalizer):
@@ -2161,6 +2177,21 @@ class DefaultRichMenuService:
             return self._complete_unknown(
                 operation_id, OperationStage.VERIFYING, scope_failure.code
             )
+        finalizer = getattr(self._repository, "complete_apply", None)
+        if callable(finalizer):
+            try:
+                result = finalizer(operation_id, candidate.public_id)
+            except Exception:
+                return self._complete_unknown(
+                    operation_id, OperationStage.VERIFYING, SafeResultCode.STORAGE_UNAVAILABLE
+                )
+            if isinstance(result, StageConflict):
+                return self._complete_unknown(
+                    operation_id, OperationStage.VERIFYING, SafeResultCode.STORAGE_UNAVAILABLE
+                )
+            if isinstance(result, OperationView):
+                return result
+            return ServiceFailed(SafeResultCode.STORAGE_UNAVAILABLE)
         finalized = self._finalize_apply_resources(operation_id, candidate.public_id)
         if isinstance(finalized, ServiceFailed):
             return self._complete_unknown(operation_id, OperationStage.VERIFYING, finalized.code)

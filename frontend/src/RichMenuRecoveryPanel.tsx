@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type {
   ManagedResourceView,
   ObservationView,
@@ -11,6 +11,8 @@ import type { RecoveryRequest } from './useRichMenuAdmin'
 import { operationStatusLabels } from './RichMenuStatePanel'
 
 type Props = {
+  primaryAction?: ReactNode
+  refreshAction?: ReactNode
   channelLabel: string
   actions: RichMenuAction[]
   currentResource: ManagedResourceView | null
@@ -27,6 +29,8 @@ type Props = {
   onStart?: (kind: RecoveryRequest['kind'], targetResourceId?: string) => void
 }
 export default function RichMenuRecoveryPanel({
+  primaryAction,
+  refreshAction,
   channelLabel,
   actions,
   currentResource,
@@ -45,6 +49,7 @@ export default function RichMenuRecoveryPanel({
   const submitted = useRef(false)
   const [confirmation, setConfirmation] = useState<{
     kind: 'unlink' | 'release'
+    resource: ManagedResourceView
     resourceId: string
     channelLabel: string
   } | null>(null)
@@ -70,6 +75,7 @@ export default function RichMenuRecoveryPanel({
       (request.kind === 'unlink' || request.kind === 'release') &&
       (request.targetResourceId !== currentResource?.resourceId ||
         !confirmation ||
+        confirmation.resource !== currentResource ||
         confirmation.resourceId !== request.targetResourceId ||
         confirmation.channelLabel !== channelLabel)
     )
@@ -91,22 +97,32 @@ export default function RichMenuRecoveryPanel({
       onStart?.(request.kind, 'targetResourceId' in request ? request.targetResourceId : undefined)
     setConfirmation(null)
   }
-  if (!allowed.some((action) => ['unlink', 'release', 'recheck', 'cleanup'].includes(action)))
+  if (
+    !primaryAction &&
+    !refreshAction &&
+    !allowed.some((action) => ['unlink', 'release', 'recheck', 'cleanup'].includes(action))
+  )
     return null
   const management = (kind: 'unlink' | 'release') => {
     if (!allowed.includes(kind) || !currentResource) return null
     const confirming =
       confirmation?.kind === kind &&
+      confirmation.resource === currentResource &&
       confirmation.resourceId === currentResource.resourceId &&
       confirmation.channelLabel === channelLabel
     return (
       <div>
         <button
           type="button"
-          className="secondary"
+          className={kind === 'unlink' ? 'secondary rich-menu-unlink' : 'secondary'}
           disabled={busy}
           onClick={() =>
-            setConfirmation({ kind, resourceId: currentResource.resourceId, channelLabel })
+            setConfirmation({
+              kind,
+              resource: currentResource,
+              resourceId: currentResource.resourceId,
+              channelLabel,
+            })
           }
         >
           {kind === 'unlink' ? '適用解除' : '管理終了'}
@@ -134,7 +150,12 @@ export default function RichMenuRecoveryPanel({
             >
               {kind === 'unlink' ? '適用解除を確定' : '管理終了を確定'}
             </button>
-            <button type="button" disabled={busy} onClick={() => setConfirmation(null)}>
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => setConfirmation(null)}
+            >
               取消
             </button>
           </div>
@@ -143,7 +164,14 @@ export default function RichMenuRecoveryPanel({
     )
   }
   return (
-    <section className="recovery-card" aria-label="リッチメニューの管理と回復">
+    <section
+      className={
+        allowed.some((action) => ['recheck', 'cleanup'].includes(action))
+          ? 'recovery-card'
+          : 'rich-menu-management'
+      }
+      aria-label="リッチメニューの管理と回復"
+    >
       {allowed.includes('recheck') && (
         <div>
           <p role="alert">結果が不明です。元の操作だけを再確認し、自動再送は行いません。</p>
@@ -189,7 +217,11 @@ export default function RichMenuRecoveryPanel({
           )}
         </div>
       )}
-      {management('unlink')}
+      <div className="rich-menu-detail-actions">
+        {primaryAction}
+        {management('unlink')}
+        {refreshAction}
+      </div>
       {allowed.includes('release') &&
         (observation?.kind === 'managed_default' ? (
           <details>

@@ -14,7 +14,7 @@ test('shows concise state and distinguishes unknown from success', () => {
   if (!parsed.ok) throw new Error('fixture')
   const state = parsed.value.rich
   const html = renderToStaticMarkup(<RichMenuStatePanel state={state} />)
-  expect(html).toContain('LINE適用済み')
+  expect(html).toContain('適用中')
   expect(html).not.toContain('<dl>')
   expect(html).not.toContain('提供モード')
   const unknown = renderToStaticMarkup(
@@ -24,7 +24,7 @@ test('shows concise state and distinguishes unknown from success', () => {
   )
   expect(unknown).toContain('role="alert"')
   expect(unknown).toContain('要確認')
-  expect(unknown).not.toContain('LINE適用済み')
+  expect(unknown).not.toContain('適用中')
   expect(unknown).not.toContain('未設定')
   const failed = renderToStaticMarkup(
     <RichMenuStatePanel
@@ -59,7 +59,7 @@ test('distinguishes read-only restrictions from confirmed inactive channels', ()
   )
   expect(inactive).toContain('チャネルは停止中')
   expect(inactive).toContain('保存済み管理対象: あり')
-  expect(inactive).not.toContain('LINE適用済み')
+  expect(inactive).not.toContain('適用中')
 })
 
 // テストケース: 既知と未知の利用不可理由がBackendから届く。
@@ -125,7 +125,7 @@ test('discards stale state whenever the current read is not ready', () => {
         current={current}
       />,
     )
-    expect(html).not.toContain('LINE適用済み')
+    expect(html).not.toContain('適用中')
     expect(html).not.toContain('次にできる操作')
     expect(html).not.toContain('連携の準備')
   }

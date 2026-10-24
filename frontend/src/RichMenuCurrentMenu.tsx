@@ -1,4 +1,6 @@
+import type { ReactNode } from 'react'
 import type { CurrentReadState } from './richMenuAdminState'
+import RichMenuDesignIcon from './RichMenuDesignIcon'
 
 type Props = {
   channelLabel: string
@@ -6,6 +8,7 @@ type Props = {
   collapsed?: boolean
   onRefresh: () => void
   onImageError: () => void
+  actions?: ReactNode
 }
 export default function RichMenuCurrentMenu({
   channelLabel,
@@ -13,6 +16,7 @@ export default function RichMenuCurrentMenu({
   collapsed = false,
   onRefresh,
   onImageError,
+  actions,
 }: Props) {
   const content =
     current.state === 'loading' ? (
@@ -55,15 +59,42 @@ export default function RichMenuCurrentMenu({
         }
       </p>
     )
+  const managed =
+    current.state === 'ready' && current.value.current.kind === 'managed'
+      ? current.value.current
+      : null
+  const caption =
+    managed?.configuration.status === 'available'
+      ? `${managed.image.status === 'available' ? (managed.image.height > 843 ? 'ラージ・' : 'コンパクト・') : ''}${managed.configuration.fields.length}項目`
+      : null
+  const applied =
+    managed &&
+    current.state === 'ready' &&
+    current.value.rich.latestObservation?.kind === 'managed_default' &&
+    !current.value.rich.activeOperation &&
+    !current.value.rich.blockingOperation &&
+    current.value.rich.cleanupResources.length === 0
   return collapsed ? (
     <details className="rich-menu-current">
-      <summary>現在のメニュー</summary>
+      <summary>
+        <span>現在のメニュー{caption && <small>{caption}</small>}</span>
+        {applied && (
+          <span className="rich-menu-state-badge" aria-hidden="true">
+            <RichMenuDesignIcon kind="check" />
+            適用中
+          </span>
+        )}
+      </summary>
       {content}
     </details>
   ) : (
-    <section aria-label="現在のメニュー">
-      <h3>現在のメニュー</h3>
+    <section className="rich-menu-current-card" aria-label="現在のメニュー">
+      <header className="rich-menu-card-heading">
+        <h3>現在のメニュー</h3>
+        {caption && <p>{caption}</p>}
+      </header>
       {content}
+      {actions}
     </section>
   )
 }

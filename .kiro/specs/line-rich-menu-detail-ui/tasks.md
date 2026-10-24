@@ -224,8 +224,8 @@
   - _Depends: 4.2, 5, 8.3, 9.6, 10.1_
   - _Requirements: 3.4, 6.4, 6.7, 6.8, 7.3_
 
-- [ ] 11. 競合・性能・画面寿命と回帰を検証する
-- [ ] 11.1 外部取得中の競合と認可失効をMySQLで検証する
+- [x] 11. 競合・性能・画面寿命と回帰を検証する
+- [x] 11.1 外部取得中の競合と認可失効をMySQLで検証する
   - downloadを停止させ、session・owner資格・provider・channel revision・current・operation・停止intentを別transactionから変更する。
   - 初回と最終検証間の行作成・削除、作成元設定変更、cleanup関係変更、既定変化・digest不一致を試験し、画像・設定が応答へ残らないことを確認する。
   - MySQLの並行transactionで既存lock順序と外部I/O中のtransactionなしを確認する。SQLiteの結果だけでlock保証済みとしない。
@@ -234,7 +234,7 @@
   - _Depends: 5_
   - _Requirements: 2.1, 2.4, 3.2, 3.4, 3.7, 8.2_
 
-- [ ] 11.2 閲覧全体のquery・外部呼出・応答サイズを計測する
+- [x] 11.2 閲覧全体のquery・外部呼出・応答サイズを計測する
   - service全体32 SQL以下を認可・channel・停止情報・最終再検証・観測記録込みで計測する。制御SQLのみ除外し、HTTP認証層は別測定する。
   - 履歴10件/1000件、旧資源1件/50件でquery数が増えず、履歴・transitionの全件走査をしないことを確認する。
   - 通常managedはdefault最大2回＋image1回、画像対象なしはdefault1回、inactiveは0回、list/get-resource/mutationは0回を確認する。既定照会の5秒timeoutと画像全体5秒deadlineを超えた再送がない。
@@ -243,7 +243,7 @@
   - _Depends: 5, 11.1_
   - _Requirements: 2.2, 2.6, 2.7, 3.6, 7.1, 7.2, 7.3_
 
-- [ ] 11.3 離脱・認証失効・後着応答と画像破棄を検証する
+- [x] 11.3 離脱・認証失効・後着応答と画像破棄を検証する
   - 成功・失敗の遅延応答を使い、channel変更、離脱、編集取消、入力変更、read置換、認証失効後に旧画像・設定・preview・操作可否が復活しないことを確認する。
   - 更新・差替え・戻る・取消・期限切れ・unmount・全連携解除・owner利用不能で、対応するObject URLがrevokeされ、decode失敗が失効表示を上書きしないことを確認する。
   - Pageとrouteの統合で確認なし離脱、read中止、mutation非中止、再訪・再認証後の同一操作GETとPOST再送なしを確認する。
@@ -252,7 +252,7 @@
   - _Depends: 8.1, 8.2, 8.3, 10.1_
   - _Requirements: 3.1, 3.7, 4.7, 5.5, 5.6, 8.1, 8.2, 8.3, 8.4, 8.5_
 
-- [ ] 11.4 配色・幅・キーボード操作をブラウザで検証する
+- [x] 11.4 配色・幅・キーボード操作をブラウザで検証する
   - 390px/1440px×light/darkで閲覧・編集・確認・回復・停止を開き、compact/large fixtureの全画像と全操作が横スクロールなしで利用できることを確認する。
   - 長いチャネル名・日本語表示名・完全URLを省略せず参照でき、狭幅で補助操作が縦に並ぶことを確認する。新規6項目templateやデモ画像は追加しない。
   - 戻る・折りたたみ・編集・確認・取消・回復へのkeyboard到達、focus-visible、編集/確認へのfocus移動、取消後の復帰、更新時のfocus保持を検証する。
@@ -261,7 +261,7 @@
   - _Depends: 10.2, 10.3, 10.4, 11.3_
   - _Requirements: 1.2, 9.1, 9.2, 9.3, 9.4_
 
-- [ ] 11.5 既存契約の回帰とサービス全体の品質検査を完了する
+- [x] 11.5 既存契約の回帰とサービス全体の品質検査を完了する
   - 対象Django test runnerで既存history記録・参照API・purge、管理終了のLINE外部変更0、preview・適用・解除・停止の回帰を実行する。
   - Frontend Vitestで新旧DTO、履歴部品の保持、画面統合を検証する。Backend endpoint追加後にFrontendを切り替える順序と、旧Frontend・旧API・既存データの互換性を確認する。
   - 両サービスのcheck scriptとFrontend production buildを実行し、関連する失敗を修正して完了する。実LINEへのmutationや新しいE2E基盤は不要。
@@ -269,3 +269,7 @@
   - _Boundary: B3 regression integration — Backend/Frontend tests, 既存runtime・品質検査_
   - _Depends: 10.2, 10.3, 10.4, 11.1, 11.2, 11.3, 11.4_
   - _Requirements: 2.5, 2.6, 2.7, 6.4, 6.7, 7.1, 7.2, 7.3, 7.5_
+
+## Implementation Notes
+
+- task 11の実画面確認で、上流の置換確定が旧資源を残したまま成功・blocker解除となる不具合を発見。ユーザー承認により上流修復まで範囲を拡張した。通常適用・結果不明からの再確認はcleanup完了までblockerを保持する。過去の成功記録を持つ旧資源は管理コマンドで因果順に一件ずつ回復する。管理修復の条件と履歴保持は [ADR 0005](../../../docs/adr/0005-repair-successful-replacements-with-pending-cleanup.md) を参照。

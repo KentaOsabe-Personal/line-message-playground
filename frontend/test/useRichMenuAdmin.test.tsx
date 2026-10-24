@@ -780,3 +780,60 @@ describe('task 8 寿命境界の回帰', () => {
     )
   })
 })
+
+describe('task 11.3 画像・確認値の寿命と非永続化', () => {
+  // テストケース: 確認中に全連携解除・owner利用不能・画面離脱の失効通知を受ける。
+  // 期待値: 現在画像とpreviewを一度ずつ破棄し、確認値・draft・操作可否を復元しない。
+  test.each(['全連携解除', 'owner利用不能', '画面離脱'])(
+    '%s clears both owned images and confirmation',
+    async (reason) => {
+      const route = new AbortController()
+      options = { ...options, readSignal: route.signal }
+      await edit()
+      await run(() => hook.preview())
+      const urls = createUrl.mock.results.map((entry) => entry.value as string)
+      expect(urls).toHaveLength(2)
+      if (route.signal.aborted) throw new Error('route already aborted')
+      if (reason === '画面離脱') await run(() => route.abort())
+      else {
+        options = { ...options, invalidated: true }
+        await render()
+      }
+      for (const url of urls) {
+        expect(revokeUrl.mock.calls.filter(([value]) => value === url)).toHaveLength(1)
+        await run(() => hook.currentImageFailed(url))
+      }
+      expect(hook.state.channel).toBeNull()
+      expect(hook.state.editor).toEqual({ state: 'viewing' })
+      expect(JSON.stringify(hook.state)).not.toContain('opaque-fixture')
+      await run(() => hook.apply())
+      expect(options.richApi.startOperation).not.toHaveBeenCalled()
+    },
+  )
+
+  // テストケース: 編集で完全URLを変更してpreviewを生成し、unmount後に同じチャネルを再mountする。
+  // 期待値: storage・ページURLに入力/画像/確認値を書かず、draftもpreviewも復元しない。
+  test('does not persist or restore drafts, full URLs, images or confirmation', async () => {
+    const storage = vi.spyOn(Storage.prototype, 'setItem')
+    const push = vi.spyOn(history, 'pushState')
+    const replace = vi.spyOn(history, 'replaceState')
+    const href = location.href
+    await edit()
+    const uri = 'https://example.test/private?draft=unique-canary#full'
+    await run(() => hook.changeDraft({ area0: { displayName: '未保存の変更', uri } }))
+    await run(() => hook.preview())
+    expect(storage).not.toHaveBeenCalled()
+    expect(push).not.toHaveBeenCalled()
+    expect(replace).not.toHaveBeenCalled()
+    expect(location.href).toBe(href)
+    const urls = createUrl.mock.results.map((entry) => entry.value as string)
+    await run(() => root.unmount())
+    for (const url of urls) expect(revokeUrl).toHaveBeenCalledWith(url)
+    root = createRoot(container)
+    await render()
+    expect(hook.state.editor).toEqual({ state: 'viewing' })
+    expect(JSON.stringify(hook.state)).not.toContain(uri)
+    expect(JSON.stringify(hook.state)).not.toContain('opaque-fixture')
+    expect(options.richApi.startOperation).not.toHaveBeenCalled()
+  })
+})

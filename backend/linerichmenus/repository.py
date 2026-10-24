@@ -1096,6 +1096,108 @@ class DjangoRichMenuRepository:
             resource.save(using=self.using, update_fields=("lifecycle", "deleted_at", "updated_at"))
         return True
 
+    def complete_apply(
+        self, operation_id: UUID, candidate_resource_id: UUID
+    ) -> OperationView | StageConflict:
+        """既定確認済み資源とcleanup blockerを同じtransactionで確定する。"""
+        with transaction.atomic(using=self.using):
+            finalized = self.finalize_apply(operation_id, candidate_resource_id)
+            if isinstance(finalized, OperationConflict) or finalized is False:
+                transaction.set_rollback(True, using=self.using)
+                return StageConflict(
+                    finalized.reason
+                    if isinstance(finalized, OperationConflict)
+                    else "invalid_relation"
+                )
+            has_old = (
+                ManagedRichMenu.objects.using(self.using)
+                .filter(
+                    replacement_operation_id=operation_id,
+                    lifecycle=ResourceLifecycle.OLD.value,
+                )
+                .exists()
+            )
+            result = self.complete_stage(
+                StageOutcome(
+                    operation_id=operation_id,
+                    expected_stage=OperationStage.VERIFYING,
+                    next_status=(
+                        OperationStatus.CLEANUP_REQUIRED if has_old else OperationStatus.SUCCEEDED
+                    ),
+                    next_stage=OperationStage.CLEANING if has_old else OperationStage.VERIFYING,
+                    result=SafeResultCode.CLEANUP_REQUIRED if has_old else SafeResultCode.SUCCEEDED,
+                )
+            )
+            if isinstance(result, StageConflict) or result.status is not (
+                OperationStatus.CLEANUP_REQUIRED if has_old else OperationStatus.SUCCEEDED
+            ):
+                transaction.set_rollback(True, using=self.using)
+                return StageConflict("stale_stage")
+            return result
+
+    def complete_apply_recovery(
+        self, recovery_operation_id: UUID, candidate_resource_id: UUID
+    ) -> OperationView | StageConflict:
+        """明示再確認済みapplyを再送せず、資源・元操作・recoveryへatomicに反映する。"""
+        with transaction.atomic(using=self.using):
+            recovery = (
+                RichMenuOperation.objects.using(self.using)
+                .select_for_update()
+                .select_related("subject_operation")
+                .filter(operation_id=recovery_operation_id)
+                .first()
+            )
+            subject = None if recovery is None else recovery.subject_operation
+            if (
+                recovery is None
+                or recovery.kind != OperationKind.RECHECK.value
+                or subject is None
+                or subject.kind != OperationKind.APPLY.value
+                or subject.status != OperationStatus.UNKNOWN.value
+                or subject.stage
+                not in {
+                    OperationStage.SETTING_DEFAULT.value,
+                    OperationStage.VERIFYING.value,
+                }
+            ):
+                return StageConflict("invalid_transition")
+            candidate = (
+                ManagedRichMenu.objects.using(self.using)
+                .filter(
+                    public_id=candidate_resource_id,
+                    origin_operation_id=subject.operation_id,
+                    channel_state_id=subject.channel_state_id,
+                    lifecycle=ResourceLifecycle.CANDIDATE.value,
+                    line_rich_menu_id__isnull=False,
+                )
+                .first()
+            )
+            if candidate is None:
+                return StageConflict("invalid_transition")
+            handoff = self.handoff_recovery(
+                RecoveryOutcome(
+                    recovery_operation_id=recovery_operation_id,
+                    subject_operation_id=subject.operation_id,
+                    subject_next_status=OperationStatus.PROCESSING,
+                    subject_next_stage=OperationStage.VERIFYING,
+                    subject_result=SafeResultCode.ACCEPTED,
+                    blocker_moves_to_recovery=False,
+                )
+            )
+            if isinstance(handoff, StageConflict):
+                return handoff
+            if handoff.recovery.status is not OperationStatus.SUCCEEDED:
+                return handoff.recovery
+            claim = self.claim_stage(subject.operation_id, OperationStage.VERIFYING)
+            if not isinstance(claim, StageClaimed):
+                transaction.set_rollback(True, using=self.using)
+                return StageConflict("stale_stage")
+            completed = self.complete_apply(subject.operation_id, candidate_resource_id)
+            if isinstance(completed, StageConflict):
+                transaction.set_rollback(True, using=self.using)
+                return completed
+            return handoff.recovery
+
     def finalize_apply(
         self, operation_id: UUID, candidate_resource_id: UUID
     ) -> bool | OperationConflict:
@@ -1315,6 +1417,39 @@ class DjangoRichMenuRepository:
                 RichMenuChannelState.objects.using(self.using)
                 .select_for_update()
                 .get(channel_public_id=operation.channel_state_id)
+            )
+            subject = (
+                RichMenuOperation.objects.using(self.using)
+                .select_for_update()
+                .filter(operation_id=operation.subject_operation_id, channel_state=state)
+                .first()
+            )
+            if (
+                subject is None
+                or subject.status != OperationStatus.CLEANUP_REQUIRED.value
+                or subject.stage != OperationStage.CLEANING.value
+                or operation.target_resource_id != target.public_id
+                or not (
+                    target.origin_operation_id == subject.operation_id
+                    or target.replacement_operation_id == subject.operation_id
+                )
+                or state.active_operation_id != operation.operation_id
+                or state.blocking_operation_id != subject.operation_id
+            ):
+                return StageConflict("invalid_transition")
+            self._append_transition(
+                operation=subject,
+                from_status=OperationStatus.CLEANUP_REQUIRED,
+                to_status=OperationStatus.SUCCEEDED,
+                stage=OperationStage.CLEANING,
+                reason=SafeResultCode.SUCCEEDED,
+            )
+            subject.status = OperationStatus.SUCCEEDED.value
+            subject.result_code = SafeResultCode.SUCCEEDED.value
+            subject.completed_at = self._clock()
+            subject.save(
+                using=self.using,
+                update_fields=("status", "result_code", "completed_at", "updated_at"),
             )
             self._append_transition(
                 operation=operation,

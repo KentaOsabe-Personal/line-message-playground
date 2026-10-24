@@ -68,10 +68,11 @@ describe('RichMenuPreview', () => {
       ),
     )
     expect(open).not.toHaveBeenCalled()
+    expect(container.textContent).not.toContain(preview.templateId)
+    expect(container.textContent).toContain('反映前にご確認ください')
     for (const text of [
       '通知チャネル',
       '2リンク',
-      'jp-link-two',
       '版 3',
       '案内',
       'https://example.com/guide',

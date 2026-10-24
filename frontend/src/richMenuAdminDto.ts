@@ -452,7 +452,7 @@ export function parseCurrentMenu(
     ok: true,
     value: {
       channelId,
-      channelRevision: value.channelRevision,
+      channelRevision,
       checkedAt: value.checkedAt,
       rich,
       deactivation,

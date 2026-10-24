@@ -74,8 +74,8 @@ describe('RichMenuEditor', () => {
     expect(container.textContent).toContain('版 3')
     expect(container.textContent).toContain('左半分')
     expect(container.textContent).toContain('右半分')
-    expect(container.textContent).toContain('表示名 20文字以内')
-    expect(container.textContent).toContain('URL 1000文字以内')
+    expect(container.textContent).toContain('表示名は20文字以内')
+    expect(container.textContent).toContain('URLは1000文字以内')
     expect(container.querySelector('input[type="file"]')).toBeNull()
 
     const inputs = [
@@ -238,6 +238,19 @@ describe('RichMenuEditor', () => {
     ])
     expect(container.textContent).toContain(draft.fields.left.uri)
     expect(container.textContent).toContain(draft.fields.left.displayName)
+    const completeValues = [...container.querySelectorAll('fieldset details')]
+    expect(completeValues).toHaveLength(2)
+    for (const [index, field] of [draft.fields.left, draft.fields.right].entries()) {
+      const details = completeValues[index] as HTMLDetailsElement
+      expect(details.querySelector('summary')?.textContent).toBe('入力内容を全文表示')
+      await act(async () => details.querySelector('summary')?.click())
+      expect(details.open).toBe(true)
+      expect([...details.querySelectorAll('dd')].map((item) => item.textContent)).toEqual([
+        field.displayName,
+        field.uri,
+      ])
+      expect(details.querySelector('dl')?.style.overflowWrap).toBe('anywhere')
+    }
     expect(document.getElementById(inputs[0].getAttribute('aria-describedby')!)?.textContent).toBe(
       '表示名を確認してください。',
     )

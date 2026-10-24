@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import type { PreviewDisplay } from './richMenuAdminState'
 import type { PreviewView } from './richMenuAdminDto'
 
 type Props = {
+  actions?: ReactNode
   preview: PreviewView | PreviewDisplay
   imageUrl: string
   templateName: string
@@ -22,6 +23,7 @@ const observationLabels: Record<PreviewView['observation']['kind'], string> = {
 }
 
 export default function RichMenuPreview({
+  actions,
   preview,
   imageUrl,
   templateName,
@@ -58,21 +60,18 @@ export default function RichMenuPreview({
 
   return (
     <section className="rich-menu-preview" aria-labelledby="rich-menu-preview-heading">
-      <div className="card-heading">
-        <div>
-          <span className="step-number">2</span>
-          <div>
-            <p className="eyebrow">表示を確認</p>
-            <h3 id="rich-menu-preview-heading" tabIndex={-1}>
-              変更内容のプレビュー
-            </h3>
-          </div>
-        </div>
-        <span className={expired ? 'status inactive' : 'status active'}>
-          {expired ? '期限切れ' : `残り ${remainingMinutes}分`}
-        </span>
-      </div>
+      <header className="rich-menu-preview-heading">
+        <h3 id="rich-menu-preview-heading" tabIndex={-1}>
+          変更内容のプレビュー
+        </h3>
+        <span className="rich-menu-state-badge">未適用</span>
+      </header>
+      <p className="field-help">対象: {preview.channelLabel}</p>
       <p role="status">未適用の内容です。LINEにはまだ反映されていません。</p>
+      <h4>変更後のメニュー</h4>
+      <p className="field-help">
+        {templateName}（版 {preview.templateVersion}）
+      </p>
       <div className="rich-menu-image-frame">
         <img
           src={imageUrl}
@@ -85,6 +84,11 @@ export default function RichMenuPreview({
       {preview.warnings.includes('external_default_replaced') && (
         <p role="alert">外部の既定リッチメニューを置き換える可能性があります。</p>
       )}
+      <p className="rich-menu-preview-expiry" role={expired ? 'alert' : undefined}>
+        {expired ? '期限切れ' : `残り ${remainingMinutes}分`}・有効期限{' '}
+        {new Date(preview.expiresAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+      </p>
+      <h4>表示名とリンク先</h4>
       <ul className="preview-link-list">
         {preview.fields.map((field, index) => (
           <li key={`${field.displayName}:${index}`}>
@@ -119,36 +123,17 @@ export default function RichMenuPreview({
         </p>
       )}
       <div className="technical-details">
-        <dl>
-          <div>
-            <dt>対象</dt>
-            <dd>{preview.channelLabel}</dd>
-          </div>
-          <div>
-            <dt>レイアウト</dt>
-            <dd>
-              {templateName}（{preview.templateId} / 版 {preview.templateVersion}）
-            </dd>
-          </div>
-          <div>
-            <dt>現在のLINE状態</dt>
-            <dd>{observationLabels[preview.observation.kind]}</dd>
-          </div>
-          <div>
-            <dt>有効期限</dt>
-            <dd>
-              {new Date(preview.expiresAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
-            </dd>
-          </div>
-        </dl>
+        <h4>反映前にご確認ください</h4>
+        <p>現在のLINE状態: {observationLabels[preview.observation.kind]}</p>
         <p>適用するとチャネル既定のメニューを置き換えます。アプリ外の資源は編集・削除しません。</p>
         <p>
           利用者別のメニューが設定されている場合は、そちらが優先されます。端末での実際の表示は保証しません。
         </p>
         <p>リンク先の到達や表示結果は保証・保存しません。</p>
       </div>
-      {onBack && (
-        <button type="button" onClick={onBack}>
+      {actions}
+      {!actions && onBack && (
+        <button type="button" className="secondary" onClick={onBack}>
           編集へ戻る
         </button>
       )}

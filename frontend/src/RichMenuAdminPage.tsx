@@ -103,6 +103,7 @@ export default function RichMenuAdminPage({
 
   return (
     <PageFrame
+      className="rich-menu-detail-page"
       title={title}
       heading="リッチメニュー管理"
       description="現在のメニューを確認し、変更内容をプレビューしてからLINEへ反映します。"

@@ -109,7 +109,7 @@ const fetchHandler: typeof fetch = async (input, init) => {
       },
       observation: fixtures.managed.rich.latestObservation,
       warnings: [],
-      confirmationToken: 'safe-fixture',
+      confirmationToken: `safe-fixture-${calls('/preview/').length}`,
       expiresAt: new Date(Date.now() + 600_000).toISOString(),
     })
   if (path.endsWith('/operations/') && method === 'POST') return operationHandler(body)
@@ -186,17 +186,19 @@ test('10.1 composes validated current without history or duplicate initial reads
   expect(calls('/current/')).toHaveLength(1)
   expect(calls('/templates/')).toHaveLength(0)
   expect(container.querySelector('input')).toBeNull()
-  expect(container.querySelector('img')?.alt).toBe('通知チャネル の現在のメニュー')
+  expect(container.querySelector<HTMLImageElement>('img[alt]:not([alt=""])')?.alt).toBe(
+    '通知チャネル の現在のメニュー',
+  )
   const refresh = button('更新')
   refresh.focus()
   await click('更新')
   expect(document.activeElement).toBe(refresh)
-  await click('メニューを編集')
+  await click('編集する')
   expect(container.querySelector('input')?.value).toBe('公式サイト')
   expect(document.activeElement?.id).toBe('rich-menu-editor-heading')
   expect(container.querySelector('details.rich-menu-current')).not.toBeNull()
   await click('キャンセル')
-  expect(document.activeElement).toBe(button('メニューを編集'))
+  expect(document.activeElement).toBe(button('編集する'))
   expect(container.querySelector('input')).toBeNull()
   expect(calls('/history/')).toHaveLength(0)
   expect(calls('/state/')).toHaveLength(0)
@@ -208,8 +210,8 @@ test('10.1 composes validated current without history or duplicate initial reads
 test('10.1 does not treat an undeployed current endpoint as success', async () => {
   status = 404
   await render()
-  expect(container.querySelector('img')).toBeNull()
-  expect(container.textContent).not.toContain('LINE適用済み')
+  expect(container.querySelector<HTMLImageElement>('img[alt]:not([alt=""])')).toBeNull()
+  expect(container.textContent).not.toContain('適用中')
   expect(calls('/state/')).toHaveLength(0)
   expect(calls('/history/')).toHaveLength(0)
 })
@@ -233,7 +235,7 @@ async function preview() {
 // 期待値: 全項目と確認影響を表示し、取消は変更せず、適用は一回で現在画像を再取得する。
 test('10.2 edits saved settings, returns, cancels and applies once through HTTP', async () => {
   await render()
-  await click('メニューを編集')
+  await click('編集する')
   expect(container.querySelectorAll('input')[1].value).toBe(
     fixtures.managed.current.configuration.fields[0].uri,
   )
@@ -244,7 +246,7 @@ test('10.2 edits saved settings, returns, cancels and applies once through HTTP'
   expect(container.textContent).toContain('利用者別')
   expect(container.textContent).toContain('端末での実際の表示は保証しません')
   expect(container.textContent).toContain('有効期限')
-  expect(container.querySelectorAll('img')).toHaveLength(2)
+  expect(container.querySelectorAll('img[alt]:not([alt=""])')).toHaveLength(2)
   const open = vi.spyOn(window, 'open').mockReturnValue(null)
   expect(open).not.toHaveBeenCalled()
   await click('リンクを開く')
@@ -266,10 +268,10 @@ test('10.2 edits saved settings, returns, cancels and applies once through HTTP'
   })
   await click('キャンセル')
   expect(calls('/operations/')).toHaveLength(0)
-  await click('メニューを編集')
+  await click('編集する')
   expect(container.querySelector('input')?.value).toBe('公式サイト')
   await preview()
-  const oldImage = container.querySelector('img')?.src
+  const oldImage = container.querySelector<HTMLImageElement>('img[alt]:not([alt=""])')?.src
   const apply = button('LINEに反映')
   operationHandler = (body) => {
     view = structuredClone(fixtures.managed) as CurrentMenuView
@@ -282,10 +284,66 @@ test('10.2 edits saved settings, returns, cancels and applies once through HTTP'
   expect(calls('/operations/')).toHaveLength(1)
   expect(calls('/operations/')[0].signal).toBeUndefined()
   expect(calls('/current/')).toHaveLength(2)
-  expect(container.querySelector('img')?.src).not.toBe(oldImage)
+  expect(container.querySelector<HTMLImageElement>('img[alt]:not([alt=""])')?.src).not.toBe(
+    oldImage,
+  )
   expect(container.textContent).toContain('直前の操作: 完了')
   expect(calls('/history/')).toHaveLength(0)
 })
+
+// テストケース: cleanup成功または通常適用の成功・失敗後に新しい編集と確認を行う。
+// 期待値: 直前結果を保持し、新しいoperation IDの適用を一回だけPOSTする。
+test.each(['cleanup', 'apply_succeeded', 'apply_failed'] as const)(
+  '10.2 applies a new preview after %s settles',
+  async (previous) => {
+    if (previous === 'cleanup') {
+      view = structuredClone(fixtures.cleanup) as CurrentMenuView
+      operationRead = fixtures.cleanup.rich.blockingOperation as OperationView
+    }
+    await render()
+    operationHandler = (body) => {
+      view = structuredClone(fixtures.managed) as CurrentMenuView
+      return reply(
+        operation(
+          body,
+          previous === 'apply_failed'
+            ? {
+                status: 'failed',
+                result: 'line_rejected',
+              }
+            : {},
+        ),
+      )
+    }
+    if (previous === 'cleanup') await click('残ったデータ 1 を削除')
+    else {
+      await click('編集する')
+      await preview()
+      await click('LINEに反映')
+    }
+    const initialPosts = calls('/operations/').filter((request) => request.method === 'POST')
+    expect(initialPosts).toHaveLength(1)
+    const priorId = initialPosts[0].body.operationId
+    expect(container.textContent).toContain('直前の操作:')
+    const readsBeforeEditing = calls('/current/').length
+    expect(readsBeforeEditing).toBeGreaterThanOrEqual(2)
+    await click('編集する')
+    await input(0, '次のメニュー')
+    await preview()
+    expect(button('LINEに反映').disabled).toBe(false)
+    operationHandler = (body) => reply(operation(body))
+    const apply = button('LINEに反映')
+    await act(async () => {
+      apply.click()
+      apply.click()
+    })
+    const posts = calls('/operations/').filter((request) => request.method === 'POST')
+    expect(posts).toHaveLength(2)
+    expect(posts[1].body).toMatchObject({ kind: 'apply' })
+    expect(posts[1].body.operationId).not.toBe(priorId)
+    expect(calls('/current/')).toHaveLength(readsBeforeEditing + 1)
+  },
+)
 
 // テストケース: 未設定から作成しtemplate変更を取消・承認する。
 // 期待値: 作成時だけ空入力にし、取消は保持、承認時は全入力を消去する。
@@ -327,7 +385,7 @@ test('10.2 rebuilds a retired template only after an explicit choice', async () 
   view.current.configuration.templateVersion = 99
   view.current.configuration.editability = 'template_unavailable'
   await render()
-  await click('メニューを編集')
+  await click('編集する')
   expect(container.querySelector('input')).toBeNull()
   expect(container.textContent).toContain('同じテンプレートと版')
   await click('別のテンプレートで作り直す')
@@ -341,7 +399,7 @@ test('10.2 rebuilds a retired template only after an explicit choice', async () 
 test('10.2 expires confirmation and regenerates after a current refresh', async () => {
   vi.useFakeTimers()
   await render()
-  await click('メニューを編集')
+  await click('編集する')
   await preview()
   await act(async () => {
     await vi.advanceTimersByTimeAsync(600_001)
@@ -378,7 +436,7 @@ test.each([false, true])(
       channelRevision: revision,
     })
     expect(container.textContent).toContain('直前の操作: 完了')
-    expect(container.querySelector('img')).toBeNull()
+    expect(container.querySelector<HTMLImageElement>('img[alt]:not([alt=""])')).toBeNull()
     expect(container.textContent).toContain(fail ? '現在表示の再取得に失敗' : 'アプリ外')
     expect(calls('/current/')).toHaveLength(2)
     expect(calls('/history/')).toHaveLength(0)
@@ -556,7 +614,7 @@ test('10.3 confirms history loss, respects references and deletes once', async (
   expect(container.textContent).toContain('適用履歴もチャネルと一緒に削除')
   await click('物理削除を確定')
   expect(container.textContent).toContain('削除を阻止する参照')
-  expect(container.textContent).not.toContain('メニューを編集')
+  expect(container.textContent).not.toContain('編集する')
   await click('更新')
   await click('チャネルを物理削除')
   lifecycleHandler = () => reply({ channelId, label: selected.label, deleted: true })
@@ -598,7 +656,7 @@ test.each([
     kind: 'release',
     targetResourceId: fixtures.managed.rich.currentResource.resourceId,
   })
-  expect(container.querySelector('img')).toBeNull()
+  expect(container.querySelector<HTMLImageElement>('img[alt]:not([alt=""])')).toBeNull()
   expect(container.textContent).toContain('直前の操作: 完了')
   expect(container.textContent).toContain('アプリ外')
   expect(calls('/current/')).toHaveLength(2)
@@ -681,7 +739,141 @@ test.each(['external', 'attention'] as const)(
 // 期待値: 編集を主操作、更新と解除を既存secondaryスタイルの補助操作として区別する。
 test('10.1 distinguishes primary editing from secondary refresh and unlink', async () => {
   await render()
-  expect(button('メニューを編集').classList.contains('secondary')).toBe(false)
+  expect(button('編集する').classList.contains('secondary')).toBe(false)
   expect(button('更新').classList.contains('secondary')).toBe(true)
   expect(button('適用解除').classList.contains('secondary')).toBe(true)
+})
+
+// テストケース: channel APIのZ表記とcurrent APIの+00:00表記で同じrevisionを返す。
+// 期待値: 初回と更新後に現在画像・編集を使え、表記差だけで更新要求へ戻らない。
+test('11.5 accepts real API revision formats through DTO, hook and Console', async () => {
+  selected.updatedAt = revision.replace('+00:00', 'Z')
+  await render(true)
+  expect(container.textContent).toContain('適用中')
+  expect(container.querySelector<HTMLImageElement>('img[alt]:not([alt=""])')).not.toBeNull()
+  await click('更新')
+  expect(container.textContent).toContain('適用中')
+  await click('編集する')
+  expect(document.activeElement?.id).toBe('rich-menu-editor-heading')
+  await preview()
+  expect(document.activeElement?.id).toBe('rich-menu-preview-heading')
+  await click('キャンセル')
+  expect(document.activeElement?.textContent).toBe('編集する')
+  expect(calls('/operations/')).toHaveLength(0)
+})
+
+// テストケース: 現在メニューの取得が失敗している画面を開く。
+// 期待値: 更新導線は一つだけで、内容のない結果パネルを表示しない。
+test('11.4 exposes one recovery refresh without an empty result card', async () => {
+  status = 503
+  await render()
+  expect(
+    [...container.querySelectorAll('button')].filter((value) => value.textContent === '更新'),
+  ).toHaveLength(1)
+  expect(container.querySelector('[aria-label="LINEへの反映と直前結果"]')).toBeNull()
+})
+
+// テストケース: 通常閲覧から編集を開始する。
+// 期待値: 操作結果も適用確認もない間は空の結果パネルを挟まない。
+test('11.4 keeps viewing and editing free of empty operation cards', async () => {
+  await render()
+  expect(container.querySelector('[aria-label="LINEへの反映と直前結果"]')).toBeNull()
+  await click('編集する')
+  expect(container.querySelector('[aria-label="LINEへの反映と直前結果"]')).toBeNull()
+  await preview()
+  expect(container.querySelector('[aria-label="LINEへの反映と直前結果"]')).not.toBeNull()
+})
+
+// テストケース: 過去資源が残るが実行可能な回復対象・操作がない実運用相当の状態を表示する。
+// 期待値: 成功だけに見せず確認案内を出し、任意削除や編集・解除を提供しない。
+test('11.4 explains cleanup restrictions when no safe recovery action exists', async () => {
+  view.rich.cleanupResources = structuredClone(
+    fixtures.cleanup.rich.cleanupResources,
+  ) as CurrentMenuView['rich']['cleanupResources']
+  view.rich.activeOperation = null
+  view.rich.blockingOperation = null
+  view.rich.nextAllowedActions = ['get_state', 'view_history']
+  view.rich.effectiveActions = ['get_state', 'view_history']
+  view.recoveryTargets = []
+  await render()
+  expect(container.textContent).toContain(
+    '過去の適用処理に不整合があります。管理者による復旧が必要です。',
+  )
+  expect(
+    container.querySelectorAll('[aria-label="リッチメニュー状態"] [role="alert"]'),
+  ).toHaveLength(1)
+  expect(container.textContent).not.toContain('LINE側の変更または未解決の操作を確認')
+  expect(container.textContent).not.toContain('次にできる操作:')
+  expect(container.querySelector('[aria-label="リッチメニュー状態"] [role="alert"]')).not.toBeNull()
+  expect(container.textContent).not.toContain('適用中')
+  expect(container.textContent).not.toContain('編集する')
+  expect(container.textContent).not.toContain('残ったデータ 1 を削除')
+})
+
+// テストケース: 更新のcurrent応答を遅延し、focus中の更新ボタンを再操作する。
+// 期待値: 更新中もfocus可能な要素を維持し、aria-disabledで再受付を防いで一度だけGETする。
+test('11.4 retains the refresh focus target while ignoring repeated refreshes', async () => {
+  await render()
+  let resolveCurrent!: (response: Response) => void
+  fetchMock.mockImplementation((input, init) => {
+    if (typeof input === 'string' && input.includes('/current/'))
+      return new Promise<Response>((resolve) => {
+        resolveCurrent = resolve
+      })
+    return fetchHandler(input, init)
+  })
+  const refresh = button('更新')
+  refresh.focus()
+  await click('更新')
+  expect(refresh.disabled).toBe(false)
+  expect(refresh.getAttribute('aria-disabled')).toBe('true')
+  expect(document.activeElement).toBe(refresh)
+  await click('更新')
+  expect(
+    fetchMock.mock.calls.filter(
+      ([input]) => typeof input === 'string' && input.includes('/current/'),
+    ),
+  ).toHaveLength(2)
+  await act(async () => resolveCurrent(reply(view)))
+  expect(refresh.getAttribute('aria-disabled')).toBe('false')
+  expect(document.activeElement).toBe(refresh)
+})
+
+// テストケース: 適用済み画面でFigmaの見出し・状態・画像カード内操作を表示する。
+// 期待値: 状態を見出し横に置き、編集・解除・更新が同じカード内で順に並ぶ。
+test('Figma aligns the status badge and current menu actions', async () => {
+  await render()
+  expect(container.querySelector('.rich-menu-design')).not.toBeNull()
+  expect(
+    container.querySelector('.rich-menu-header .rich-menu-state-badge')?.textContent,
+  ).toContain('適用中')
+  const card = container.querySelector('.rich-menu-current-card')
+  expect(card?.querySelector<HTMLImageElement>('img[alt]:not([alt=""])')?.alt).toBe(
+    '通知チャネル の現在のメニュー',
+  )
+  expect(
+    [...card!.querySelectorAll('.rich-menu-detail-actions button')].map((b) => b.textContent),
+  ).toEqual(['編集する', '適用解除', '更新'])
+  expect(card?.querySelector('.recovery-card')).toBeNull()
+})
+
+// テストケース: 保存設定を編集し、プレビューの反映・戻る・取消を確認する。
+// 期待値: 編集用の見出しと2列の項目構造を使い、副操作は確認カード内のsecondaryで表示する。
+test('Figma groups edit fields and preview actions without technical ids', async () => {
+  await render()
+  await click('編集する')
+  expect(container.querySelector('#rich-menu-editor-heading')?.textContent).toContain(
+    'メニューを編集',
+  )
+  expect(container.querySelector('.rich-menu-edit-row')?.querySelectorAll('label')).toHaveLength(2)
+  expect(button('キャンセル').className).toContain('secondary')
+  await preview()
+  const panel = container.querySelector('.rich-menu-preview .rich-menu-inline-apply')
+  expect(panel).not.toBeNull()
+  expect(panel?.contains(button('LINEに反映'))).toBe(true)
+  expect(panel?.contains(button('編集へ戻る'))).toBe(true)
+  expect(panel?.contains(button('キャンセル'))).toBe(true)
+  expect(button('編集へ戻る').className).toContain('secondary')
+  expect(button('キャンセル').className).toContain('secondary')
+  expect(container.textContent).not.toContain('jp-link-one')
 })

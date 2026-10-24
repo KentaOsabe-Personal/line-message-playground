@@ -6,6 +6,7 @@ import { createProtectedHttpClient } from './httpApi'
 import { createRichMenuAdminApiClient, type RichMenuAdminApiClient } from './richMenuAdminApi'
 import { allowedRichMenuActions } from './richMenuAdminState'
 import RichMenuCurrentMenu from './RichMenuCurrentMenu'
+import RichMenuDesignIcon from './RichMenuDesignIcon'
 import RichMenuEditor from './RichMenuEditor'
 import RichMenuOperationPanel from './RichMenuOperationPanel'
 import RichMenuPreview from './RichMenuPreview'
@@ -91,58 +92,116 @@ export default function RichMenuAdminConsole({
   const viewing = editor.state === 'viewing'
   const templates = state.catalog.state === 'ready' ? state.catalog.templates : []
   const refresh = () => {
+    if (busy || state.current.state === 'loading') return
     setStopConfirmation(false)
     void controller.refresh()
   }
   const cancel = () => controller.cancelEdit()
+  const recoveryPanel =
+    viewing && ['ready', 'loading'].includes(state.current.state) ? (
+      <RichMenuRecoveryPanel
+        primaryAction={
+          <>
+            {viewing &&
+              actions.includes('new_preview') &&
+              (current?.current.kind === 'managed' || current?.current.kind === 'unset') && (
+                <button
+                  ref={primary}
+                  disabled={busy || state.catalog.state === 'loading'}
+                  onClick={() => {
+                    void (current?.current.kind === 'unset'
+                      ? controller.beginCreate()
+                      : controller.beginEdit())
+                  }}
+                >
+                  <RichMenuDesignIcon kind="edit" />
+                  {current?.current.kind === 'unset' ? 'メニューを作成' : '編集する'}
+                </button>
+              )}
+          </>
+        }
+        refreshAction={
+          <>
+            {['ready', 'loading'].includes(state.current.state) && (
+              <button
+                className="secondary"
+                disabled={busy}
+                aria-disabled={busy || state.current.state === 'loading'}
+                onClick={refresh}
+              >
+                <RichMenuDesignIcon kind="refresh" />
+                更新
+              </button>
+            )}
+          </>
+        }
+        channelLabel={state.channel.label}
+        actions={actions}
+        currentResource={current?.rich.currentResource ?? null}
+        cleanupResources={current?.rich.cleanupResources ?? []}
+        subjectOperation={current?.rich.activeOperation ?? current?.rich.blockingOperation ?? null}
+        observation={current?.rich.latestObservation ?? null}
+        busy={busy}
+        result={null}
+        recoveryTargets={current?.recoveryTargets ?? []}
+        active={state.channel.active}
+        mode={current?.rich.mode}
+        deactivationPending={pending}
+        onRecovery={(request) => {
+          void controller.startRecovery(request)
+        }}
+      />
+    ) : null
+  const operationPanel =
+    editor.state === 'confirming' || busy || state.operation.state !== 'idle' ? (
+      <RichMenuOperationPanel
+        embedded={editor.state === 'confirming'}
+        onBack={editor.state === 'confirming' ? controller.backToEdit : undefined}
+        onCancel={editor.state === 'confirming' ? cancel : undefined}
+        channelLabel={state.channel.label}
+        preview={editor.state === 'confirming' ? editor.preview : null}
+        valid={actions.includes('apply')}
+        busy={busy}
+        result={result}
+        operation={state.operation}
+        onApply={() => {
+          void controller.apply()
+        }}
+        onTrack={() => {
+          void controller.trackOperation()
+        }}
+        refreshFailed={
+          result !== null && ['failed', 'refresh_required'].includes(state.current.state)
+        }
+        onRefresh={refresh}
+      />
+    ) : null
   return (
     <section
-      className="rich-menu-admin rich-menu-detail"
+      className="rich-menu-admin rich-menu-detail rich-menu-design"
       ref={host}
       onFocusCapture={(event) => {
         focused.current = event.target
       }}
     >
       <header className="rich-menu-header">
+        <p className="rich-menu-breadcrumb">チャネル / リッチメニュー</p>
         <h2 ref={heading} tabIndex={-1}>
           {state.channel.label}
         </h2>
+        <RichMenuStatePanel current={state.current} readOnly={!state.channel.active} />
       </header>
-      <RichMenuStatePanel current={state.current} readOnly={!state.channel.active} />
       <RichMenuCurrentMenu
         channelLabel={state.channel.label}
         current={state.current}
         collapsed={!viewing}
+        actions={recoveryPanel}
         onRefresh={refresh}
         onImageError={() => {
           if (current?.current.kind === 'managed' && current.current.image.status === 'available')
             controller.currentImageFailed(current.current.image.imageUrl)
         }}
       />
-      <div className="rich-menu-detail-actions">
-        {viewing &&
-          actions.includes('new_preview') &&
-          (current?.current.kind === 'managed' || current?.current.kind === 'unset') && (
-            <button
-              ref={primary}
-              disabled={busy || state.catalog.state === 'loading'}
-              onClick={() => {
-                void (current?.current.kind === 'unset'
-                  ? controller.beginCreate()
-                  : controller.beginEdit())
-              }}
-            >
-              {current?.current.kind === 'unset' ? 'メニューを作成' : 'メニューを編集'}
-            </button>
-          )}
-        <button
-          className="secondary"
-          disabled={busy || state.current.state === 'loading'}
-          onClick={refresh}
-        >
-          更新
-        </button>
-      </div>
       {state.catalog.state === 'loading' && <p role="status">テンプレートを確認しています…</p>}
       {state.catalog.state === 'failed' && (
         <p role="alert">テンプレートを取得できません。編集操作から再取得してください。</p>
@@ -168,6 +227,7 @@ export default function RichMenuAdminConsole({
         )}
       {!viewing && editor.state !== 'confirming' && (
         <RichMenuEditor
+          editing={current?.current.kind === 'managed'}
           templates={templates}
           draft={editor}
           busy={busy || editor.state === 'previewing'}
@@ -207,51 +267,11 @@ export default function RichMenuAdminConsole({
                 (t) => t.templateId === editor.templateId && t.version === editor.templateVersion,
               )?.displayName ?? editor.templateId
             }
-            onBack={controller.backToEdit}
+            actions={operationPanel}
           />
-          <button disabled={busy} onClick={cancel}>
-            キャンセル
-          </button>
         </>
       )}
-      <RichMenuOperationPanel
-        channelLabel={state.channel.label}
-        preview={editor.state === 'confirming' ? editor.preview : null}
-        valid={actions.includes('apply')}
-        busy={busy}
-        result={result}
-        operation={state.operation}
-        onApply={() => {
-          void controller.apply()
-        }}
-        onTrack={() => {
-          void controller.trackOperation()
-        }}
-        refreshFailed={
-          result !== null && ['failed', 'refresh_required'].includes(state.current.state)
-        }
-        onRefresh={refresh}
-      />
-      {viewing && current && (
-        <RichMenuRecoveryPanel
-          key={`${state.channel.updatedAt}:${state.current.state}:${current.checkedAt ?? ''}`}
-          channelLabel={state.channel.label}
-          actions={actions}
-          currentResource={current.rich.currentResource}
-          cleanupResources={current.rich.cleanupResources}
-          subjectOperation={current.rich.activeOperation ?? current.rich.blockingOperation}
-          observation={current.rich.latestObservation}
-          busy={busy}
-          result={null}
-          recoveryTargets={current.recoveryTargets}
-          active={state.channel.active}
-          mode={current.rich.mode}
-          deactivationPending={pending}
-          onRecovery={(request) => {
-            void controller.startRecovery(request)
-          }}
-        />
-      )}
+      {editor.state !== 'confirming' && operationPanel}
       <details>
         <summary>チャネルの停止・削除</summary>
         <section className="lifecycle-settings" aria-label="チャネルライフサイクル">

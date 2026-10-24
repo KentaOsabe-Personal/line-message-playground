@@ -319,3 +319,16 @@ describe('現在閲覧の提供モード', () => {
     expect(parseCurrent(value)).toEqual({ ok: true, value })
   })
 })
+
+// テストケース: マイクロ秒を含むcurrentのUTC offset表記を同時刻のchannel revisionで検証する。
+// 期待値: 成功値を検証済みchannel表記へ揃え、1マイクロ秒の競合は拒否する。
+test('11.5 returns the verified requested revision without losing microseconds', () => {
+  const value = { ...currentFixtures.managed, channelRevision: '2026-10-18T00:00:00.123456+00:00' }
+  for (const expected of ['2026-10-18T00:00:00.123456Z', '2026-10-18T09:00:00.123456+09:00']) {
+    const parsed = parseCurrentMenu(value, id, expected)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) throw new Error('current expected')
+    expect(parsed.value.channelRevision).toBe(expected)
+  }
+  expect(parseCurrentMenu(value, id, '2026-10-18T00:00:00.123457Z').ok).toBe(false)
+})

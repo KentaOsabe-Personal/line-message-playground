@@ -1,3 +1,4 @@
+import RichMenuDesignIcon from './RichMenuDesignIcon'
 import type { RichMenuAction, RichMenuStateView } from './richMenuAdminDto'
 
 import type { CurrentReadState } from './richMenuAdminState'
@@ -53,7 +54,13 @@ export default function RichMenuStatePanel({ state, readOnly = false, current, o
   const rich = current?.state === 'ready' ? current.value.rich : current ? undefined : state
   const inactive = current?.state === 'ready' && current.value.current.kind === 'inactive'
   const operation = rich?.activeOperation ?? rich?.blockingOperation
+  const cleanupUnavailable = Boolean(
+    rich?.cleanupResources.length &&
+    !operation &&
+    !rich?.effectiveActions.some((action) => action === 'cleanup' || action === 'recheck'),
+  )
   const needsAttention =
+    cleanupUnavailable ||
     rich?.latestObservation?.kind === 'unknown' ||
     rich?.latestObservation?.kind === 'other_managed_default' ||
     (rich?.latestObservation?.kind === 'default_none' &&
@@ -70,32 +77,51 @@ export default function RichMenuStatePanel({ state, readOnly = false, current, o
             ? 'チャネルは停止中です。保存済み情報だけを表示しています。'
             : operation
               ? operationStatusLabels[operation.status]
-              : needsAttention
-                ? '現在の状態は要確認です。LINE側の変更または未解決の操作を確認してください。'
-                : rich?.latestObservation?.kind === 'external_default'
-                  ? 'アプリ外で設定されています。LINE側で確認してください。'
-                  : rich?.latestObservation?.kind === 'managed_default'
-                    ? 'LINE適用済み'
-                    : rich?.latestObservation?.kind === 'default_none'
-                      ? '確認済み・未設定'
-                      : '現在の状態は要確認です。更新してください。'
+              : cleanupUnavailable
+                ? '過去の適用処理に不整合があります。管理者による復旧が必要です。'
+                : needsAttention
+                  ? '現在の状態は要確認です。LINE側の変更または未解決の操作を確認してください。'
+                  : rich?.latestObservation?.kind === 'external_default'
+                    ? 'アプリ外で設定されています。LINE側で確認してください。'
+                    : rich?.latestObservation?.kind === 'managed_default'
+                      ? '適用中'
+                      : rich?.latestObservation?.kind === 'default_none'
+                        ? '確認済み・未設定'
+                        : '現在の状態は要確認です。更新してください。'
   const problem =
     current?.state === 'failed' ||
     current?.state === 'refresh_required' ||
     needsAttention ||
     (operation && ['unknown', 'failed', 'cleanup_required'].includes(operation.status))
-  const reason =
-    (rich?.unavailableReason
-      ? (unavailableReasonLabels[rich.unavailableReason] ??
-        '現在は変更できません。更新して状態を確認してください。')
-      : null) ??
-    (readOnly || rich?.mode === 'read_only'
-      ? '読取専用のため変更できません。'
-      : rich?.mode === 'recovery_only'
-        ? '許可された回復操作だけを利用できます。'
-        : rich?.cleanupResources.length
-          ? '後片付けが完了するまで新しい変更はできません。'
-          : null)
+  const reason = cleanupUnavailable
+    ? null
+    : ((rich?.unavailableReason
+        ? (unavailableReasonLabels[rich.unavailableReason] ??
+          '現在は変更できません。更新して状態を確認してください。')
+        : null) ??
+      (readOnly || rich?.mode === 'read_only'
+        ? '読取専用のため変更できません。'
+        : rich?.mode === 'recovery_only'
+          ? '許可された回復操作だけを利用できます。'
+          : rich?.cleanupResources.length
+            ? '後片付けが完了するまで新しい変更はできません。'
+            : null))
+  const applied =
+    current?.state === 'ready' &&
+    !inactive &&
+    !problem &&
+    !operation &&
+    !reason &&
+    rich?.latestObservation?.kind === 'managed_default'
+  if (applied)
+    return (
+      <section className="rich-menu-state-badge" aria-label="リッチメニュー状態">
+        <p role="status">
+          <RichMenuDesignIcon kind="check" />
+          適用中
+        </p>
+      </section>
+    )
   return (
     <section className="rich-menu-state-card" aria-label="リッチメニュー状態">
       <p role={problem ? 'alert' : 'status'}>{message}</p>
@@ -109,7 +135,7 @@ export default function RichMenuStatePanel({ state, readOnly = false, current, o
       {onRefresh && current?.state !== 'loading' && (problem || !rich) && (
         <button onClick={onRefresh}>更新</button>
       )}
-      {!inactive && problem && rich && (
+      {!inactive && !cleanupUnavailable && problem && rich && (
         <p>
           次にできる操作:{' '}
           {rich.effectiveActions

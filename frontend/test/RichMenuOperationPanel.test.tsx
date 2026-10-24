@@ -97,6 +97,108 @@ describe('RichMenuOperationPanel', () => {
     expect(container.textContent).not.toContain(result.operationId)
     expect(container.querySelector('button')?.disabled).toBe(true)
   })
+  // テストケース: 確定済みの直前結果を保持したまま新しいプレビューを反映する。
+  // 期待値: 成功・失敗・cleanup成功後に次の確認を一回だけ実行し、同じ確認は再送しない。
+  test.each([
+    ['apply', 'succeeded'],
+    ['apply', 'failed'],
+    ['cleanup', 'succeeded'],
+  ] as const)('allows a fresh confirmation after %s %s', async (kind, status) => {
+    const onApply = vi.fn()
+    const settled = { ...result, kind, status }
+    const renderPreview = async (confirmationToken: string) => {
+      await act(async () =>
+        root.render(
+          <RichMenuOperationPanel
+            channelLabel="通知"
+            preview={{ ...preview, confirmationToken }}
+            now="2026-08-03T09:59:00+09:00"
+            busy={false}
+            result={settled}
+            onApply={onApply}
+          />,
+        ),
+      )
+    }
+    await renderPreview('new-confirmation')
+    expect(container.textContent).toContain('直前の操作:')
+    expect(container.querySelector('button')?.disabled).toBe(false)
+    await act(async () => {
+      container.querySelector('button')?.click()
+      container.querySelector('button')?.click()
+    })
+    expect(onApply).toHaveBeenCalledTimes(1)
+    await renderPreview('new-confirmation')
+    expect(container.querySelector('button')?.disabled).toBe(true)
+    await renderPreview('next-confirmation')
+    expect(container.querySelector('button')?.disabled).toBe(false)
+    await act(async () => container.querySelector('button')?.click())
+    expect(onApply).toHaveBeenCalledTimes(2)
+    await renderPreview('new-confirmation')
+    expect(container.querySelector('button')?.disabled).toBe(true)
+  })
+
+  // テストケース: 未確定・回復中の直前結果に新しいプレビューを渡す。
+  // 期待値: 結果が成功か失敗に確定するまで新規適用を開始しない。
+  test.each(['accepted', 'processing', 'unknown', 'cleanup_required', 'recovery_active'] as const)(
+    'blocks a fresh confirmation while the prior result is %s',
+    async (status) => {
+      const onApply = vi.fn()
+      await act(async () =>
+        root.render(
+          <RichMenuOperationPanel
+            channelLabel="通知"
+            preview={preview}
+            now="2026-08-03T09:59:00+09:00"
+            busy={false}
+            result={{ ...result, status }}
+            onApply={onApply}
+          />,
+        ),
+      )
+      expect(container.querySelector('button')?.disabled).toBe(true)
+      await act(async () => container.querySelector('button')?.click())
+      expect(onApply).not.toHaveBeenCalled()
+    },
+  )
+  // テストケース: 確定結果があっても失効・無効確認・観測不明・処理中・通信結果不明を渡す。
+  // 期待値: 次のプレビューでも安全条件を満たさない場合は適用を開始しない。
+  test.each([
+    { valid: false },
+    { busy: true },
+    { now: '2026-08-03T10:01:00+09:00' },
+    { preview: { ...preview, observation: { ...preview.observation, kind: 'unknown' as const } } },
+    { operation: { state: 'tracking' as const, operationId: result.operationId } },
+    {
+      operation: {
+        state: 'transport_unknown' as const,
+        operationId: result.operationId,
+        error: { code: 'network_error', summary: '切断' },
+      },
+    },
+  ])('retains confirmation safety gates with a settled result %j', async (patch) => {
+    const onApply = vi.fn()
+    await act(async () =>
+      root.render(
+        <RichMenuOperationPanel
+          channelLabel="通知"
+          preview={preview}
+          now="2026-08-03T09:59:00+09:00"
+          busy={false}
+          result={result}
+          onApply={onApply}
+          {...patch}
+        />,
+      ),
+    )
+    const apply = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'LINEに反映',
+    )!
+    expect(apply.disabled).toBe(true)
+    await act(async () => apply.click())
+    expect(onApply).not.toHaveBeenCalled()
+  })
+
   // テストケース: 失効した確認を渡して適用を選ぶ。
   // 期待値: ボタンを無効にし、適用を開始しない。
   test('prevents apply for expired or invalid confirmation', async () => {
