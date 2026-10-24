@@ -161,3 +161,13 @@ _更新日: 2026-08-29。Phase 3としてFrontendのアプリ画面分割を追�
 比較の受入条件は [requirements](../specs/text-judgment-lab-comparison/requirements.md)、実装タスクは [tasks](../specs/text-judgment-lab-comparison/tasks.md)、現在の共通契約は [text-judgment-lab.md](text-judgment-lab.md) を参照する。承認時の規模判定は [brief](../specs/text-judgment-lab-comparison/brief.md) に保持する。
 
 _更新日: 2026-10-05。既存 Phase 4 の判断履歴を保持し、コードと完了済みタスクに合わせて書き換え比較の現在範囲を追記。_
+
+## Phase 5: リッチメニュー詳細画面の改修
+
+既存のリッチメニュー管理を、現在画像の閲覧から明示的な編集・プレビュー・適用へ進む画面へ改修した。現在画像の取得は適用前の期限付きプレビューから分離し、認可・チャネル revision・現在既定・管理資源の取得前後の検証を行う。詳細画面で履歴一覧を取得・表示せず、履歴記録、参照 API、回復とチャネルライフサイクルの契約を維持する。
+
+- [x] line-rich-menu-detail-ui -- 現在画像の閲覧 API、閲覧・編集・操作追跡の分離、画像と通信の寿命管理、停止中の読取専用表示を提供する。Dependencies: line-rich-menu-admin-lifecycle, app-screen-separation
+
+実装中に確認した旧資源の後片付け不備は、置換操作との因果関係を検証し、後片付け完了まで blocker を保つことで修正した。旧版の成功記録を持つ操作は、元の履歴を残す管理修復で回復する。判断の背景は [ADR 0004](../../docs/adr/0004-record-rich-menu-replacement-causality.md) と [ADR 0005](../../docs/adr/0005-repair-successful-replacements-with-pending-cleanup.md)、実装・検証範囲は [tasks](../specs/line-rich-menu-detail-ui/tasks.md)、規模判定は [brief](../specs/line-rich-menu-detail-ui/brief.md) を参照する。
+
+_更新日: 2026-10-24。既存 Phase の判断履歴を保持し、line-rich-menu-detail-ui の実装と全タスクの完了に合わせて追加改修を記録。_
