@@ -16,7 +16,7 @@
     "check": "npm run lint && npm run format:check && npm run typecheck"
   },
   "dependencies": {
-    "@line/liff": "2.29.1",
+    "@line/liff": "2.31.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-router": "8.3.1"
